@@ -259,3 +259,15 @@ If you use this tool for research or academic purposes, please cite the followin
 ```
 
 ---
+
+
+
+## 掲載研究での活用例
+
+SegRef3Dは、さまざまな種類の連続画像データを用いた解剖学・形態学研究において、AI支援セグメンテーションと三次元再構築に活用されています。
+
+| 画像データ | 検体・試料 | 研究 | 活用内容 |
+|---|---|---|---|
+| 連続組織切片画像 | ヒト解剖体標本 | Muro et al. Why is the umbilicus concave? A histological and three-dimensional anatomical study revealing the “umbilical sheath”. *Anatomical Science International*, 2026. [https://doi.org/10.1007/s12565-026-00950-w](https://doi.org/10.1007/s12565-026-00950-w) | 臍の陥凹を支持する線維性結合組織構造の三次元再構築。 |
+| 連続組織切片画像 | 動物試料 | Kakui et al. A new entoproct commensal on holothuroids in the northwestern Pacific abyssal–hadal zone. *Deep-Sea Research Part I*, 2026. [https://doi.org/10.1016/j.dsr.2026.104716](https://doi.org/10.1016/j.dsr.2026.104716) | 連続組織切片に基づく、深海性内肛動物新種の三次元再構築。 |
+| CoMBIブロックフェイス画像 | ヒト解剖体標本 | Muro et al. Thin-Adipose Compartment at the Colonic Mesentery–Perirenal Fat Interface: Histological and Three-Dimensional Morphological Studies. *International Journal of Urology*, 2026. [https://doi.org/10.1111/iju.70385](https://doi.org/10.1111/iju.70385) | CoMBIにより取得した連続ブロックフェイス画像を用いた、薄い脂肪性コンパートメントのセグメンテーションと三次元再構築。 |
