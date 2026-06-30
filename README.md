@@ -312,3 +312,14 @@ If you use this tool for research or academic purposes, please cite the followin
 ```
 
 ---
+
+
+## Applications in Published Studies
+
+SegRef3D has been used for AI-assisted segmentation and three-dimensional reconstruction in anatomical and morphological studies using different types of serial image datasets.
+
+| Image dataset | Specimen type | Study | Application |
+|---|---|---|---|
+| Serial histological sections | Human cadaveric specimen | Muro et al. Why is the umbilicus concave? A histological and three-dimensional anatomical study revealing the “umbilical sheath”. *Anatomical Science International*, 2026. | 3D reconstruction of the fibrous connective tissue structure supporting the umbilical concavity. |
+| Serial histological sections | Animal specimen | Kakui et al. A new entoproct commensal on holothuroids in the northwestern Pacific abyssal–hadal zone. *Deep-Sea Research Part I*, 2026. | 3D reconstruction of a newly described deep-sea entoproct species from serial histological sections. |
+| CoMBI block-face images | Human cadaveric specimen | Muro et al. Thin-Adipose Compartment at the Colonic Mesentery–Perirenal Fat Interface: Histological and Three-Dimensional Morphological Studies. *International Journal of Urology*, 2026. | Segmentation and 3D reconstruction of thin adipose compartments using serial block-face images obtained by CoMBI. |
