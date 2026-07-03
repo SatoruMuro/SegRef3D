@@ -5,6 +5,9 @@
   
 日本語は[こちら](https://github.com/SatoruMuro/SAM2GUIfor3Drecon/blob/main/READMEJP.md)  
 
+This repository was formerly named SAM2GUIfor3Drecon.  
+The software is now distributed as SegRef3D.  
+
 ---
 <img src="https://github.com/SatoruMuro/SAM2GUIfor3Drecon/blob/main/images/SegRef3D-v1.2.0-GUI.png" alt="image"  width="100%">
 
