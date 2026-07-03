@@ -1,8 +1,13 @@
 # SegRef3D
 
-**SegRef3D** is an open-source platform for AI-assisted segmentation, interactive refinement, multiframe tracking, and three-dimensional reconstruction in morphological research.  
-  
-**SegRef3D**（セグレフ3D） は、形態学研究におけるAI支援セグメンテーション、対話的修正、連続画像上の追跡、三次元再構築を支援するオープンソースプラットフォームです。
+**SegRef3D** is an open-source platform for AI-assisted segmentation, interactive refinement, multiframe tracking, and three-dimensional reconstruction in morphological research.
+
+It provides a practical, lightweight alternative workflow for researchers working with serial histological sections, microscopy images, and other morphological datasets, particularly when access to comprehensive commercial platforms such as Amira/Avizo is limited.
+
+**SegRef3D**（セグレフ3D）は、形態学研究におけるAI支援セグメンテーション、対話的修正、連続画像上の追跡、三次元再構築を支援するオープンソースプラットフォームです。
+
+連続組織切片、顕微鏡画像、その他の形態学画像データを扱う研究者に対して、特にAmira/Avizoなどの商用総合プラットフォームを利用しにくい環境でも実践可能な、軽量な代替ワークフローを提供します。
+
 
 👉 [Read the full usage tutorial here](https://github.com/SatoruMuro/SAM2GUIfor3Drecon/blob/main/Tutorial/TutorialSegRef3DEN.md)    
   
