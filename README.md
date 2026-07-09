@@ -63,11 +63,17 @@ Watch the **Basic Workflow** video to learn how to use SegRef3D, from loading im
 
 ### 1. Download
 
-#### **Latest Version — ver.1.2.1**
+#### **Latest Version — ver.1.2.2**
 
-Newest build with improved image-processing workflow, unified raster-based mask handling, and UI improvements.
+Newest Windows builds with improved image-processing workflow, unified raster-based label PNG mask handling, autosave support, overlay PNG export, mouse-wheel image navigation, and UI improvements.
 
-* [`SegRef3D-ver1.2.1.zip`](https://www.dropbox.com/scl/fi/um7pvcdw1nygwcj8d1x76/SegRef3D-ver1.2.1.zip?rlkey=n6p8ewi5nvjji4ds39ij0ghfu&st=kqwc6w63&dl=1)
+Two builds are available:
+
+* **GPU build** — includes local SAM2-based AI segmentation. Recommended for NVIDIA GPU environments.
+  * [`SegRef3D-GPU-v1.2.2-Windows.zip`](https://www.dropbox.com/scl/fi/ambp64xwi34p92dawodje/SegRef3D-GPU-v1.2.2-Windows.zip?rlkey=qv8ulqtqeapnaxoo63q0zbk3x&st=4bkdtzwp&dl=1)
+
+* **Lite build** — lightweight build without bundled SAM2. Recommended for general use when local AI segmentation is not required.
+  * [`SegRef3D-Lite-v1.2.2-Windows.zip`](https://www.dropbox.com/scl/fi/ddtec7w51alclq6gb7pq3/SegRef3D-Lite-v1.2.2-Windows.zip?rlkey=4dd09eyjeovw4j61im4rl2prz&st=s1oz2syz&dl=1)
 
 #### **Previous Stable Version — ver.1.1.0**
 
