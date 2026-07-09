@@ -51,12 +51,17 @@ SegRef3Dの基本的な操作手順をご覧いただける動画を掲載して
 
 ### 1. ダウンロード
 
-#### **最新版 — ver.1.2.1**
+#### **最新版 — ver.1.2.2**
 
-画像処理の内部処理を改善し、マスク処理をラスター処理で統一しました。  
-また、UIも改善した最新版です。
+画像処理ワークフローの改善、ラスターベースのラベルPNGマスク管理、マスクの自動保存、オーバーレイPNG出力、マウスホイールによる画像切り替え、UI改善を含む最新版のWindowsビルドです。
 
-* [`SegRef3D-ver1.2.1.zip`](https://www.dropbox.com/scl/fi/um7pvcdw1nygwcj8d1x76/SegRef3D-ver1.2.1.zip?rlkey=n6p8ewi5nvjji4ds39ij0ghfu&st=kqwc6w63&dl=1)
+用途に応じて2種類のビルドを用意しています。
+
+* **GPU版** — ローカル環境でSAM2によるAI支援セグメンテーションを使用できます。NVIDIA GPU環境での使用を推奨します。
+  * [`SegRef3D-GPU-v1.2.2-Windows.zip`](https://www.dropbox.com/scl/fi/ambp64xwi34p92dawodje/SegRef3D-GPU-v1.2.2-Windows.zip?rlkey=qv8ulqtqeapnaxoo63q0zbk3x&st=4bkdtzwp&dl=1)
+
+* **Lite版** — SAM2を同梱していない軽量版です。ローカルAIセグメンテーションが不要な場合や、まずSegRef3Dを試したい場合に推奨します。
+  * [`SegRef3D-Lite-v1.2.2-Windows.zip`](https://www.dropbox.com/scl/fi/ddtec7w51alclq6gb7pq3/SegRef3D-Lite-v1.2.2-Windows.zip?rlkey=4dd09eyjeovw4j61im4rl2prz&st=s1oz2syz&dl=1)
 
 #### **旧安定版 — ver.1.1.0**
 
