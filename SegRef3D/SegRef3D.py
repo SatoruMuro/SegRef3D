@@ -1,21 +1,4 @@
-__version__ = "1.2.1"
-
-
-import sys, torch, warnings
-
-print("=== SegRef3D GPU Diagnostic ===")
-print("Python:", sys.executable)
-print("Torch:", torch.__version__, "CUDA", torch.version.cuda)
-print("ARCH:", torch.cuda.get_arch_list())
-print("CUDA available:", torch.cuda.is_available())
-if torch.cuda.is_available():
-    try:
-        print("GPU:", torch.cuda.get_device_name(0))
-    except Exception as e:
-        print("GPU: <unavailable>", e)
-print("===============================")
-
-
+__version__ = "1.2.2"
 
 
 import sys
@@ -43,7 +26,8 @@ from PyQt6.QtGui import (
     QPainter, 
     QMouseEvent,
     QImage,
-    QColor
+    QColor,
+    QBrush
 )
 
 from PyQt6.QtCore import Qt, QPointF
@@ -60,6 +44,8 @@ from svgpathtools import parse_path
 
 from datetime import datetime
 import shutil
+
+CANVAS_BACKGROUND_COLOR = QColor("#e8e8e8")
 from xml.etree import ElementTree as ET
 
 from collections import defaultdict
@@ -74,7 +60,6 @@ import csv
 from PyQt6.QtCore import QRectF
 from PyQt6.QtWidgets import QGraphicsRectItem
 
-from sam2_interface import SAM2Interface
 from PyQt6.QtGui import QPainterPath
 from PyQt6.QtGui import QCursor
 
@@ -82,7 +67,6 @@ from PyQt6.QtGui import QCursor
 import cv2
 import subprocess
 
-import torch
 import time
 
 from trimesh.smoothing import filter_laplacian  # ✅ 追加
@@ -192,7 +176,10 @@ FFMPEG_PATH = get_ffmpeg_path()
 class CustomGraphicsView(QGraphicsView):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setScene(QGraphicsScene(self))
+        scene = QGraphicsScene(self)
+        scene.setBackgroundBrush(QBrush(CANVAS_BACKGROUND_COLOR))
+        self.setScene(scene)
+        self.setBackgroundBrush(QBrush(CANVAS_BACKGROUND_COLOR))
         self.drawing = False
         self.current_path = None
         self.paths = []  # 各画像ごとに後で辞書化予定
@@ -205,11 +192,15 @@ class CustomGraphicsView(QGraphicsView):
         self.click_points = []   # clickモードで使用する座標のリスト
         self.current_path_item = None  # clickモード用
 
-        self.save_callback = None  # ✅ コールバック追加 
+        self.save_callback = None  # ✅ コールバック追加
+        self.image_wheel_callback = None
         
         self.temp_preview_item = None  # 仮のスムージングプレビュー用
         
         self.gray_image = None  # グレースケール画像（スナップ用）
+        self.middle_mouse_panning = False
+        self.last_pan_pos = None
+        self.cursor_before_pan = None
 
 
 
@@ -274,9 +265,8 @@ class CustomGraphicsView(QGraphicsView):
                 self.horizontalScrollBar().value() - delta
             )
         elif modifiers == Qt.KeyboardModifier.NoModifier:
-            self.verticalScrollBar().setValue(
-                self.verticalScrollBar().value() - delta
-            )
+            if self.image_wheel_callback is not None:
+                self.image_wheel_callback(delta)
         event.accept()
 
 
@@ -348,6 +338,14 @@ class CustomGraphicsView(QGraphicsView):
 
     
     def mousePressEvent(self, event: QMouseEvent):
+        if event.button() == Qt.MouseButton.MiddleButton:
+            self.middle_mouse_panning = True
+            self.last_pan_pos = event.pos()
+            self.cursor_before_pan = self.cursor()
+            self.setCursor(Qt.CursorShape.ClosedHandCursor)
+            event.accept()
+            return
+
         if event.button() == Qt.MouseButton.LeftButton:
             scene_pos = self.mapToScene(event.pos())
     
@@ -418,6 +416,18 @@ class CustomGraphicsView(QGraphicsView):
     #     event.accept()
 
     def mouseMoveEvent(self, event: QMouseEvent):
+        if self.middle_mouse_panning and self.last_pan_pos is not None:
+            delta = event.pos() - self.last_pan_pos
+            self.last_pan_pos = event.pos()
+            self.horizontalScrollBar().setValue(
+                self.horizontalScrollBar().value() - delta.x()
+            )
+            self.verticalScrollBar().setValue(
+                self.verticalScrollBar().value() - delta.y()
+            )
+            event.accept()
+            return
+
         scene_pos = self.mapToScene(event.pos())
     
         # ✅ freeモード（従来の手描き）
@@ -490,6 +500,15 @@ class CustomGraphicsView(QGraphicsView):
 
                 
     def mouseReleaseEvent(self, event: QMouseEvent):
+        if event.button() == Qt.MouseButton.MiddleButton and self.middle_mouse_panning:
+            self.middle_mouse_panning = False
+            self.last_pan_pos = None
+            if self.cursor_before_pan is not None:
+                self.setCursor(self.cursor_before_pan)
+                self.cursor_before_pan = None
+            event.accept()
+            return
+
         if self.draw_mode == 'free':
             if event.button() == Qt.MouseButton.LeftButton and self.drawing:
                 self.drawing = False
@@ -665,7 +684,9 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
         # ✅ Scene を作成
         self.scene = QGraphicsScene()
+        self.scene.setBackgroundBrush(QBrush(CANVAS_BACKGROUND_COLOR))
         self.graphicsView.setScene(self.scene)
+        self.graphicsView.setBackgroundBrush(QBrush(CANVAS_BACKGROUND_COLOR))
 
         # ✅ チェックボックスのイベント接続
         for checkbox in self.checkboxes:
@@ -760,6 +781,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         self.btn_export_nifti_reversed.clicked.connect(self.export_nifti_labelmap_reversed)
         self.btn_export_tiff.clicked.connect(self.export_all_svgs_to_grayscale_tiff)
         self.btn_export_tiff_reversed.clicked.connect(self.export_all_svgs_to_grayscale_tiff_reversed)
+        self.btn_export_overlay_png.clicked.connect(self.export_overlay_png_sequence)
         
         self.btn_draw_calibration_line.clicked.connect(self.start_calibration)
         self.btn_load_volinf.clicked.connect(self.load_volinf_csv)
@@ -802,6 +824,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         # ✅ 線データ保持
         self.drawn_paths_per_image = {}
         self.graphicsView.save_callback = self.save_drawn_path
+        self.graphicsView.image_wheel_callback = self.switch_image_by_wheel
         
         self.color_labels = self.color_labels
         
@@ -818,8 +841,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         os.makedirs(self.output_mask_dir, exist_ok=True)
 
         # ✅ PNG単一ラベル保存先（新規）
-        self.output_label_dir = os.path.join(os.getcwd(), f"label_masks_{now}")
-        os.makedirs(self.output_label_dir, exist_ok=True)
+        self.reset_autosave_label_dir()
         
         self.redo_stack = defaultdict(list)  # 🔁 Redoline用のスタック（画像ごと）
         
@@ -849,11 +871,13 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         undo_shortcut = QShortcut(QKeySequence("Ctrl+Z"), self)
         undo_shortcut.activated.connect(self.smart_undo)
     
-        self.sam2_interface = SAM2Interface()
-        self.sam2_enabled = self.sam2_interface.has_cuda  # ✅ GPU使用可否の判定
+        self.sam2_interface = None
+        self.sam2_enabled = False
+        self.sam2_disabled_reason = None
 
-        if not self.sam2_enabled:
-            self.label_status.setText("⚠ SAM2 is disabled (requires NVIDIA GPU + CUDA + PyTorch).")
+        if False:
+            sam2_disabled_message = self.sam2_interface.status_message
+            self.label_status.setText(f"⚠ {sam2_disabled_message}")
 
             # SAM2関連のボタンをリストアップ
             sam_buttons = [
@@ -877,10 +901,13 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
                 btn.setEnabled(False)  # ✅ グレーアウト
                 btn.setStyleSheet("color: gray; background-color: lightgray;")  # ✅ 見た目もグレーアウト
                 btn.clicked.connect(lambda _, b=btn: self.label_status.setText(
-                    f"⚠ '{b.text()}' is only available on systems with NVIDIA GPU + CUDA + PyTorch."))
+                    f"⚠ '{b.text()}' is unavailable. {sam2_disabled_message}"))
+        if False:
+            self.label_status.setText(self.sam2_interface.status_message)
         
         
-        self.label_status.setText("Ready.")
+        if self.sam2_enabled:
+            self.label_status.setText(self.sam2_interface.status_message)
         
         self.loaded_images = {}  # 🔧 画像読み込み管理用の辞書
         
@@ -898,6 +925,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         self.btn_run_tracking.clicked.connect(self.run_tracking)
         self.btn_add_object_prompt.clicked.connect(self.add_object_prompt_for_batch)
         self.btn_batch_tracking.clicked.connect(self.run_batch_tracking)
+        self.initialize_sam2()
         
         #オーバーラップの検出
         self.btn_extract_overlap.clicked.connect(self.on_extract_overlap_clicked)
@@ -1301,6 +1329,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
     
         self.label_masks[key] = label
         self.label_mask_paths[key] = self.get_label_png_path(key)
+        self.save_label_mask_png(key)
     
         print(
             f"[INFO] Loaded SVG as label mask: {os.path.basename(svg_path)} | "
@@ -1415,6 +1444,17 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
 #ヘルパー関数
     
+    def reset_autosave_label_dir(self) -> None:
+        now = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.output_label_dir = os.path.join(os.getcwd(), f"label_png_[autosave]_{now}")
+        os.makedirs(self.output_label_dir, exist_ok=True)
+        self.label_mask_paths = {
+            key: self.get_label_png_path(key)
+            for key in getattr(self, "label_masks", {}).keys()
+        }
+        print(f"[INFO] Autosave label PNG folder: {self.output_label_dir}")
+
+
     def get_label_png_path(self, key: str) -> str:
         return os.path.join(self.output_label_dir, f"mask{key}.png")
     
@@ -1442,6 +1482,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         if key not in self.label_masks:
             self.label_masks[key] = self.create_empty_label_mask(key)
             self.label_mask_paths[key] = self.get_label_png_path(key)
+            self.save_label_mask_png(key)
         return self.label_masks[key]
     
     
@@ -1452,12 +1493,17 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         if key not in self.label_masks:
             raise KeyError(f"No label mask in memory for key: {key}")
     
-        save_path = self.label_mask_paths.get(key, self.get_label_png_path(key))
+        os.makedirs(self.output_label_dir, exist_ok=True)
+        save_path = self.get_label_png_path(key)
         ok = cv2.imwrite(save_path, self.label_masks[key])
         if not ok:
             raise IOError(f"Failed to save label mask: {save_path}")
     
         self.label_mask_paths[key] = save_path
+        message = f"Autosaved label PNG: {os.path.basename(save_path)}"
+        print(f"[INFO] {message}")
+        if hasattr(self, "label_status"):
+            self.label_status.setText(message)
     
     
     def load_label_mask_png(self, key: str, png_path: str) -> None:
@@ -1475,7 +1521,8 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             arr = arr.astype(np.uint8)
     
         self.label_masks[key] = arr
-        self.label_mask_paths[key] = png_path
+        self.label_mask_paths[key] = self.get_label_png_path(key)
+        self.save_label_mask_png(key)
     
     
     def save_all_label_masks_png(self) -> None:
@@ -1484,6 +1531,8 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         """
         for key in sorted(self.label_masks.keys()):
             self.save_label_mask_png(key)
+        if hasattr(self, "label_status"):
+            self.label_status.setText(f"Autosaved label PNGs to: {self.output_label_dir}")
     
     
     def get_current_label_mask(self) -> np.ndarray | None:
@@ -1502,7 +1551,6 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
     from datetime import datetime
     
     def show_version_info(self):
-        from SegRef3D import __version__
         month_str = datetime.now().strftime("%B %Y")
         version_text = (
             f"SegRef3D\n"
@@ -1513,6 +1561,110 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             "PyQt6 GUI for AI-based segmentation and refinement"
         )
         QMessageBox.information(self, "Version Information", version_text)
+
+
+    def local_sam2_buttons(self):
+        return [
+            self.btn_prepare_tracking,
+            self.btn_set_box_prompt,
+            self.btn_clear_box,
+            self.btn_set_tracking_start,
+            self.btn_set_tracking_end,
+            self.btn_add_object_prompt,
+            self.btn_batch_tracking,
+            self.btn_run_tracking,
+            self.btn_run_sam2,
+        ]
+
+
+    def disable_sam2_ui(self, reason: str):
+        self.sam2_interface = None
+        self.sam2_enabled = False
+        self.sam2_disabled_reason = reason
+        message = reason or (
+            "SAM2 is not included in this lightweight build. "
+            "Use Seg on Web or the GPU build for AI segmentation."
+        )
+
+        for btn in self.local_sam2_buttons():
+            try:
+                btn.clicked.disconnect()
+            except (TypeError, RuntimeError):
+                pass
+            btn.setEnabled(False)
+            btn.setToolTip(message)
+            btn.setStyleSheet("color: gray; background-color: lightgray;")
+            btn.clicked.connect(lambda _, m=message: self.label_status.setText(f"⚠ {m}"))
+
+        # Keep cloud/web AI routes available in the lightweight build.
+        for btn in (self.btn_seg_on_web, self.btn_instant3dweb):
+            btn.setEnabled(True)
+            btn.setToolTip("")
+
+        self.label_status.setText(f"⚠ {message}")
+        print(f"[INFO] Local SAM2 disabled: {message}")
+
+
+    def initialize_sam2(self):
+        lite_reason = (
+            "SAM2 is not included in this lightweight build. "
+            "Use Seg on Web or the GPU build for AI segmentation."
+        )
+
+        disable_flag = os.environ.get("SEGREF3D_DISABLE_SAM2", "").strip().lower()
+        if disable_flag in ("1", "true", "yes", "on"):
+            self.disable_sam2_ui(lite_reason)
+            return
+
+        try:
+            from sam2_interface import SAM2Interface
+        except Exception as exc:
+            self.disable_sam2_ui(f"{lite_reason} Import error: {exc}")
+            return
+
+        allow_cpu_sam2 = os.environ.get("SEGREF3D_ALLOW_SAM2_CPU", "").strip().lower() in (
+            "1", "true", "yes", "on"
+        )
+
+        try:
+            self.sam2_interface = SAM2Interface(allow_cpu_fallback=allow_cpu_sam2)
+            self.sam2_enabled = bool(getattr(self.sam2_interface, "enabled", False))
+        except Exception as exc:
+            self.disable_sam2_ui(f"{lite_reason} Initialization error: {exc}")
+            return
+
+        if self.sam2_enabled:
+            self.sam2_disabled_reason = None
+            self.label_status.setText(self.sam2_interface.status_message)
+        else:
+            self.disable_sam2_ui(
+                getattr(self.sam2_interface, "status_message", "Local SAM2 is unavailable.")
+            )
+
+
+    def ensure_local_sam2_available(self) -> bool:
+        if self.sam2_enabled and self.sam2_interface is not None:
+            return True
+        self.label_status.setText("⚠ SAM2 is not included in this build.")
+        if self.sam2_disabled_reason:
+            print(f"[WARN] {self.sam2_disabled_reason}")
+        return False
+
+
+    def mask_to_qpath(self, mask):
+        from skimage import measure
+
+        path = QPainterPath()
+        contours = measure.find_contours(mask.astype(np.uint8), 0.5)
+
+        for contour in contours:
+            if len(contour) < 2:
+                continue
+            path.moveTo(contour[0][1], contour[0][0])
+            for y, x in contour[1:]:
+                path.lineTo(x, y)
+
+        return path
     
     def open_seg_on_web(self):
         import webbrowser
@@ -1556,7 +1708,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             mask = cv2.inRange(img, lower, upper)
     
             # マスク → QPainterPath
-            qpath = self.sam2_interface.mask_to_qpath(mask)
+            qpath = self.mask_to_qpath(mask)
     
             # 現在の画像だけ画面に描画
             if key == current_key:
@@ -1986,6 +2138,9 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
     
     def start_box_prompt_mode(self):
+        if not self.ensure_local_sam2_available():
+            return
+
         self.box_mode = True
         self.box_points = []
         print("[DEBUG] start_box_prompt_mode called")
@@ -2025,6 +2180,9 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         
     
     def clear_box(self):
+        if not self.ensure_local_sam2_available():
+            return
+
         # ✅ ボックスが表示されていれば削除
         if hasattr(self, "confirmed_box_item") and self.confirmed_box_item:
             self.scene.removeItem(self.confirmed_box_item)
@@ -2051,6 +2209,15 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
     
     def run_sam2_segmentation(self):
+        if not self.ensure_local_sam2_available():
+            return
+
+        if not getattr(self, "sam2_enabled", False):
+            message = getattr(self.sam2_interface, "status_message", "SAM2 is not available in this runtime.")
+            self.label_status.setText(f"⚠ {message}")
+            print(f"[WARN] {message}")
+            return
+
         key = self.get_current_image_key()
         if key is None or key not in self.image_paths:
             print("[WARN] No image loaded.")
@@ -2085,10 +2252,15 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             QApplication.processEvents()
 
         
-        result_mask = self.sam2_interface.run_segmentation(image_np, box, progress_callback=update_progress)
+        try:
+            result_mask = self.sam2_interface.run_segmentation(image_np, box, progress_callback=update_progress)
+        except Exception as e:
+            self.label_status.setText(f"⚠ SAM2 segmentation failed: {e}")
+            print(f"[ERROR] SAM2 segmentation failed: {e}")
+            return
     
         # マスクから QPainterPath に変換して、描画＆保存
-        qpath = self.sam2_interface.mask_to_qpath(result_mask)
+        qpath = self.mask_to_qpath(result_mask)
                 
         # ✅ パスの簡略化（曲線が多すぎる問題を軽減）
         qpath = qpath.simplified()
@@ -2150,6 +2322,9 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
     
     def prepare_tracking_frames(self):
+        if not self.ensure_local_sam2_available():
+            return
+
         self.label_status.setText("📦 Preparing tracking frames...")
         QApplication.processEvents()
     
@@ -2178,10 +2353,16 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
     
     def set_tracking_start(self):
+        if not self.ensure_local_sam2_available():
+            return
+
         self.tracking_start_index = self.current_image_index
         self.label_status.setText(f"Tracking Start set at frame {self.tracking_start_index + 1}")
     
     def set_tracking_end(self):
+        if not self.ensure_local_sam2_available():
+            return
+
         self.tracking_end_index = self.current_image_index
         self.label_status.setText(f"Tracking End set at frame {self.tracking_end_index + 1}")
     
@@ -2458,6 +2639,9 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         
     
     def run_tracking(self):
+        if not self.ensure_local_sam2_available():
+            return
+
         # 🔎 チェック：開始・終了フレーム
         if not hasattr(self, 'tracking_start_index') or not hasattr(self, 'tracking_end_index'):
             self.label_status.setText("Please set both start and end frames for tracking.")
@@ -2675,7 +2859,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
                     try:
                         # mask -> QPainterPath に変換
                         mask_uint8 = (mask.astype(np.uint8) * 255)
-                        qpath = self.sam2_interface.mask_to_qpath(mask_uint8)
+                        qpath = self.mask_to_qpath(mask_uint8)
         
                         if qpath is None or qpath.isEmpty():
                             print(f"[WARN] Empty qpath for frame {key}")
@@ -2742,6 +2926,9 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
     
     def add_object_prompt_for_batch(self):
+        if not self.ensure_local_sam2_available():
+            return
+
 
         
         if not hasattr(self, 'last_used_box_px'):
@@ -2987,6 +3174,9 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
     
     def run_tracking_for_object(self, obj_id, box, point, start_frame, end_frame, box_frame):
+        if not self.ensure_local_sam2_available():
+            return
+
         self.label_status.setText(f"📦 Tracking Object {obj_id}: Frame {start_frame+1}–{end_frame+1}")
         QApplication.processEvents()
     
@@ -3201,6 +3391,9 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
     
     def run_batch_tracking(self):
+        if not self.ensure_local_sam2_available():
+            return
+
         if not self.batch_object_data:
             self.label_status.setText("⚠ No objects registered for batch tracking.")
             return
@@ -3540,7 +3733,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
                 mask = np.where((image_np >= min_val) & (image_np <= max_val), 255, 0).astype(np.uint8)
     
                 # ✨ マスク → QPainterPath
-                qpath = self.sam2_interface.mask_to_qpath(mask)
+                qpath = self.mask_to_qpath(mask)
     
                 # ✏ 現在表示中の画像には画面にも描画
                 if key == current_key:
@@ -3792,6 +3985,8 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         # ✅ 既存の画像／マスク／描画パス／Undo情報などをすべてリセット
         self.image_paths.clear()
         self.mask_paths.clear()
+        self.label_masks.clear()
+        self.label_mask_paths.clear()
         self.drawn_paths_per_image.clear()
         self.undo_stack.clear()
         self.redo_stack.clear()
@@ -4497,7 +4692,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         self.display_current_image()
         self.fit_view_to_window()
         
-        self.label_status.setText("✅ Images loaded. Use ↓↑, F/R, or J/U to switch images.")
+        self.label_status.setText("✅ Images loaded. Use mouse wheel, PageUp/PageDown, F/R, or J/U to switch images.")
 
             
             
@@ -4650,9 +4845,6 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
                 elif filename.lower().endswith(".svg"):
                     self.load_svg_as_label_mask(key, src_path)
     
-                    # SVGから読んだものも、新方式のPNGとして保存しておく
-                    self.save_label_mask_png(key)
-    
                 loaded_count += 1
     
             except Exception as e:
@@ -4666,7 +4858,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         # self.display_current_image()    
         self.update_checkboxes_based_on_used_colors()
         self.display_current_image()
-        self.label_status.setText(f"✅ Loaded {loaded_count} mask(s) into label map.")    
+        self.label_status.setText(f"✅ Loaded {loaded_count} mask(s). Autosaved label PNGs to: {self.output_label_dir}")    
     
     
     
@@ -5158,6 +5350,67 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
                     
                     
+    def export_overlay_png_sequence(self):
+        if not self.image_paths:
+            self.label_status.setText("⚠ No images loaded.")
+            return
+
+        root_folder = QFileDialog.getExistingDirectory(
+            self, "Select Folder to Export Overlay PNGs"
+        )
+        if not root_folder:
+            self.label_status.setText("Overlay export canceled.")
+            return
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_dir = os.path.join(root_folder, f"overlay_png_{timestamp}")
+        os.makedirs(output_dir, exist_ok=True)
+
+        alpha = 77 / 255.0
+        exported_count = 0
+
+        for export_index, key in enumerate(sorted(self.image_paths.keys()), start=1):
+            image_path = self.image_paths[key]
+            image = cv2.imread(image_path, cv2.IMREAD_COLOR)
+            if image is None:
+                print(f"[WARN] Failed to load image for overlay export: {image_path}")
+                continue
+
+            h, w = image.shape[:2]
+            output = image.astype(np.float32)
+            label_mask = self.label_masks.get(key)
+
+            if label_mask is not None:
+                if label_mask.shape != (h, w):
+                    print(
+                        f"[WARN] Skipping mask overlay for {key}: "
+                        f"label={label_mask.shape}, image={(h, w)}"
+                    )
+                else:
+                    for obj_id, (r, g, b) in enumerate(self.color_labels, start=1):
+                        if obj_id - 1 >= len(self.checkboxes):
+                            continue
+                        if not self.checkboxes[obj_id - 1].isChecked():
+                            continue
+
+                        mask = (label_mask == obj_id)
+                        if not np.any(mask):
+                            continue
+
+                        color_bgr = np.array([b, g, r], dtype=np.float32)
+                        output[mask] = (1.0 - alpha) * output[mask] + alpha * color_bgr
+
+            output = np.clip(output, 0, 255).astype(np.uint8)
+            output_path = os.path.join(output_dir, f"overlay{export_index:04d}.png")
+            if cv2.imwrite(output_path, output):
+                exported_count += 1
+            else:
+                print(f"[WARN] Failed to write overlay PNG: {output_path}")
+
+        self.label_status.setText(f"✅ Exported {exported_count} overlay PNGs")
+        print(f"[INFO] Exported {exported_count} overlay PNGs to: {output_dir}")
+
+
     def display_current_image(self):
     
         # ✅ 現在の画像インデックスを記録
@@ -5265,7 +5518,63 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             self.graphicsView.resetTransform()
             self.graphicsView.fitInView(self.scene.itemsBoundingRect(), Qt.AspectRatioMode.KeepAspectRatio)
                 
-    
+
+    def closeEvent(self, event):
+        box = QMessageBox(self)
+        box.setWindowTitle("Confirm Exit")
+        box.setText(
+            "Are you sure you want to close SegRef3D?\n\n"
+            "Please confirm that your label PNG masks have been saved.\n\n"
+            "Autosaved label PNG masks are stored in:\n"
+            f"{self.output_label_dir}"
+        )
+        close_button = box.addButton("Close", QMessageBox.ButtonRole.AcceptRole)
+        box.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
+        box.exec()
+
+        if box.clickedButton() is close_button:
+            event.accept()
+        else:
+            event.ignore()
+
+
+    def finalize_pending_click_path(self):
+        if self.graphicsView.draw_mode in ['click', 'click_snap']:
+            if self.graphicsView.click_points and self.graphicsView.current_path_item:
+                self.graphicsView.finalize_click_drawing()
+
+
+    def switch_image(self, delta: int) -> bool:
+        if not self.image_paths:
+            return False
+
+        target_index = self.current_index + delta
+        if target_index < 0 or target_index >= len(self.image_paths):
+            return False
+
+        self.finalize_pending_click_path()
+        self.current_index = target_index
+        self.image_pristine = False
+        self.display_current_image()
+        return True
+
+
+    def go_to_next_image(self) -> bool:
+        return self.switch_image(1)
+
+
+    def go_to_previous_image(self) -> bool:
+        return self.switch_image(-1)
+
+
+    def switch_image_by_wheel(self, delta: int) -> bool:
+        if delta > 0:
+            return self.go_to_previous_image()
+        if delta < 0:
+            return self.go_to_next_image()
+        return False
+
+
     
 
     
@@ -5275,27 +5584,11 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             key = event.key()
         
             if key in (Qt.Key.Key_PageDown, Qt.Key.Key_F, Qt.Key.Key_J):
-                if self.current_index + 1 < len(self.image_paths):
-                    # ✅ 描画途中なら確定（切り替え前に！）
-                    if self.graphicsView.draw_mode in ['click', 'click_snap']:
-                        if self.graphicsView.click_points and self.graphicsView.current_path_item:
-                            self.graphicsView.finalize_click_drawing()                    
-                    
-                    self.current_index += 1
-                    self.image_pristine = False  # 🔸 操作フラグをオフ
-                    self.display_current_image()
+                self.go_to_next_image()
                 return True
         
             elif key in (Qt.Key.Key_PageUp, Qt.Key.Key_R, Qt.Key.Key_U):
-                if self.current_index > 0:
-                    # ✅ 描画途中なら確定（切り替え前に！）
-                    if self.graphicsView.draw_mode in ['click', 'click_snap']:
-                        if self.graphicsView.click_points and self.graphicsView.current_path_item:
-                            self.graphicsView.finalize_click_drawing()                    
-                    
-                    self.current_index -= 1
-                    self.image_pristine = False  # 🔸 操作フラグをオフ
-                    self.display_current_image()
+                self.go_to_previous_image()
                 return True
             
             # 🔍 拡大：E
@@ -5362,8 +5655,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
                 return True
     
             elif modifiers == Qt.KeyboardModifier.NoModifier:
-                vbar = self.graphicsView.verticalScrollBar()
-                vbar.setValue(vbar.value() - delta)
+                self.switch_image_by_wheel(delta)
                 return True
     
            
@@ -9375,6 +9667,30 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
 
 if __name__ == "__main__":
+    if "--gpu-check" in sys.argv:
+        try:
+            from gpu_runtime import (
+                compatibility_result,
+                configure_safe_torch_attention,
+                get_cuda_diagnostics,
+                print_cuda_diagnostics,
+            )
+
+            configure_safe_torch_attention()
+            cuda_diagnostics = get_cuda_diagnostics()
+            print_cuda_diagnostics(cuda_diagnostics, sam2_mode="diagnostic-only")
+            print(f"Result: {compatibility_result(cuda_diagnostics)}")
+            sys.exit(
+                0
+                if cuda_diagnostics.get("cuda_test_ok") or not cuda_diagnostics.get("cuda_available")
+                else 2
+            )
+        except Exception as exc:
+            print("=== SegRef3D GPU Diagnostic ===")
+            print(f"GPU diagnostic failed: {exc}")
+            print("===============================")
+            sys.exit(2)
+
     app = QApplication(sys.argv)
     window = SegRefMain()
     app.installEventFilter(window)  # ← ここでアプリケーション全体にフィルターを適用

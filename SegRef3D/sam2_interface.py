@@ -2,7 +2,6 @@
 
 import os
 import sys
-import torch
 import numpy as np
 from PIL import Image
 from PyQt6.QtGui import QPainterPath
@@ -21,10 +20,6 @@ from PyQt6.QtWidgets import QApplication
 # sam2pkg/sam2 を直接追加する
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SAM2_DIR = os.path.join(BASE_DIR, "sam2pkg", "sam2")
-if SAM2_DIR not in sys.path:
-    sys.path.insert(0, SAM2_DIR)
-
-from build_sam import build_sam2_video_predictor
 
 
 
@@ -32,35 +27,87 @@ from build_sam import build_sam2_video_predictor
 class SAM2Interface:
     def __init__(self,
                  model_ckpt_path=os.path.join(BASE_DIR, "checkpoints", "sam2.1_hiera_large.pt"),
-                 model_cfg_path=os.path.join(BASE_DIR, "configs", "sam2.1", "sam2.1_hiera_l.yaml")):
+                 model_cfg_path=os.path.join(BASE_DIR, "configs", "sam2.1", "sam2.1_hiera_l.yaml"),
+                 cuda_info=None,
+                 allow_cpu_fallback=False):
 
         # self.device = self._select_device()
         # self.predictor = build_sam2_video_predictor(model_cfg_path, model_ckpt_path, device=self.device)
         # print("[INFO] SAM2 model initialized.")
 
-        self.device = self._select_device()
-        self.has_cuda = self.device.type == "cuda"  # ✅ CUDA判定を属性として保持
+        if not os.path.isdir(SAM2_DIR):
+            raise RuntimeError(f"SAM2 package directory is missing: {SAM2_DIR}")
+        if not os.path.exists(model_ckpt_path):
+            raise RuntimeError(f"SAM2 checkpoint is missing: {model_ckpt_path}")
+        if not os.path.exists(model_cfg_path):
+            raise RuntimeError(f"SAM2 config is missing: {model_cfg_path}")
 
-        if self.has_cuda:
+        try:
+            import torch
+        except Exception as exc:
+            raise RuntimeError(
+                "PyTorch is required for local SAM2 but is not installed or bundled."
+            ) from exc
+
+        try:
+            from gpu_runtime import (
+                choose_sam2_mode,
+                configure_safe_torch_attention,
+                get_cuda_diagnostics,
+                print_cuda_diagnostics,
+            )
+        except Exception as exc:
+            raise RuntimeError("GPU runtime diagnostics are unavailable.") from exc
+
+        if SAM2_DIR not in sys.path:
+            sys.path.insert(0, SAM2_DIR)
+
+        try:
+            from build_sam import build_sam2_video_predictor
+        except Exception as exc:
+            raise RuntimeError(
+                "SAM2 could not be imported. Ensure sam2pkg is included in the GPU build."
+            ) from exc
+
+        self._torch = torch
+        configure_safe_torch_attention()
+        self.cuda_info = cuda_info or get_cuda_diagnostics()
+        self.mode, self.status_message = choose_sam2_mode(
+            self.cuda_info,
+            allow_cpu_fallback=allow_cpu_fallback,
+        )
+        self.has_cuda = self.mode == "cuda"
+        self.enabled = self.mode in ("cuda", "cpu")
+        self.disabled_reason = None if self.enabled else self.status_message
+        self.device = self._select_device()
+        self.predictor = None
+
+        if self.enabled:
             self.predictor = build_sam2_video_predictor(model_cfg_path, model_ckpt_path, device=self.device)
-            print("[INFO] SAM2 model initialized.")
+            print(f"[INFO] SAM2 model initialized on {self.device}.")
         else:
-            self.predictor = None  # ✅ 無効化
-            print("[INFO] SAM2 is disabled (no CUDA available).")
+            print(f"[INFO] {self.status_message}")
+
+        print_cuda_diagnostics(self.cuda_info, sam2_mode=self.mode)
 
 
     def _select_device(self):
         # ↓ 以下の行を一時的に追加（GPUがあっても無視）
         # return torch.device("cpu")  # ← 強制的にCPU環境にする        
         
-        if torch.cuda.is_available():
-            device = torch.device("cuda")
-        elif torch.backends.mps.is_available():
-            device = torch.device("mps")
+        if self.mode == "cuda":
+            device = self._torch.device("cuda")
+        elif self.mode == "cpu":
+            device = self._torch.device("cpu")
         else:
-            device = torch.device("cpu")
+            device = self._torch.device("cpu")
         print(f"[INFO] Using device: {device}")
         return device
+
+
+    def ensure_available(self):
+        if self.predictor is None:
+            raise RuntimeError(self.disabled_reason or "SAM2 is not available in this runtime.")
     
 
     
@@ -69,6 +116,7 @@ class SAM2Interface:
         """
         画像とボックス（[x1, y1, x2, y2]）を入力として、2Dマスクを返す
         """
+        self.ensure_available()
         assert image_np.ndim == 3 and image_np.shape[2] in (3, 4), "Input must be RGB or RGBA image"
         if image_np.shape[2] == 4:
             image_np = image_np[:, :, :3]  # RGBA → RGB
@@ -112,6 +160,7 @@ class SAM2Interface:
         if progress_callback:
             progress_callback(0)
     
+        self.ensure_available()
         print(f"[INFO] Running SAM2 on box: {box_prompt}")  
     
     

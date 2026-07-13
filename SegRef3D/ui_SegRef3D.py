@@ -46,6 +46,7 @@ class Ui_MainWindow:
         self.btn_export_tiff = QPushButton("Export TIFF")
         # self.btn_export_grayscale_png = QPushButton("Export PNG")   
         self.btn_export_tiff_reversed = QPushButton("Export TIFF (Reversed)")
+        self.btn_export_overlay_png = QPushButton("Export Overlay PNG")
 
 
 
@@ -724,6 +725,7 @@ class Ui_MainWindow:
                 self.btn_export_nifti_reversed,
                 self.btn_export_tiff,
                 self.btn_export_tiff_reversed,
+                self.btn_export_overlay_png,
             ],
             # "Threshold / RGB": [
             #     self.label_threshold_preset,

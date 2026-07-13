@@ -1,0 +1,30 @@
+*.py[cod]
+__pycache__/
+*/__pycache__/
+
+# Local Python environments
+.venv*/
+SegRef3D/.venv*/
+
+# Local build outputs
+build/
+dist/
+SegRef3D/build/
+SegRef3D/dist/
+*.spec
+*.zip
+
+# SegRef3D generated outputs and test data
+SegRef3D/label_png/
+SegRef3D/label_png_[autosave]_*/
+SegRef3D/preview_png/
+SegRef3D/masks_*/
+SegRef3D/video_frames/
+SegRef3D/video_frames_reversed/
+SegRef3D/testimages*/
+
+# Local model/dependency payloads
+SegRef3D/checkpoints/
+SegRef3D/sam_model/
+SegRef3D/sam2pkg/
+SegRef3D/ffmpeg_bin/
