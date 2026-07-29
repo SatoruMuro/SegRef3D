@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="SegRef3DのNIfTIラベルマップへ空白スライスを挿入し、3D SlicerのFill between slicesで補間できる形に変換します。"
+    />
+    <meta name="theme-color" content="#103c35" />
+    <title>SliceBridge — SegRef3D</title>
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="site-header">
+        <a class="brand" href="https://github.com/SatoruMuro/SegRef3D">
+          <span class="brand-mark" aria-hidden="true">
+            <span></span><span></span><span></span>
+          </span>
+          <span>SegRef3D</span>
+        </a>
+        <a
+          class="github-link"
+          href="https://github.com/SatoruMuro/SegRef3D"
+          target="_blank"
+          rel="noreferrer"
+        >
+          GitHub
+          <span aria-hidden="true">↗</span>
+        </a>
+      </header>
+
+      <main>
+        <section class="hero">
+          <div class="eyebrow"><span></span> NIfTI anchor-slice utility</div>
+          <h1>Slice<span>Bridge</span></h1>
+          <p class="hero-copy">
+            離れた輪郭の間に空白スライスを挿入し、<br class="desktop-only" />
+            3D Slicerで補間できるラベルマップをつくります。
+          </p>
+          <div class="privacy-pill">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 3 5 6v5c0 4.7 2.8 8.8 7 10 4.2-1.2 7-5.3 7-10V6l-7-3Z" />
+              <path d="m9 12 2 2 4-5" />
+            </svg>
+            <span><strong>完全ローカル処理</strong> — 画像は外部へ送信されません</span>
+          </div>
+        </section>
+
+        <section class="workspace" aria-label="NIfTI変換">
+          <div class="step-heading">
+            <span class="step-number">1</span>
+            <div>
+              <p>INPUT</p>
+              <h2>ラベルマップを選ぶ</h2>
+            </div>
+          </div>
+
+          <input
+            id="file-input"
+            class="visually-hidden"
+            type="file"
+            accept=".nii,.nii.gz,application/gzip"
+          />
+          <label id="drop-zone" class="drop-zone" for="file-input">
+            <span class="drop-icon" aria-hidden="true">
+              <svg viewBox="0 0 48 48">
+                <path d="M24 32V12m0 0-8 8m8-8 8 8" />
+                <path d="M9 29v7a4 4 0 0 0 4 4h22a4 4 0 0 0 4-4v-7" />
+              </svg>
+            </span>
+            <span class="drop-title">NIfTIファイルをドロップ</span>
+            <span class="drop-subtitle">またはクリックして選択（.nii / .nii.gz）</span>
+          </label>
+
+          <div id="file-card" class="file-card" hidden>
+            <div class="file-card-main">
+              <div class="file-type">NII</div>
+              <div class="file-name-wrap">
+                <strong id="file-name"></strong>
+                <span id="file-size"></span>
+              </div>
+              <button id="replace-file" class="text-button" type="button">変更</button>
+            </div>
+            <dl class="metadata-grid">
+              <div>
+                <dt>画像サイズ</dt>
+                <dd id="meta-dimensions">—</dd>
+              </div>
+              <div>
+                <dt>Voxel spacing</dt>
+                <dd id="meta-spacing">—</dd>
+              </div>
+              <div>
+                <dt>データ型</dt>
+                <dd id="meta-datatype">—</dd>
+              </div>
+              <div>
+                <dt>ラベル</dt>
+                <dd id="meta-labels">—</dd>
+              </div>
+            </dl>
+          </div>
+
+          <div id="settings" class="settings" hidden>
+            <div class="step-heading">
+              <span class="step-number">2</span>
+              <div>
+                <p>SETTINGS</p>
+                <h2>空白スライスを設定</h2>
+              </div>
+            </div>
+
+            <div class="settings-grid">
+              <label class="field">
+                <span class="field-label">スライス方向</span>
+                <select id="axis-select">
+                  <option value="auto">自動判定</option>
+                  <option value="x">X軸</option>
+                  <option value="y">Y軸</option>
+                  <option value="z">Z軸</option>
+                </select>
+                <small id="axis-hint">最大spacingの方向を自動で選びます</small>
+              </label>
+
+              <label class="field">
+                <span class="field-label">細分化倍率</span>
+                <span class="number-control">
+                  <button type="button" id="factor-minus" aria-label="倍率を1減らす">−</button>
+                  <input id="factor-input" type="number" min="2" max="100" step="1" value="10" />
+                  <button type="button" id="factor-plus" aria-label="倍率を1増やす">＋</button>
+                </span>
+                <small>元の輪郭をN枚ごとの基準スライスにします</small>
+              </label>
+            </div>
+
+            <div class="conversion-preview">
+              <div>
+                <span>元のspacing</span>
+                <strong id="preview-old-spacing">—</strong>
+              </div>
+              <span class="conversion-arrow" aria-hidden="true">→</span>
+              <div class="preview-output">
+                <span>変換後のspacing</span>
+                <strong id="preview-new-spacing">—</strong>
+              </div>
+              <div class="preview-detail">
+                <span id="preview-axis">—</span>
+                <span id="preview-dimensions">—</span>
+                <span id="preview-size">—</span>
+              </div>
+            </div>
+
+            <div id="warning" class="notice warning" hidden></div>
+
+            <button id="generate-button" class="primary-button" type="button">
+              <span>Anchor NIfTIを作成</span>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M5 12h14m-6-6 6 6-6 6" />
+              </svg>
+            </button>
+
+            <div id="progress-panel" class="progress-panel" hidden>
+              <div class="progress-copy">
+                <span id="progress-label">準備中…</span>
+                <strong id="progress-value">0%</strong>
+              </div>
+              <div
+                class="progress-track"
+                role="progressbar"
+                aria-valuemin="0"
+                aria-valuemax="100"
+                aria-valuenow="0"
+              >
+                <span id="progress-bar"></span>
+              </div>
+            </div>
+          </div>
+
+          <div id="result" class="result" hidden>
+            <div class="result-check" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="m6 12 4 4 8-9" /></svg>
+            </div>
+            <div class="result-copy">
+              <span>変換が完了しました</span>
+              <strong id="result-name"></strong>
+              <small id="result-summary"></small>
+            </div>
+            <a id="download-link" class="download-button" download>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 3v12m0 0-5-5m5 5 5-5M5 20h14" />
+              </svg>
+              ダウンロード
+            </a>
+          </div>
+        </section>
+
+        <section id="slicer-guide" class="slicer-guide" hidden>
+          <div class="guide-intro">
+            <p class="section-kicker">NEXT STEP</p>
+            <h2>3D Slicerで補間する</h2>
+            <p>
+              SliceBridgeは空白スライスを用意します。形状の補間そのものは、
+              3D Slicerの <strong>Fill between slices</strong> で行います。
+            </p>
+          </div>
+          <ol class="guide-steps">
+            <li>
+              <span>01</span>
+              <div>
+                <strong>Volumeとして読み込む</strong>
+                <p>Add data → Show Options → <b>Label map</b> を選択</p>
+              </div>
+            </li>
+            <li>
+              <span>02</span>
+              <div>
+                <strong>Segmentationへ変換</strong>
+                <p>Segmentations → Import labelmap to segmentation</p>
+              </div>
+            </li>
+            <li>
+              <span>03</span>
+              <div>
+                <strong>重なりを許可</strong>
+                <p>Modify other segments → <b>Allow overlap</b></p>
+              </div>
+            </li>
+            <li>
+              <span>04</span>
+              <div>
+                <strong>輪郭間を補間</strong>
+                <p>Segment Editor → Fill between slices → Initialize → Apply</p>
+              </div>
+            </li>
+          </ol>
+        </section>
+      </main>
+
+      <footer>
+        <span>SegRef3D SliceBridge</span>
+        <span>Client-side NIfTI utility · No upload · No tracking</span>
+      </footer>
+    </div>
+
+    <div id="toast" class="toast" role="alert" aria-live="assertive" hidden></div>
+    <script type="module" src="./app.mjs"></script>
+  </body>
+</html>
