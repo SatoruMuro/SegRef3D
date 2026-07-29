@@ -1,0 +1,60 @@
+name: SliceBridge
+
+on:
+  pull_request:
+    paths:
+      - "slice-bridge/**"
+      - ".github/workflows/slice-bridge.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "slice-bridge/**"
+      - ".github/workflows/slice-bridge.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Test NIfTI conversion
+        run: node --test slice-bridge/tests/nifti.test.mjs
+
+  deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - name: Upload SliceBridge
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: slice-bridge
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -47,6 +47,20 @@ Watch the **Basic Workflow** video to learn how to use SegRef3D, from loading im
 
 ---
 
+## 🌉 SliceBridge — NIfTI Anchor-Slice Utility
+
+**[Open SliceBridge in your browser](https://satorumuro.github.io/SegRef3D/)**
+
+SliceBridge inserts blank planes between the labeled planes of a SegRef3D
+NIfTI label map. The resulting anchor-slice NIfTI can be interpolated with
+3D Slicer's **Fill between slices** effect.
+
+- Runs entirely in the browser; files are not uploaded
+- Preserves label values, physical extent, origin, and orientation
+- Supports `.nii` and `.nii.gz` NIfTI-1 integer label maps
+
+---
+
 ## ⚙️ System Requirements
 
 * **Operating System:** Windows 10/11 (64-bit)  

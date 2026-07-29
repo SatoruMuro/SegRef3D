@@ -37,6 +37,19 @@ SegRef3Dの基本的な操作手順をご覧いただける動画を掲載して
 
 ---
 
+## 🌉 SliceBridge — NIfTI基準スライス作成ツール
+
+**[ブラウザでSliceBridgeを開く](https://satorumuro.github.io/SegRef3D/)**
+
+SegRef3Dから出力したNIfTIラベルマップの輪郭間に空白スライスを挿入し、
+3D Slicerの **Fill between slices** で補間できる基準スライスデータを作成します。
+
+- ファイルは外部へ送信せず、ブラウザ内だけで処理
+- ラベル値、実寸範囲、原点、向きを保持
+- NIfTI-1整数ラベルマップ（`.nii` / `.nii.gz`）に対応
+
+---
+
 ## ⚙️ 動作環境
 
 * **OS:** Windows 10/11 (64-bit)  
