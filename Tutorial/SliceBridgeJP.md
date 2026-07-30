@@ -138,22 +138,25 @@ segref3d_labelmap_anchor_z0p65mm.nii.gz
 SliceBridgeの読み込み画面に表示された`ラベル`の整数値だけを作成すれば十分です。
 必要に応じて、各セグメントを骨盤骨、内閉鎖筋、肛門挙筋などの名称へ変更します。
 
-### 5-5. 各セグメントでFill between slicesを実行する
+### 5-5. 表示中の全セグメントをまとめて補間する
 
-作成したセグメントを1つずつ補間します。
+`Fill between slices`は、選択中のセグメントだけでなく、目のアイコンがONに
+なっているすべてのセグメントを同時に処理します。
 
-1. 補間するセグメントを1つ選択します。
+1. 補間したいすべてのセグメントの目のアイコンをONにします。
 2. `Fill between slices`を選択します。
-3. `Initialize`を押して補間結果を確認します。
-4. 問題がなければ`Apply`を押します。
-5. 次のセグメントを選択し、同じく`Initialize`、`Apply`を行います。
-6. 作成したすべてのセグメントで繰り返します。
+3. `Initialize`を押し、表示中の全セグメントの補間プレビューを確認します。
+4. 問題がなければ`Apply`を1回押します。
 
 ```text
-Segment_1を選択 → Fill between slices → Initialize → Apply
-Segment_2を選択 → Fill between slices → Initialize → Apply
-Segment_3を選択 → Fill between slices → Initialize → Apply
+Segment_1・Segment_2・Segment_3を表示
+→ Fill between slices → Initialize → Apply（各1回）
 ```
+
+青く選択されているセグメントではなく、目のアイコンによる表示状態が処理対象を
+決めます。一部だけを補間したい場合は、対象外のセグメントを非表示にしてから
+`Initialize`を押してください。なお、この補間はSource volumeの濃度ではなく、
+セグメントの形状を用いて計算されます。
 ---
 
 ## 使用上の注意
