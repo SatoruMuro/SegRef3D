@@ -217,22 +217,29 @@
             <li>
               <span>02</span>
               <div>
-                <strong>Segmentationへ変換</strong>
-                <p>Segmentations → Import labelmap to segmentation</p>
+                <strong>Segment Editorへ移動</strong>
+                <p>Source volumeで読み込んだNIfTIを選択</p>
               </div>
             </li>
             <li>
               <span>03</span>
               <div>
-                <strong>重なりを許可</strong>
-                <p>Modify other segments → <b>Allow overlap</b></p>
+                <strong>ラベル1を抽出</strong>
+                <p>Add → Threshold → Rangeを <b>1.00–1.00</b> → Apply</p>
               </div>
             </li>
             <li>
               <span>04</span>
               <div>
-                <strong>輪郭間を補間</strong>
-                <p>Segment Editor → Fill between slices → Initialize → Apply</p>
+                <strong>他のラベルも順に抽出</strong>
+                <p>再度Add → <b>2.00–2.00</b>、<b>3.00–3.00</b>… → 各Apply</p>
+              </div>
+            </li>
+            <li>
+              <span>05</span>
+              <div>
+                <strong>表示中の全セグメントをまとめて補間</strong>
+                <p>Fill between slices → Initialize → Apply（目のアイコンがONの全セグメント）</p>
               </div>
             </li>
           </ol>
