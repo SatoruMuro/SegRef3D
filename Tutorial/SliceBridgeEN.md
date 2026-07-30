@@ -71,11 +71,11 @@ NIfTI.
 
 ### Slice axis
 
-In most cases, you can leave this set to `Auto-detect`. SliceBridge
+In most cases, you can leave this set to `自動判定 (Auto-detect)`. SliceBridge
 automatically selects the axis with the largest voxel spacing. You can also
 select the X, Y, or Z axis manually.
 
-### Subdivision factor
+### `細分化倍率 (Subdivision factor)`
 
 Specify how many intervals should be created from each original slice interval.
 
@@ -88,9 +88,9 @@ Check the displayed output spacing, image dimensions, and estimated data size.
 
 ## 4. Create the Anchor NIfTI
 
-1. Click `Create Anchor NIfTI`.
+1. Click `Anchor NIfTIを作成 (Create Anchor NIfTI)`.
 2. Wait until the progress reaches 100%.
-3. Click `Download` to save the generated `.nii.gz` file.
+3. Click `ダウンロード (Download)` to save the generated `.nii.gz` file.
 
 Example output filename:
 
@@ -141,7 +141,7 @@ Label 3: Add → Threshold → 3.00–3.00 → Apply
 ```
 
 You only need to create segments for the integer values listed under
-`Labels` in SliceBridge. Rename the segments as needed, for example pelvis,
+`ラベル (Labels)` in SliceBridge. Rename the segments as needed, for example pelvis,
 obturator internus, and levator ani.
 
 ### 5-5. Interpolate all visible segments together
@@ -156,7 +156,7 @@ the segment highlighted in blue.
 
 ```text
 Show Segment_1, Segment_2, and Segment_3
-→ Fill between slices → Initialize → Apply (once each)
+→ Fill between slices → Initialize once → Apply once
 ```
 
 The visibility state determined by the eye icons controls which segments are
