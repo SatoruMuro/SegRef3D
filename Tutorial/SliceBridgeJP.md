@@ -104,12 +104,41 @@ segref3d_labelmap_anchor_z0p65mm.nii.gz
 2. SliceBridgeからダウンロードした`.nii.gz`を選びます。
 3. `Description`を`Volume`にして読み込みます。
 
-### 5-2. Segmentationへ変換する
+### 5-2. Segment Editorへ移動する
 
-`Segmentations`モジュールで、読み込んだlabelmapをSegmentationへ
-インポートします。
+1. `Segment Editor`モジュールを開きます。
+2. `Source volume`で、読み込んだNIfTI Volumeを選択します。
+3. `Add`を押して、空のセグメントを1つ作ります。
 
-### 5-3. セグメントの重なりを許可する
+### 5-3. ラベル値1を抽出する
+
+1. 作成したセグメントを選択します。
+2. エフェクトから`Threshold`を選択します。
+3. `Threshold Range`の下限と上限を、どちらも`1.00`にします。
+4. `Apply`を押します。
+
+これで、Volume内のラベル値`1`の領域だけが最初のセグメントへ入ります。
+
+### 5-4. 他の整数ラベル値も順に抽出する
+
+ラベル値`2`以降も、整数値ごとにセグメントを分けて抽出します。
+
+1. 再度`Add`を押し、新しい空のセグメントを作ります。
+2. `Threshold`を選択します。
+3. ラベル値`2`なら、Rangeを`2.00–2.00`にして`Apply`します。
+4. ラベル値`3`なら、さらに`Add`して、Rangeを`3.00–3.00`にして`Apply`します。
+5. NIfTIに含まれる整数ラベル値の分だけ繰り返します。
+
+```text
+ラベル値1：Add → Threshold → 1.00–1.00 → Apply
+ラベル値2：Add → Threshold → 2.00–2.00 → Apply
+ラベル値3：Add → Threshold → 3.00–3.00 → Apply
+```
+
+SliceBridgeの読み込み画面に表示された`ラベル`の整数値だけを作成すれば十分です。
+必要に応じて、各セグメントを骨盤骨、内閉鎖筋、肛門挙筋などの名称へ変更します。
+
+### 5-5. セグメントの重なりを許可する
 
 `Segment Editor`で、以下を設定します。
 
@@ -117,16 +146,16 @@ segref3d_labelmap_anchor_z0p65mm.nii.gz
 Modify other segments → Allow overlap
 ```
 
-骨盤骨、内閉鎖筋、肛門挙筋など、複数の構造を同時に扱う場合に重要です。
+複数の構造を補間した結果、境界部分でセグメント同士が接触・重複する可能性が
+あるため、Fill between slicesを行う前に設定します。
 
-### 5-4. Fill between slicesを実行する
+### 5-6. Fill between slicesを実行する
 
-1. 補間するセグメントを選択します。
+1. 補間するセグメントを1つ選択します。
 2. `Fill between slices`を選択します。
 3. `Initialize`で補間結果を確認します。
 4. 問題がなければ`Apply`を押します。
-5. 複数のセグメントがある場合は、各セグメントで繰り返します。
-
+5. 作成した各セグメントで同じ操作を繰り返します。
 ---
 
 ## 使用上の注意
