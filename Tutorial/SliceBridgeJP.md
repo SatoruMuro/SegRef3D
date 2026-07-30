@@ -8,6 +8,8 @@
 
 👉 **[SegRef3D SliceBridge](https://satorumuro.github.io/SegRef3D/slice-bridge/)**
 
+🇺🇸 [English user guide](https://satorumuro.github.io/SegRef3D/Tutorial/SliceBridgeEN.html)
+
 ファイルはサーバーへアップロードされません。読み込み、変換、圧縮、
 ダウンロードまで、すべて使用中のブラウザ内で処理されます。
 
