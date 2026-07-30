@@ -212,7 +212,7 @@ If you do not have a CUDA-compatible GPU, you can still use SegRef3D through a h
 ## Related Tool: SliceBridge
 
 **[Open SliceBridge in your browser](https://satorumuro.github.io/SegRef3D/slice-bridge/)**  
-📘 **[日本語の詳しい使い方 / Japanese step-by-step guide](https://satorumuro.github.io/SegRef3D/Tutorial/SliceBridgeJP.html)**
+📘 **User guides:** [English](https://satorumuro.github.io/SegRef3D/Tutorial/SliceBridgeEN.html) / [日本語](https://satorumuro.github.io/SegRef3D/Tutorial/SliceBridgeJP.html)
 
 SliceBridge inserts blank planes between the labeled planes of a SegRef3D
 NIfTI label map. The resulting anchor-slice NIfTI can be interpolated with
