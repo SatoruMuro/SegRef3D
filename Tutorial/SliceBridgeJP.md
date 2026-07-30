@@ -138,24 +138,22 @@ segref3d_labelmap_anchor_z0p65mm.nii.gz
 SliceBridgeの読み込み画面に表示された`ラベル`の整数値だけを作成すれば十分です。
 必要に応じて、各セグメントを骨盤骨、内閉鎖筋、肛門挙筋などの名称へ変更します。
 
-### 5-5. セグメントの重なりを許可する
+### 5-5. 各セグメントでFill between slicesを実行する
 
-`Segment Editor`で、以下を設定します。
-
-```text
-Modify other segments → Allow overlap
-```
-
-複数の構造を補間した結果、境界部分でセグメント同士が接触・重複する可能性が
-あるため、Fill between slicesを行う前に設定します。
-
-### 5-6. Fill between slicesを実行する
+作成したセグメントを1つずつ補間します。
 
 1. 補間するセグメントを1つ選択します。
 2. `Fill between slices`を選択します。
-3. `Initialize`で補間結果を確認します。
+3. `Initialize`を押して補間結果を確認します。
 4. 問題がなければ`Apply`を押します。
-5. 作成した各セグメントで同じ操作を繰り返します。
+5. 次のセグメントを選択し、同じく`Initialize`、`Apply`を行います。
+6. 作成したすべてのセグメントで繰り返します。
+
+```text
+Segment_1を選択 → Fill between slices → Initialize → Apply
+Segment_2を選択 → Fill between slices → Initialize → Apply
+Segment_3を選択 → Fill between slices → Initialize → Apply
+```
 ---
 
 ## 使用上の注意
