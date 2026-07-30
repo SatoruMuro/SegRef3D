@@ -49,7 +49,8 @@ Watch the **Basic Workflow** video to learn how to use SegRef3D, from loading im
 
 ## 🌉 SliceBridge — NIfTI Anchor-Slice Utility
 
-**[Open SliceBridge in your browser](https://satorumuro.github.io/SegRef3D/slice-bridge/)**
+**[Open SliceBridge in your browser](https://satorumuro.github.io/SegRef3D/slice-bridge/)**  
+📘 **[日本語の詳しい使い方 / Japanese step-by-step guide](https://satorumuro.github.io/SegRef3D/Tutorial/SliceBridgeJP.html)**
 
 SliceBridge inserts blank planes between the labeled planes of a SegRef3D
 NIfTI label map. The resulting anchor-slice NIfTI can be interpolated with
