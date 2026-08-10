@@ -66,17 +66,17 @@ SegRef3Dから出力したNIfTIラベルマップの輪郭間に空白スライ�
 
 ### 1. ダウンロード
 
-#### **最新版 — ver.1.2.2**
+#### **最新版 — ver.1.2.3**
 
-画像処理ワークフローの改善、ラスターベースのラベルPNGマスク管理、マスクの自動保存、オーバーレイPNG出力、マウスホイールによる画像切り替え、UI改善を含む最新版のWindowsビルドです。
+CUDA 12.8 / RTX 50シリーズ対応、SAM2を含まないLite版、トラッキングとマスク編集の安全性向上、3D出力用の5x/10xスライス補間、画像前処理、キャンバス操作改善を含む最新版のWindowsビルドです。
 
 用途に応じて2種類のビルドを用意しています。
 
 * **GPU版** — ローカル環境でSAM2によるAI支援セグメンテーションを使用できます。NVIDIA GPU環境での使用を推奨します。
-  * [`SegRef3D-GPU-v1.2.2-Windows.zip`](https://www.dropbox.com/scl/fi/ambp64xwi34p92dawodje/SegRef3D-GPU-v1.2.2-Windows.zip?rlkey=qv8ulqtqeapnaxoo63q0zbk3x&st=4bkdtzwp&dl=1)
+  * [`SegRef3D-GPU-v1.2.3-Windows.zip`](https://www.dropbox.com/scl/fi/aixgd0a7lyp45tcye3x3e/SegRef3D-GPU-v1.2.3-Windows.zip?rlkey=0mgnxeb3afovi60ln4q9uo156&st=tbh8qvrf&dl=1)
 
 * **Lite版** — SAM2を同梱していない軽量版です。ローカルAIセグメンテーションが不要な場合や、まずSegRef3Dを試したい場合に推奨します。
-  * [`SegRef3D-Lite-v1.2.2-Windows.zip`](https://www.dropbox.com/scl/fi/ddtec7w51alclq6gb7pq3/SegRef3D-Lite-v1.2.2-Windows.zip?rlkey=4dd09eyjeovw4j61im4rl2prz&st=s1oz2syz&dl=1)
+  * [`SegRef3D-Lite-v1.2.3-Windows.zip`](https://www.dropbox.com/scl/fi/2bbm6byzi3tme547e2beb/SegRef3D-Lite-v1.2.3-Windows.zip?rlkey=4u3njpty6ggm37oa04cqx12kn&st=95sqew99&dl=1)
 
 #### **旧安定版 — ver.1.1.0**
 

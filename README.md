@@ -63,17 +63,17 @@ Watch the **Basic Workflow** video to learn how to use SegRef3D, from loading im
 
 ### 1. Download
 
-#### **Latest Version — ver.1.2.2**
+#### **Latest Version — ver.1.2.3**
 
-Newest Windows builds with improved image-processing workflow, unified raster-based label PNG mask handling, autosave support, overlay PNG export, mouse-wheel image navigation, and UI improvements.
+Newest Windows builds with CUDA 12.8 / RTX 50-series support, a SAM2-free Lite edition, safer tracking and mask editing, 5x/10x slice interpolation for 3D export, image preprocessing, and improved canvas navigation.
 
 Two builds are available:
 
 * **GPU build** — includes local SAM2-based AI segmentation. Recommended for NVIDIA GPU environments.
-  * [`SegRef3D-GPU-v1.2.2-Windows.zip`](https://www.dropbox.com/scl/fi/ambp64xwi34p92dawodje/SegRef3D-GPU-v1.2.2-Windows.zip?rlkey=qv8ulqtqeapnaxoo63q0zbk3x&st=4bkdtzwp&dl=1)
+  * [`SegRef3D-GPU-v1.2.3-Windows.zip`](https://www.dropbox.com/scl/fi/aixgd0a7lyp45tcye3x3e/SegRef3D-GPU-v1.2.3-Windows.zip?rlkey=0mgnxeb3afovi60ln4q9uo156&st=tbh8qvrf&dl=1)
 
 * **Lite build** — lightweight build without bundled SAM2. Recommended for general use when local AI segmentation is not required.
-  * [`SegRef3D-Lite-v1.2.2-Windows.zip`](https://www.dropbox.com/scl/fi/ddtec7w51alclq6gb7pq3/SegRef3D-Lite-v1.2.2-Windows.zip?rlkey=4dd09eyjeovw4j61im4rl2prz&st=s1oz2syz&dl=1)
+  * [`SegRef3D-Lite-v1.2.3-Windows.zip`](https://www.dropbox.com/scl/fi/2bbm6byzi3tme547e2beb/SegRef3D-Lite-v1.2.3-Windows.zip?rlkey=4u3njpty6ggm37oa04cqx12kn&st=95sqew99&dl=1)
 
 #### **Previous Stable Version — ver.1.1.0**
 
@@ -238,6 +238,16 @@ https://github.com/SatoruMuro/SegRef3DViewer
 ---
 
 # Update  
+**2026.8.10**
+
+SegRef3D **ver.1.2.3** を公開。
+
+* GPU版を CUDA 12.8 / PyTorch 2.11 対応に更新し、RTX 50シリーズ（Blackwell、sm_120）を含む幅広いNVIDIA GPUへの対応を改善。SAM2を同梱しないLite版も追加。
+* トラッキング範囲未設定時や `Clear Box` 操作時のエラーを防ぎ、CUDA非対応環境でもアプリ全体が終了しないよう安全性を改善。
+* 3D出力に5x/10xのスライス間輪郭補間を追加し、断面間が滑らかなSTLを生成可能に変更。
+* サイズの異なる画像の白キャンバス統一、2000px超画像の1000px縮小、ラベルPNG自動保存、オーバーレイPNG出力に対応。
+* Add/EraseのUndo/Redo、マウスホイールによる画像切り替え、中ボタンドラッグによるキャンバス移動、グレー背景表示などの操作性を改善。
+
 **2026.5.1**   
 SegRef3D **ver.1.2.0** を公開。  
 マスク処理をラスター処理ベースに統一し、編集・保存・読み込みの安定性を改善。  
