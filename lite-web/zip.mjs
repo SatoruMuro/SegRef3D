@@ -1,4 +1,5 @@
 const textEncoder = new TextEncoder();
+const textDecoder = new TextDecoder();
 
 const crcTable = (() => {
   const table = new Uint32Array(256);
@@ -32,6 +33,90 @@ function writeUint16(view, offset, value) {
 
 function writeUint32(view, offset, value) {
   view.setUint32(offset, value >>> 0, true);
+}
+
+async function inflateRaw(bytes) {
+  if (typeof DecompressionStream !== "function") {
+    throw new Error("This browser cannot open compressed ZIP files.");
+  }
+  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+function findEndOfCentralDirectory(view) {
+  const minimumOffset = Math.max(0, view.byteLength - 65_557);
+  for (let offset = view.byteLength - 22; offset >= minimumOffset; offset -= 1) {
+    if (view.getUint32(offset, true) === 0x06054b50) return offset;
+  }
+  throw new Error("The ZIP file is incomplete or unsupported.");
+}
+
+export async function parseZip(source) {
+  const buffer = source instanceof ArrayBuffer ? source : await source.arrayBuffer();
+  const view = new DataView(buffer);
+  const input = new Uint8Array(buffer);
+  if (view.byteLength < 22) throw new Error("The ZIP file is empty or incomplete.");
+
+  const endOffset = findEndOfCentralDirectory(view);
+  const diskNumber = view.getUint16(endOffset + 4, true);
+  const centralDisk = view.getUint16(endOffset + 6, true);
+  const entryCount = view.getUint16(endOffset + 10, true);
+  const centralOffset = view.getUint32(endOffset + 16, true);
+  if (diskNumber !== 0 || centralDisk !== 0) throw new Error("Multi-disk ZIP files are unsupported.");
+  if (entryCount === 0xffff || centralOffset === 0xffffffff) {
+    throw new Error("ZIP64 files are unsupported.");
+  }
+  if (entryCount > 10_000) throw new Error("The ZIP file contains too many entries.");
+
+  const entries = [];
+  let totalUncompressed = 0;
+  let offset = centralOffset;
+  for (let index = 0; index < entryCount; index += 1) {
+    if (offset + 46 > view.byteLength || view.getUint32(offset, true) !== 0x02014b50) {
+      throw new Error("The ZIP directory is invalid.");
+    }
+    const flags = view.getUint16(offset + 8, true);
+    const method = view.getUint16(offset + 10, true);
+    const checksum = view.getUint32(offset + 16, true);
+    const compressedSize = view.getUint32(offset + 20, true);
+    const uncompressedSize = view.getUint32(offset + 24, true);
+    const nameLength = view.getUint16(offset + 28, true);
+    const extraLength = view.getUint16(offset + 30, true);
+    const commentLength = view.getUint16(offset + 32, true);
+    const localOffset = view.getUint32(offset + 42, true);
+    const nameStart = offset + 46;
+    const nameEnd = nameStart + nameLength;
+    if (nameEnd > view.byteLength) throw new Error("A ZIP entry name is invalid.");
+    const name = textDecoder.decode(input.subarray(nameStart, nameEnd)).replaceAll("\\", "/");
+    offset = nameEnd + extraLength + commentLength;
+
+    if (flags & 0x0001) throw new Error(`Encrypted ZIP entry is unsupported: ${name}`);
+    if (method !== 0 && method !== 8) {
+      throw new Error(`Unsupported ZIP compression method ${method}: ${name}`);
+    }
+    if (localOffset + 30 > view.byteLength || view.getUint32(localOffset, true) !== 0x04034b50) {
+      throw new Error(`Invalid ZIP entry: ${name}`);
+    }
+    const localNameLength = view.getUint16(localOffset + 26, true);
+    const localExtraLength = view.getUint16(localOffset + 28, true);
+    const dataStart = localOffset + 30 + localNameLength + localExtraLength;
+    const dataEnd = dataStart + compressedSize;
+    if (dataEnd > view.byteLength) throw new Error(`Incomplete ZIP entry: ${name}`);
+
+    totalUncompressed += uncompressedSize;
+    if (totalUncompressed > 1_000_000_000) {
+      throw new Error("The expanded ZIP data exceeds the 1 GB browser safety limit.");
+    }
+    if (name.endsWith("/")) continue;
+
+    const compressed = input.slice(dataStart, dataEnd);
+    const bytes = method === 0 ? compressed : await inflateRaw(compressed);
+    if (bytes.length !== uncompressedSize || crc32(bytes) !== checksum) {
+      throw new Error(`ZIP integrity check failed: ${name}`);
+    }
+    entries.push({ name, bytes, blob: new Blob([bytes]) });
+  }
+  return entries;
 }
 
 export async function createZip(entries) {

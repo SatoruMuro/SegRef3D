@@ -13,6 +13,8 @@ Public beta: <https://satorumuro.github.io/SegRef3D/lite-web/>
 - Add, Erase, and Transfer label operations
 - Separate Undo/Redo histories for drawn lines and committed mask edits
 - Browser autosave with IndexedDB
+- Load grayscale label PNG sequences from a folder or ZIP, with value and dimension checks
+- Export and restore Project ZIP files containing label masks and editor settings
 - Plain wheel image navigation, Ctrl/Command+wheel zoom, Shift+wheel horizontal pan
 - Middle-button drag and WASD/arrow-key canvas pan
 - Label visibility controls
@@ -20,6 +22,9 @@ Public beta: <https://satorumuro.github.io/SegRef3D/lite-web/>
 - Responsive desktop/mobile layout and offline cache
 
 All image processing happens locally in the browser. Images are not uploaded.
+
+Project ZIP files do not contain the source images. Load the original image folder first, then
+open the Project ZIP from **Load Masks** to restore its masks and editor settings.
 
 ## Local development
 

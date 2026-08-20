@@ -10,7 +10,11 @@ import {
   naturalCompare,
   nearestEdgePoint,
   overlayFilename,
+  placeLabelMask,
   pointInsideImage,
+  rgbaToLabelMask,
+  resizeLabelMaskNearest,
+  sanitizeFilename,
   screenToImage,
   timestamp,
   traceRegionPath,
@@ -18,7 +22,7 @@ import {
   zoomAroundPoint,
 } from "./core.mjs";
 import { loadMask, saveMask } from "./storage.mjs";
-import { createZip } from "./zip.mjs";
+import { createZip, parseZip } from "./zip.mjs";
 
 const elements = {
   canvas: document.querySelector("#editor-canvas"),
@@ -27,6 +31,9 @@ const elements = {
   emptyLoad: document.querySelector("#empty-load"),
   loadFolder: document.querySelector("#load-folder"),
   folderInput: document.querySelector("#folder-input"),
+  loadMasks: document.querySelector("#load-masks"),
+  maskFolderInput: document.querySelector("#mask-folder-input"),
+  maskZipInput: document.querySelector("#mask-zip-input"),
   loadDemo: document.querySelector("#load-demo"),
   fitView: document.querySelector("#fit-view"),
   previousImage: document.querySelector("#previous-image"),
@@ -47,6 +54,7 @@ const elements = {
   redoEdit: document.querySelector("#redo-edit"),
   exportLabels: document.querySelector("#export-labels"),
   exportOverlays: document.querySelector("#export-overlays"),
+  exportProject: document.querySelector("#export-project"),
   labelsPanel: document.querySelector("#labels-panel"),
   labelsToggle: document.querySelector("#labels-toggle"),
   labelsClose: document.querySelector("#labels-close"),
@@ -64,6 +72,10 @@ const elements = {
   localFileDontShow: document.querySelector("#local-file-dont-show"),
   localFileCancel: document.querySelector("#local-file-cancel"),
   localFileContinue: document.querySelector("#local-file-continue"),
+  maskImportDialog: document.querySelector("#mask-import-dialog"),
+  chooseMaskFolder: document.querySelector("#choose-mask-folder"),
+  chooseMaskZip: document.querySelector("#choose-mask-zip"),
+  maskImportCancel: document.querySelector("#mask-import-cancel"),
   toast: document.querySelector("#toast"),
 };
 
@@ -193,8 +205,10 @@ function setControlsEnabled(enabled) {
     elements.addMask,
     elements.eraseMask,
     elements.transferMask,
+    elements.loadMasks,
     elements.exportLabels,
     elements.exportOverlays,
+    elements.exportProject,
     ...elements.modeButtons,
   ];
   for (const control of controls) control.disabled = !enabled;
@@ -683,14 +697,425 @@ async function exportSequence(kind) {
   }
 }
 
-function decodeImage(file) {
+const PROJECT_FORMAT = "segref3d-lite-web-project";
+const PROJECT_VERSION = 1;
+
+function entryBasename(path) {
+  return path.replaceAll("\\", "/").split("/").at(-1) || path;
+}
+
+function normalizedEntryPath(path) {
+  return path.replaceAll("\\", "/").replace(/^\.\//, "").toLowerCase();
+}
+
+function selectLabelPngEntries(entries) {
+  const pngEntries = entries.filter((entry) => {
+    const path = entry.name.replaceAll("\\", "/");
+    const basename = entryBasename(path);
+    return (
+      /\.png$/i.test(basename) &&
+      !path.split("/").includes("__MACOSX") &&
+      !basename.startsWith(".")
+    );
+  });
+  const standardNames = pngEntries.filter((entry) =>
+    /^mask\d+(?:\[autosave\])?\.png$/i.test(entryBasename(entry.name)),
+  );
+  const selected = standardNames.length
+    ? standardNames
+    : pngEntries.filter((entry) => !/(?:preview|overlay)/i.test(entryBasename(entry.name)));
+  return selected.sort((left, right) => naturalCompare(left.name, right.name));
+}
+
+async function decodeLabelPng(entry) {
+  const result = await decodeImage(entry.blob, entry.name);
+  try {
+    const width = result.image.naturalWidth;
+    const height = result.image.naturalHeight;
+    if (width * height > 160_000_000) {
+      throw new Error(`${entry.name} is too large to process safely in this browser.`);
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const outputContext = canvas.getContext("2d", { willReadFrequently: true });
+    outputContext.drawImage(result.image, 0, 0);
+    const rgba = outputContext.getImageData(0, 0, width, height).data;
+    return {
+      name: entry.name,
+      width,
+      height,
+      mask: rgbaToLabelMask(rgba, width, height),
+    };
+  } catch (error) {
+    throw new Error(`${entry.name}: ${error.message}`);
+  } finally {
+    URL.revokeObjectURL(result.url);
+  }
+}
+
+function centerLabelMask(decoded, image) {
+  return placeLabelMask(
+    decoded.mask,
+    decoded.width,
+    decoded.height,
+    image.width,
+    image.height,
+    image.contentX,
+    image.contentY,
+  );
+}
+
+function resizeLabelMask(decoded, targetWidth, targetHeight) {
+  return resizeLabelMaskNearest(
+    decoded.mask,
+    decoded.width,
+    decoded.height,
+    targetWidth,
+    targetHeight,
+  );
+}
+
+function normalizeDecodedMask(decoded, image, allowResize) {
+  if (decoded.width === image.width && decoded.height === image.height) return decoded.mask;
+  if (
+    decoded.width === image.contentWidth &&
+    decoded.height === image.contentHeight &&
+    image.contentX >= 0 &&
+    image.contentY >= 0
+  ) {
+    return centerLabelMask(decoded, image);
+  }
+  if (!allowResize) return null;
+  if (decoded.width === image.originalWidth && decoded.height === image.originalHeight) {
+    const resizedContent = {
+      width: image.contentWidth,
+      height: image.contentHeight,
+      mask: resizeLabelMask(decoded, image.contentWidth, image.contentHeight),
+    };
+    return centerLabelMask(resizedContent, image);
+  }
+  return resizeLabelMask(decoded, image.width, image.height);
+}
+
+function masksEqual(left, right) {
+  if (left.length !== right.length) return false;
+  for (let index = 0; index < left.length; index += 1) {
+    if (left[index] !== right[index]) return false;
+  }
+  return true;
+}
+
+function enableLabelsUsedByMasks(imported) {
+  const used = new Uint8Array(21);
+  for (const { mask } of imported) {
+    for (const label of mask) {
+      if (label > 0 && label <= 20) used[label] = 1;
+    }
+  }
+  for (let label = 1; label <= 20; label += 1) {
+    if (!used[label]) continue;
+    state.visibleLabels[label] = true;
+    const checkbox = elements.labelList.querySelector(`[data-label="${label}"] input`);
+    if (checkbox) checkbox.checked = true;
+  }
+  for (const image of state.images) image.overlayDirty = true;
+}
+
+async function applyImportedMasks(imported, { settings = null, projectName = null } = {}) {
+  const changedImages = [];
+  for (const { image, mask } of imported) {
+    clearImagePaths(image);
+    if (masksEqual(image.mask, mask)) continue;
+    const before = image.mask.slice();
+    image.mask = mask;
+    recordMaskChange(image, before);
+    changedImages.push(image);
+  }
+  if (settings) applyProjectSettings(settings);
+  else enableLabelsUsedByMasks(imported);
+  if (projectName) state.projectName = projectName;
+  updateImageUi();
+  render();
+  for (const image of changedImages) await autosave(image, "Imported masks autosaved");
+  return changedImages.length;
+}
+
+async function prepareImportedMasks(mappings) {
+  const decoded = [];
+  for (let index = 0; index < mappings.length; index += 1) {
+    elements.loadingDetail.textContent = `Checking ${index + 1} / ${mappings.length}`;
+    const mapping = mappings[index];
+    const decodedMask = await decodeLabelPng(mapping.entry);
+    if (
+      Number.isInteger(mapping.expectedWidth) &&
+      Number.isInteger(mapping.expectedHeight) &&
+      (decodedMask.width !== mapping.expectedWidth || decodedMask.height !== mapping.expectedHeight)
+    ) {
+      throw new Error(
+        `${mapping.entry.name} dimensions do not match the project manifest ` +
+          `(${decodedMask.width}x${decodedMask.height} vs ${mapping.expectedWidth}x${mapping.expectedHeight}).`,
+      );
+    }
+    decoded.push({ image: mapping.image, decoded: decodedMask });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+
+  const mismatched = decoded.filter(
+    ({ image, decoded: item }) => normalizeDecodedMask(item, image, false) === null,
+  );
+  let allowResize = false;
+  if (mismatched.length > 0) {
+    allowResize = window.confirm(
+      `${mismatched.length} mask(s) do not match the working image dimensions.\n\n` +
+        "Resize them with nearest-neighbor interpolation?\n" +
+        "Choose Cancel to leave all current masks unchanged.",
+    );
+    if (!allowResize) return null;
+  }
+  return decoded.map(({ image, decoded: item }) => ({
+    image,
+    mask: normalizeDecodedMask(item, image, allowResize),
+  }));
+}
+
+async function importLabelEntries(entries, sourceName) {
+  const selected = selectLabelPngEntries(entries);
+  if (selected.length === 0) throw new Error("No label PNG files were found.");
+  const importCount = Math.min(selected.length, state.images.length);
+  if (
+    selected.length !== state.images.length &&
+    !window.confirm(
+      `Found ${selected.length} label PNG(s) for ${state.images.length} image(s).\n\n` +
+        `Load the first ${importCount} mask(s) in natural filename order?\n` +
+        "Unmatched images will keep their current masks.",
+    )
+  ) {
+    setStatus("Mask import canceled. Current masks were not changed.");
+    showToast("Mask import canceled.");
+    return false;
+  }
+  const mappings = selected.slice(0, importCount).map((entry, index) => ({
+    entry,
+    image: state.images[index],
+  }));
+  const imported = await prepareImportedMasks(mappings);
+  if (!imported) {
+    setStatus("Mask import canceled. Current masks were not changed.");
+    showToast("Mask import canceled.");
+    return false;
+  }
+  const changedCount = await applyImportedMasks(imported);
+  setStatus(
+    `Loaded ${imported.length} label PNG mask(s) from ${sourceName}. ${changedCount} image(s) changed and autosaved.`,
+  );
+  showToast(`Loaded ${imported.length} mask(s).`);
+  return true;
+}
+
+function applyProjectSettings(settings = {}) {
+  const targetLabel = Number(settings.targetLabel);
+  const transferLabelValue = Number(settings.transferLabel);
+  const drawMode = ["free", "click", "snap"].includes(settings.drawMode)
+    ? settings.drawMode
+    : state.drawMode;
+  const penColor = ["#808080", "#000000", "#ffffff"].includes(settings.penColor)
+    ? settings.penColor
+    : state.penColor;
+  const savedVisibility = Array.isArray(settings.visibleLabels) ? settings.visibleLabels : null;
+
+  if (targetLabel >= 1 && targetLabel <= 20) state.targetLabel = targetLabel;
+  if (transferLabelValue >= 1 && transferLabelValue <= 20) state.transferLabel = transferLabelValue;
+  state.drawMode = drawMode;
+  state.penColor = penColor;
+  elements.targetLabel.value = String(state.targetLabel);
+  elements.transferLabel.value = String(state.transferLabel);
+  elements.penColor.value = state.penColor;
+  elements.penColorSwatch.style.background = state.penColor;
+  for (const button of elements.modeButtons) {
+    button.classList.toggle("selected", button.dataset.mode === state.drawMode);
+  }
+  if (savedVisibility && (savedVisibility.length === 20 || savedVisibility.length === 21)) {
+    for (let label = 1; label <= 20; label += 1) {
+      const value = savedVisibility.length === 21 ? savedVisibility[label] : savedVisibility[label - 1];
+      state.visibleLabels[label] = Boolean(value);
+      const checkbox = elements.labelList.querySelector(`[data-label="${label}"] input`);
+      if (checkbox) checkbox.checked = state.visibleLabels[label];
+    }
+  }
+  updateLabelTargets();
+  for (const image of state.images) image.overlayDirty = true;
+}
+
+function validateProjectManifest(manifest) {
+  if (!manifest || manifest.format !== PROJECT_FORMAT || manifest.version !== PROJECT_VERSION) {
+    throw new Error("This is not a supported SegRef3D Lite Web project ZIP.");
+  }
+  if (!Array.isArray(manifest.images) || manifest.images.length === 0) {
+    throw new Error("The project manifest has no image sequence.");
+  }
+  if (manifest.images.length !== state.images.length) {
+    throw new Error(
+      `This project expects ${manifest.images.length} source image(s), but ${state.images.length} are loaded.`,
+    );
+  }
+}
+
+async function importProjectEntries(entries, manifestEntry, sourceName) {
+  let manifest;
+  try {
+    manifest = JSON.parse(new TextDecoder().decode(manifestEntry.bytes));
+  } catch {
+    throw new Error("The SegRef3D project manifest is not valid JSON.");
+  }
+  validateProjectManifest(manifest);
+
+  const imagesByName = new Map();
+  for (const image of state.images) {
+    if (!imagesByName.has(image.name)) imagesByName.set(image.name, []);
+    imagesByName.get(image.name).push(image);
+  }
+  const entriesByPath = new Map(entries.map((entry) => [normalizedEntryPath(entry.name), entry]));
+  const mappings = [];
+  for (const savedImage of manifest.images) {
+    const candidates = imagesByName.get(savedImage.name);
+    if (!candidates?.length) {
+      throw new Error(
+        `Source image ${savedImage.name} is not loaded. Load the original image folder first.`,
+      );
+    }
+    const entry = entriesByPath.get(normalizedEntryPath(savedImage.mask || ""));
+    if (!entry) throw new Error(`Project mask is missing: ${savedImage.mask || savedImage.name}`);
+    mappings.push({
+      image: candidates.shift(),
+      entry,
+      expectedWidth: savedImage.width,
+      expectedHeight: savedImage.height,
+    });
+  }
+
+  const imported = await prepareImportedMasks(mappings);
+  if (!imported) {
+    setStatus("Project import canceled. Current masks were not changed.");
+    showToast("Project import canceled.");
+    return false;
+  }
+  const changedCount = await applyImportedMasks(imported, {
+    settings: manifest.settings,
+    projectName: manifest.projectName || state.projectName,
+  });
+  setStatus(
+    `Restored project ${manifest.projectName || sourceName}: ${imported.length} mask(s), ${changedCount} changed and autosaved.`,
+  );
+  showToast("Project masks and settings restored.");
+  return true;
+}
+
+async function importMaskFolder(files) {
+  if (state.images.length === 0 || state.loading) return;
+  const entries = files.map((file) => ({
+    name: file.webkitRelativePath || file.name,
+    blob: file,
+  }));
+  setLoading(true, "Loading label masks", "Checking folder");
+  try {
+    await importLabelEntries(entries, "selected folder");
+  } catch (error) {
+    console.error(error);
+    setStatus(`Mask loading failed: ${error.message}`);
+    window.alert(`Mask loading failed.\n\n${error.message}`);
+  } finally {
+    setLoading(false);
+    elements.maskFolderInput.value = "";
+  }
+}
+
+async function importMaskZip(file) {
+  if (!file || state.images.length === 0 || state.loading) return;
+  setLoading(true, "Loading label masks", "Opening ZIP");
+  try {
+    const entries = await parseZip(file);
+    const manifestEntry = entries.find(
+      (entry) => entryBasename(entry.name).toLowerCase() === "segref3d-project.json",
+    );
+    if (manifestEntry) await importProjectEntries(entries, manifestEntry, file.name);
+    else await importLabelEntries(entries, file.name);
+  } catch (error) {
+    console.error(error);
+    setStatus(`Mask ZIP loading failed: ${error.message}`);
+    window.alert(`Mask ZIP loading failed.\n\n${error.message}`);
+  } finally {
+    setLoading(false);
+    elements.maskZipInput.value = "";
+  }
+}
+
+async function exportProjectZip() {
+  if (state.images.length === 0 || state.loading) return;
+  setLoading(true, "Exporting project ZIP", "Preparing project manifest");
+  try {
+    const manifest = {
+      format: PROJECT_FORMAT,
+      version: PROJECT_VERSION,
+      createdAt: new Date().toISOString(),
+      projectName: state.projectName,
+      images: state.images.map((image, index) => ({
+        name: image.name,
+        width: image.width,
+        height: image.height,
+        originalWidth: image.originalWidth,
+        originalHeight: image.originalHeight,
+        contentWidth: image.contentWidth,
+        contentHeight: image.contentHeight,
+        contentX: image.contentX,
+        contentY: image.contentY,
+        mask: `label_png/${maskFilename(index)}`,
+      })),
+      settings: {
+        targetLabel: state.targetLabel,
+        transferLabel: state.transferLabel,
+        visibleLabels: state.visibleLabels.slice(1),
+        drawMode: state.drawMode,
+        penColor: state.penColor,
+      },
+    };
+    const entries = [
+      {
+        name: "segref3d-project.json",
+        blob: new Blob([JSON.stringify(manifest, null, 2)], { type: "application/json" }),
+      },
+    ];
+    for (let index = 0; index < state.images.length; index += 1) {
+      elements.loadingDetail.textContent = `Preparing ${index + 1} / ${state.images.length}`;
+      entries.push({
+        name: `label_png/${maskFilename(index)}`,
+        blob: await labelPngBlob(state.images[index]),
+      });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    elements.loadingDetail.textContent = "Creating ZIP";
+    const zip = await createZip(entries);
+    const filename = `${sanitizeFilename(state.projectName)}_SegRef3D_Project_${timestamp()}.zip`;
+    downloadBlob(zip, filename);
+    setStatus(`Exported project ZIP with ${state.images.length} label mask(s).`);
+    showToast(`Downloaded ${filename}`);
+  } catch (error) {
+    console.error(error);
+    setStatus(`Project export failed: ${error.message}`);
+    showToast("Project export failed.");
+  } finally {
+    setLoading(false);
+  }
+}
+
+function decodeImage(file, displayName = file.name || "image") {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
     const image = new Image();
     image.onload = () => resolve({ image, url });
     image.onerror = () => {
       URL.revokeObjectURL(url);
-      reject(new Error(`Could not read ${file.name}`));
+      reject(new Error(`Could not read ${displayName}`));
     };
     image.src = url;
   });
@@ -781,6 +1206,12 @@ async function prepareFiles(files) {
         name: source.file.name,
         width,
         height,
+        originalWidth: source.image.naturalWidth,
+        originalHeight: source.image.naturalHeight,
+        contentWidth: size.width,
+        contentHeight: size.height,
+        contentX: Math.floor((width - size.width) / 2),
+        contentY: Math.floor((height - size.height) / 2),
         sourceCanvas,
         sourcePixels: null,
         mask: restored ?? new Uint8Array(width * height),
@@ -878,6 +1309,12 @@ async function loadDemo() {
       name: `demo${String(index + 1).padStart(4, "0")}.png`,
       width: sourceCanvas.width,
       height: sourceCanvas.height,
+      originalWidth: sourceCanvas.width,
+      originalHeight: sourceCanvas.height,
+      contentWidth: sourceCanvas.width,
+      contentHeight: sourceCanvas.height,
+      contentX: 0,
+      contentY: 0,
       sourceCanvas,
       sourcePixels: null,
       mask: new Uint8Array(sourceCanvas.width * sourceCanvas.height),
@@ -1023,7 +1460,7 @@ function zoomFromKeyboard(factor) {
 }
 
 function handleKeyDown(event) {
-  if (elements.localFileDialog.open) return;
+  if (elements.localFileDialog.open || elements.maskImportDialog.open) return;
   if (!currentImage()) return;
   const key = event.key;
   const lowerKey = key.toLowerCase();
@@ -1102,6 +1539,15 @@ function requestLocalFolder() {
   elements.localFileDialog.showModal();
 }
 
+function requestMaskImport() {
+  if (state.images.length === 0 || state.loading) return;
+  if (typeof elements.maskImportDialog.showModal === "function") {
+    elements.maskImportDialog.showModal();
+  } else {
+    elements.maskZipInput.click();
+  }
+}
+
 function bindEvents() {
   elements.loadFolder.addEventListener("click", requestLocalFolder);
   elements.emptyLoad.addEventListener("click", requestLocalFolder);
@@ -1112,6 +1558,20 @@ function bindEvents() {
     elements.folderInput.click();
   });
   elements.folderInput.addEventListener("change", () => prepareFiles([...elements.folderInput.files]));
+  elements.loadMasks.addEventListener("click", requestMaskImport);
+  elements.maskImportCancel.addEventListener("click", () => elements.maskImportDialog.close());
+  elements.chooseMaskFolder.addEventListener("click", () => {
+    elements.maskImportDialog.close();
+    elements.maskFolderInput.click();
+  });
+  elements.chooseMaskZip.addEventListener("click", () => {
+    elements.maskImportDialog.close();
+    elements.maskZipInput.click();
+  });
+  elements.maskFolderInput.addEventListener("change", () =>
+    importMaskFolder([...elements.maskFolderInput.files]),
+  );
+  elements.maskZipInput.addEventListener("change", () => importMaskZip(elements.maskZipInput.files[0]));
   elements.loadDemo.addEventListener("click", loadDemo);
   elements.fitView.addEventListener("click", fitCurrentImage);
   elements.previousImage.addEventListener("click", () => switchImage(-1));
@@ -1138,6 +1598,7 @@ function bindEvents() {
   elements.redoEdit.addEventListener("click", redoEdit);
   elements.exportLabels.addEventListener("click", () => exportSequence("labels"));
   elements.exportOverlays.addEventListener("click", () => exportSequence("overlays"));
+  elements.exportProject.addEventListener("click", exportProjectZip);
   elements.labelsToggle.addEventListener("click", () => elements.labelsPanel.classList.add("open"));
   elements.labelsClose.addEventListener("click", () => elements.labelsPanel.classList.remove("open"));
   elements.canvas.addEventListener("pointerdown", handlePointerDown);

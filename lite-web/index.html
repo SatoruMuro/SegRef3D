@@ -96,6 +96,23 @@
             webkitdirectory
             multiple
           />
+          <button id="load-masks" class="command-button" type="button" disabled>
+            <svg><use href="#i-layers"></use></svg><span>Load Masks</span>
+          </button>
+          <input
+            id="mask-folder-input"
+            class="visually-hidden"
+            type="file"
+            accept="image/png,.png"
+            webkitdirectory
+            multiple
+          />
+          <input
+            id="mask-zip-input"
+            class="visually-hidden"
+            type="file"
+            accept="application/zip,.zip"
+          />
           <button id="fit-view" class="icon-button" type="button" title="Fit image to window" disabled>
             <svg><use href="#i-fit"></use></svg>
           </button>
@@ -179,6 +196,9 @@
           </button>
           <button id="export-overlays" class="command-button" type="button" disabled>
             <svg><use href="#i-layers"></use></svg><span>Overlay PNG</span>
+          </button>
+          <button id="export-project" class="command-button" type="button" disabled>
+            <svg><use href="#i-download"></use></svg><span>Project ZIP</span>
           </button>
         </div>
       </section>
@@ -265,6 +285,35 @@
           <button id="local-file-continue" class="command-button accent" type="button" autofocus>
             <svg><use href="#i-folder"></use></svg><span>Open Folder</span>
           </button>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="mask-import-dialog" class="local-file-dialog" aria-labelledby="mask-import-title">
+      <div class="local-file-dialog-content">
+        <div class="local-file-dialog-heading">
+          <span class="local-file-dialog-icon" aria-hidden="true">
+            <svg><use href="#i-layers"></use></svg>
+          </span>
+          <div>
+            <span class="dialog-kicker">LOCAL MASK IMPORT</span>
+            <h2 id="mask-import-title">Load label masks</h2>
+          </div>
+        </div>
+        <div class="local-file-dialog-copy">
+          <p>Open grayscale label PNGs with values 0-20. Files stay on this device.</p>
+          <p>Project ZIP restores masks and editor settings after the original image folder is loaded.</p>
+        </div>
+        <div class="mask-import-options">
+          <button id="choose-mask-folder" class="command-button" type="button">
+            <svg><use href="#i-folder"></use></svg><span>Mask Folder</span>
+          </button>
+          <button id="choose-mask-zip" class="command-button" type="button">
+            <svg><use href="#i-download"></use></svg><span>ZIP / Project ZIP</span>
+          </button>
+        </div>
+        <div class="local-file-dialog-actions compact-dialog-actions">
+          <button id="mask-import-cancel" class="command-button" type="button">Cancel</button>
         </div>
       </div>
     </dialog>

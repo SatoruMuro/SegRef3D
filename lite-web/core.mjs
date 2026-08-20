@@ -59,6 +59,65 @@ export function overlayFilename(index) {
   return `overlay${String(index + 1).padStart(4, "0")}.png`;
 }
 
+export function rgbaToLabelMask(rgba, width, height, maximumLabel = 20) {
+  if (rgba.length !== width * height * 4) {
+    throw new Error("Decoded PNG dimensions do not match its pixel data.");
+  }
+  const mask = new Uint8Array(width * height);
+  for (let index = 0; index < mask.length; index += 1) {
+    const offset = index * 4;
+    if (rgba[offset + 3] === 0) continue;
+    const red = rgba[offset];
+    const green = rgba[offset + 1];
+    const blue = rgba[offset + 2];
+    if (Math.max(red, green, blue) - Math.min(red, green, blue) > 1) {
+      throw new Error("Label PNG must be grayscale, not a color image.");
+    }
+    const value = Math.round((red + green + blue) / 3);
+    if (value > maximumLabel) {
+      throw new Error(`Label PNG contains value ${value}; supported values are 0-${maximumLabel}.`);
+    }
+    mask[index] = value;
+  }
+  return mask;
+}
+
+export function placeLabelMask(mask, sourceWidth, sourceHeight, targetWidth, targetHeight, x, y) {
+  if (mask.length !== sourceWidth * sourceHeight) {
+    throw new Error("Source mask dimensions do not match its pixel data.");
+  }
+  if (x < 0 || y < 0 || x + sourceWidth > targetWidth || y + sourceHeight > targetHeight) {
+    throw new Error("Source mask does not fit inside the target canvas.");
+  }
+  const output = new Uint8Array(targetWidth * targetHeight);
+  for (let row = 0; row < sourceHeight; row += 1) {
+    const sourceStart = row * sourceWidth;
+    const targetStart = (row + y) * targetWidth + x;
+    output.set(mask.subarray(sourceStart, sourceStart + sourceWidth), targetStart);
+  }
+  return output;
+}
+
+export function resizeLabelMaskNearest(mask, sourceWidth, sourceHeight, targetWidth, targetHeight) {
+  if (mask.length !== sourceWidth * sourceHeight) {
+    throw new Error("Source mask dimensions do not match its pixel data.");
+  }
+  if (targetWidth < 1 || targetHeight < 1) {
+    throw new Error("Target mask dimensions must be positive.");
+  }
+  const output = new Uint8Array(targetWidth * targetHeight);
+  for (let y = 0; y < targetHeight; y += 1) {
+    const sourceY = Math.min(sourceHeight - 1, Math.floor((y * sourceHeight) / targetHeight));
+    const sourceRow = sourceY * sourceWidth;
+    const targetRow = y * targetWidth;
+    for (let x = 0; x < targetWidth; x += 1) {
+      const sourceX = Math.min(sourceWidth - 1, Math.floor((x * sourceWidth) / targetWidth));
+      output[targetRow + x] = mask[sourceRow + sourceX];
+    }
+  }
+  return output;
+}
+
 export function fitViewport(viewWidth, viewHeight, imageWidth, imageHeight, padding = 24) {
   if (!viewWidth || !viewHeight || !imageWidth || !imageHeight) {
     return { zoom: 1, panX: 0, panY: 0 };

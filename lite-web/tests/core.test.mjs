@@ -6,6 +6,9 @@ import {
   fitViewport,
   maskFilename,
   naturalCompare,
+  placeLabelMask,
+  rgbaToLabelMask,
+  resizeLabelMaskNearest,
   screenToImage,
   transferLabel,
   traceRegionPath,
@@ -72,6 +75,49 @@ test("label transfer changes only source pixels inside the drawn region", () => 
   const region = new Uint8Array([0, 255, 255, 0, 255]);
   assert.equal(transferLabel(mask, 1, 7, region), 1);
   assert.deepEqual([...mask], [1, 7, 2, 1, 0]);
+});
+
+test("grayscale PNG pixels become validated single-label masks", () => {
+  const rgba = new Uint8ClampedArray([
+    0, 0, 0, 255,
+    7, 7, 7, 255,
+    20, 20, 20, 255,
+    255, 0, 0, 0,
+  ]);
+  assert.deepEqual([...rgbaToLabelMask(rgba, 2, 2)], [0, 7, 20, 0]);
+  assert.throws(
+    () => rgbaToLabelMask(new Uint8ClampedArray([21, 21, 21, 255]), 1, 1),
+    /supported values are 0-20/,
+  );
+  assert.throws(
+    () => rgbaToLabelMask(new Uint8ClampedArray([1, 3, 1, 255]), 1, 1),
+    /must be grayscale/,
+  );
+});
+
+test("label masks use nearest-neighbor resizing without inventing label values", () => {
+  const resized = resizeLabelMaskNearest(new Uint8Array([1, 2, 3, 4]), 2, 2, 4, 4);
+  assert.deepEqual([...resized], [
+    1, 1, 2, 2,
+    1, 1, 2, 2,
+    3, 3, 4, 4,
+    3, 3, 4, 4,
+  ]);
+  assert.deepEqual([...new Set(resized)], [1, 2, 3, 4]);
+});
+
+test("smaller label masks are placed on a shared canvas at the requested offset", () => {
+  const placed = placeLabelMask(new Uint8Array([5, 6, 7, 8]), 2, 2, 4, 4, 1, 1);
+  assert.deepEqual([...placed], [
+    0, 0, 0, 0,
+    0, 5, 6, 0,
+    0, 7, 8, 0,
+    0, 0, 0, 0,
+  ]);
+  assert.throws(
+    () => placeLabelMask(new Uint8Array([1, 2, 3, 4]), 2, 2, 2, 2, 1, 1),
+    /does not fit/,
+  );
 });
 
 test("project and mask naming are deterministic", () => {

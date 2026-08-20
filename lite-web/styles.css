@@ -208,6 +208,22 @@ svg {
   min-width: 112px;
 }
 
+.mask-import-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.mask-import-options .command-button {
+  width: 100%;
+  height: 42px;
+}
+
+.compact-dialog-actions {
+  margin-top: 14px;
+}
+
 .app-shell {
   display: grid;
   grid-template-rows: var(--header-height) auto auto minmax(0, 1fr) var(--status-height);
@@ -1053,6 +1069,10 @@ svg {
 
   .local-file-dialog-actions .command-button span {
     display: inline;
+  }
+
+  .mask-import-options {
+    grid-template-columns: 1fr;
   }
 
   .draw-settings .compact-field {
