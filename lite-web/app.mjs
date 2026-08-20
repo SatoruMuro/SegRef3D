@@ -1027,8 +1027,9 @@ function handleKeyDown(event) {
   if (!currentImage()) return;
   const key = event.key;
   const lowerKey = key.toLowerCase();
+  const code = event.code;
 
-  if ((event.ctrlKey || event.metaKey) && lowerKey === "z") {
+  if ((event.ctrlKey || event.metaKey) && (code === "KeyZ" || lowerKey === "z")) {
     event.shiftKey ? redoEdit() : undoEdit();
     event.preventDefault();
     return;
@@ -1044,31 +1045,31 @@ function handleKeyDown(event) {
     currentImage().activePathMode = null;
     render();
     updateHistoryButtons();
-  } else if (["pagedown", "f", "j"].includes(lowerKey)) {
+  } else if (["PageDown", "KeyF", "KeyJ"].includes(code) || lowerKey === "pagedown") {
     switchImage(1);
     event.preventDefault();
-  } else if (["pageup", "r", "u"].includes(lowerKey)) {
+  } else if (["PageUp", "KeyR", "KeyU"].includes(code) || lowerKey === "pageup") {
     switchImage(-1);
     event.preventDefault();
-  } else if (["e", "i", "+", "="].includes(lowerKey)) {
+  } else if (["KeyE", "KeyI", "NumpadAdd", "Equal"].includes(code)) {
     zoomFromKeyboard(1.25);
     event.preventDefault();
-  } else if (["q", "p", "-"].includes(lowerKey)) {
+  } else if (["KeyQ", "KeyP", "NumpadSubtract", "Minus"].includes(code)) {
     zoomFromKeyboard(0.8);
     event.preventDefault();
-  } else if (key === "ArrowLeft" || lowerKey === "a" || lowerKey === "k") {
+  } else if (["ArrowLeft", "KeyA", "KeyK"].includes(code)) {
     state.viewport.panX += 50;
     render();
     event.preventDefault();
-  } else if (key === "ArrowRight" || lowerKey === "d" || key === ";") {
+  } else if (["ArrowRight", "KeyD", "Semicolon"].includes(code)) {
     state.viewport.panX -= 50;
     render();
     event.preventDefault();
-  } else if (key === "ArrowUp" || lowerKey === "w" || lowerKey === "o") {
+  } else if (["ArrowUp", "KeyW", "KeyO"].includes(code)) {
     state.viewport.panY += 50;
     render();
     event.preventDefault();
-  } else if (key === "ArrowDown" || lowerKey === "s" || lowerKey === "l") {
+  } else if (["ArrowDown", "KeyS", "KeyL"].includes(code)) {
     state.viewport.panY -= 50;
     render();
     event.preventDefault();
@@ -1151,8 +1152,8 @@ function bindEvents() {
   });
   elements.canvas.addEventListener("wheel", handleWheel, { passive: false });
   elements.canvas.addEventListener("contextmenu", (event) => event.preventDefault());
-  window.addEventListener("keydown", handleKeyDown);
-  new ResizeObserver(() => resizeCanvas({ refit: true })).observe(elements.canvasPanel);
+  document.addEventListener("keydown", handleKeyDown, { capture: true });
+  new ResizeObserver(() => resizeCanvas()).observe(elements.canvasPanel);
 }
 
 initializeLabels();
