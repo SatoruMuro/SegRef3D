@@ -92,9 +92,17 @@
             id="folder-input"
             class="visually-hidden"
             type="file"
-            accept="image/jpeg,image/png,.jpg,.jpeg,.png"
             webkitdirectory
             multiple
+          />
+          <button id="load-volume" class="command-button" type="button">
+            <svg><use href="#i-image"></use></svg><span>Load NIfTI</span>
+          </button>
+          <input
+            id="volume-input"
+            class="visually-hidden"
+            type="file"
+            accept=".nii,.nii.gz,application/gzip,application/octet-stream"
           />
           <button id="load-masks" class="command-button" type="button" disabled>
             <svg><use href="#i-layers"></use></svg><span>Load Masks</span>
@@ -209,11 +217,12 @@
           <div id="empty-state" class="empty-state">
             <div class="empty-icon"><svg><use href="#i-image"></use></svg></div>
             <h1>Open an image sequence</h1>
-            <p>JPG or PNG folder</p>
+            <p>JPG / PNG / DICOM folder or NIfTI volume</p>
             <div class="empty-actions">
               <button id="empty-load" class="command-button accent" type="button">
                 <svg><use href="#i-folder"></use></svg><span>Load Images</span>
               </button>
+              <button id="empty-volume" class="command-button" type="button">Load NIfTI</button>
               <button id="load-demo" class="command-button" type="button">Demo</button>
             </div>
           </div>
@@ -246,7 +255,7 @@
       <footer class="status-bar">
         <div class="status-message">
           <svg><use href="#i-info"></use></svg>
-          <span id="status-text">Load a JPG or PNG folder to begin.</span>
+          <span id="status-text">Load a JPG, PNG, DICOM folder, or NIfTI volume to begin.</span>
         </div>
         <div id="image-meta" class="image-meta">Local processing · no uploads</div>
       </footer>
@@ -260,7 +269,7 @@
           </span>
           <div>
             <span class="dialog-kicker">LOCAL PROCESSING</span>
-            <h2 id="local-file-title">Open a local image folder</h2>
+            <h2 id="local-file-title">Open local images</h2>
           </div>
         </div>
         <div class="local-file-dialog-copy">
@@ -319,6 +328,7 @@
     </dialog>
 
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+    <script src="./vendor/dicom-parser.min.js"></script>
     <script type="module" src="./app.mjs"></script>
   </body>
 </html>

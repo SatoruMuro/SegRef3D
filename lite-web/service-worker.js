@@ -1,12 +1,20 @@
-const CACHE_NAME = "segref3d-lite-web-v6";
+const CACHE_NAME = "segref3d-lite-web-v7";
 const APP_FILES = [
   "./",
   "./index.html",
   "./styles.css",
   "./app.mjs",
   "./core.mjs",
+  "./medical-io.mjs",
   "./storage.mjs",
   "./zip.mjs",
+  "./vendor/dicom-parser.min.js",
+  "./vendor/fflate.mjs",
+  "./vendor/nifti-reader.js",
+  "./vendor/nifti1.js",
+  "./vendor/nifti2.js",
+  "./vendor/nifti-extension.js",
+  "./vendor/utilities.js",
   "./favicon.svg",
   "./manifest.webmanifest",
 ];

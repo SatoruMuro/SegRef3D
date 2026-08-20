@@ -7,6 +7,8 @@ Public beta: <https://satorumuro.github.io/SegRef3D/lite-web/>
 ## Current MVP
 
 - Load naturally sorted JPG/PNG image folders
+- Load DICOM folders with `.dcm` or extensionless files
+- Load NIfTI-1/NIfTI-2 `.nii` and `.nii.gz` volumes as editable slice sequences
 - Optional resize for images larger than 2000 px
 - Optional shared white canvas for mixed image dimensions
 - Edit 20 single-label objects with Free, Click, and edge Snap drawing
@@ -26,6 +28,17 @@ All image processing happens locally in the browser. Images are not uploaded.
 Project ZIP files do not contain the source images. Load the original image folder first, then
 open the Project ZIP from **Load Masks** to restore its masks and editor settings.
 
+### Medical image support
+
+- DICOM: uncompressed Implicit VR Little Endian, Explicit VR Little Endian, Explicit VR Big
+  Endian, and browser-decodable JPEG Baseline frames
+- NIfTI: common integer and floating-point scalar datatypes plus RGB/RGBA volumes
+- DICOM window center/width and rescale slope/intercept are applied when available
+- NIfTI slope/intercept are applied before grayscale display conversion
+
+JPEG-LS, JPEG 2000, RLE, other compressed DICOM transfer syntaxes, and 4D NIfTI volumes are
+currently rejected with a clear error instead of being rendered incorrectly.
+
 ## Local development
 
 Serve the repository root with a server that maps `.mjs` to JavaScript, then open:
@@ -43,6 +56,6 @@ node --test "lite-web/tests/*.test.mjs"
 ## Planned expansion
 
 - Threshold and RGB extraction
-- TIFF and NIfTI import/export
+- TIFF import/export and NIfTI export
 - 5x/10x signed-distance slice interpolation
 - STL generation and Three.js preview

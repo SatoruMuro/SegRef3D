@@ -1,7 +1,7 @@
 {
   "name": "SegRef3D Lite Web",
   "short_name": "SegRef3D Lite",
-  "description": "Local-first image segmentation mask editor",
+  "description": "Local-first JPG, PNG, DICOM, and NIfTI segmentation mask editor",
   "start_url": "./",
   "display": "standalone",
   "background_color": "#f4f5f6",

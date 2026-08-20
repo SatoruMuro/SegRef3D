@@ -21,6 +21,13 @@ import {
   transferLabel,
   zoomAroundPoint,
 } from "./core.mjs";
+import {
+  decodeDicomSeries,
+  groupDicomSeries,
+  isNiftiFilename,
+  parseDicomInstance,
+  parseNiftiVolume,
+} from "./medical-io.mjs";
 import { loadMask, saveMask } from "./storage.mjs";
 import { createZip, parseZip } from "./zip.mjs";
 
@@ -31,6 +38,9 @@ const elements = {
   emptyLoad: document.querySelector("#empty-load"),
   loadFolder: document.querySelector("#load-folder"),
   folderInput: document.querySelector("#folder-input"),
+  loadVolume: document.querySelector("#load-volume"),
+  volumeInput: document.querySelector("#volume-input"),
+  emptyVolume: document.querySelector("#empty-volume"),
   loadMasks: document.querySelector("#load-masks"),
   maskFolderInput: document.querySelector("#mask-folder-input"),
   maskZipInput: document.querySelector("#mask-zip-input"),
@@ -69,9 +79,11 @@ const elements = {
   loadingTitle: document.querySelector("#loading-title"),
   loadingDetail: document.querySelector("#loading-detail"),
   localFileDialog: document.querySelector("#local-file-dialog"),
+  localFileTitle: document.querySelector("#local-file-title"),
   localFileDontShow: document.querySelector("#local-file-dont-show"),
   localFileCancel: document.querySelector("#local-file-cancel"),
   localFileContinue: document.querySelector("#local-file-continue"),
+  localFileContinueText: document.querySelector("#local-file-continue span"),
   maskImportDialog: document.querySelector("#mask-import-dialog"),
   chooseMaskFolder: document.querySelector("#choose-mask-folder"),
   chooseMaskZip: document.querySelector("#choose-mask-zip"),
@@ -103,6 +115,7 @@ const state = {
   saveQueue: Promise.resolve(),
   toastTimer: null,
   loading: false,
+  pendingPicker: "folder",
 };
 
 const context = elements.canvas.getContext("2d", { alpha: false });
@@ -234,7 +247,9 @@ function updateImageUi() {
   elements.imageCounter.textContent = image ? `${state.index + 1} / ${state.images.length}` : "0 / 0";
   elements.projectName.textContent = state.projectName;
   elements.imageMeta.textContent = image
-    ? `${image.name} · ${image.width} × ${image.height}px`
+    ? `${image.name} · ${image.width} × ${image.height}px${
+        image.sourceFormat === "dicom" ? " · DICOM" : image.sourceFormat === "nifti" ? " · NIfTI" : ""
+      }`
     : "Local processing · no uploads";
   if (image) {
     setStatus(`Editing ${image.name}. Wheel: images · Ctrl+wheel: zoom · middle drag: pan.`);
@@ -1069,6 +1084,9 @@ async function exportProjectZip() {
         contentHeight: image.contentHeight,
         contentX: image.contentX,
         contentY: image.contentY,
+        sourceFormat: image.sourceFormat,
+        pixelSpacing: image.pixelSpacing,
+        sliceSpacing: image.sliceSpacing,
         mask: `label_png/${maskFilename(index)}`,
       })),
       settings: {
@@ -1136,124 +1154,337 @@ function makeWorkingCanvas(image, sourceWidth, sourceHeight, targetWidth, target
   return canvas;
 }
 
-async function prepareFiles(files) {
-  const accepted = files
-    .filter((file) => /\.(jpe?g|png)$/i.test(file.name))
-    .sort((left, right) => naturalCompare(left.name, right.name));
-  if (accepted.length === 0) {
-    showToast("No JPG or PNG images were found.");
-    return;
+function imageElementToCanvas(image) {
+  const canvas = document.createElement("canvas");
+  canvas.width = image.naturalWidth;
+  canvas.height = image.naturalHeight;
+  canvas.getContext("2d").drawImage(image, 0, 0);
+  return canvas;
+}
+
+async function medicalFrameToCanvas(frame) {
+  if (frame.kind === "encoded") {
+    const blob = new Blob([frame.bytes], { type: frame.mimeType });
+    const decoded = await decodeImage(blob, frame.name);
+    try {
+      return makeWorkingCanvas(
+        decoded.image,
+        decoded.image.naturalWidth,
+        decoded.image.naturalHeight,
+        frame.width,
+        frame.height,
+      );
+    } finally {
+      URL.revokeObjectURL(decoded.url);
+    }
+  }
+  const canvas = document.createElement("canvas");
+  canvas.width = frame.width;
+  canvas.height = frame.height;
+  const outputContext = canvas.getContext("2d");
+  const imageData = outputContext.createImageData(frame.width, frame.height);
+  if (frame.kind === "gray") {
+    for (let index = 0; index < frame.pixels.length; index += 1) {
+      const target = index * 4;
+      const value = frame.pixels[index];
+      imageData.data[target] = value;
+      imageData.data[target + 1] = value;
+      imageData.data[target + 2] = value;
+      imageData.data[target + 3] = 255;
+    }
+  } else {
+    imageData.data.set(frame.pixels);
+  }
+  outputContext.putImageData(imageData, 0, 0);
+  return canvas;
+}
+
+async function prepareImageSequence(sources, projectFiles, projectName, sourceDescription) {
+  if (sources.length === 0) throw new Error("No readable image slices were found.");
+  const largeCount = sources.filter(
+    (source) => Math.max(source.width, source.height) > 2000,
+  ).length;
+  const resizeLarge =
+    largeCount > 0 &&
+    window.confirm(
+      `${largeCount} image(s) are larger than 2000px.\n\nResize their longest side to 1000px for smoother editing?`,
+    );
+
+  const dimensions = sources.map((source) => {
+    const longest = Math.max(source.width, source.height);
+    const scale = resizeLarge && longest > 2000 ? 1000 / longest : 1;
+    return {
+      width: Math.max(1, Math.round(source.width * scale)),
+      height: Math.max(1, Math.round(source.height * scale)),
+    };
+  });
+  const uniqueSizes = new Set(dimensions.map(({ width, height }) => `${width}x${height}`));
+  const unifyCanvas =
+    uniqueSizes.size > 1 &&
+    window.confirm(
+      "The images have different dimensions.\n\nPlace them at the center of a shared white canvas?",
+    );
+  const commonWidth = Math.max(...dimensions.map(({ width }) => width));
+  const commonHeight = Math.max(...dimensions.map(({ height }) => height));
+  const totalPixels = dimensions.reduce(
+    (sum, size) => sum + (unifyCanvas ? commonWidth * commonHeight : size.width * size.height),
+    0,
+  );
+  if (
+    totalPixels > 160_000_000 &&
+    !window.confirm(
+      `This project needs about ${Math.round(totalPixels / 1_000_000)} million mask pixels.\n\nContinue loading?`,
+    )
+  ) {
+    return false;
   }
 
-  setLoading(true, "Loading images", `Reading 0 / ${accepted.length}`);
-  const decoded = [];
-  try {
-    for (let index = 0; index < accepted.length; index += 1) {
-      elements.loadingDetail.textContent = `Reading ${index + 1} / ${accepted.length}`;
-      const result = await decodeImage(accepted[index]);
-      decoded.push({ file: accepted[index], ...result });
-    }
-
-    const largeCount = decoded.filter(
-      ({ image }) => Math.max(image.naturalWidth, image.naturalHeight) > 2000,
-    ).length;
-    const resizeLarge =
-      largeCount > 0 &&
-      window.confirm(
-        `${largeCount} image(s) are larger than 2000px.\n\nResize their longest side to 1000px for smoother editing?`,
-      );
-
-    const dimensions = decoded.map(({ image }) => {
-      const longest = Math.max(image.naturalWidth, image.naturalHeight);
-      const scale = resizeLarge && longest > 2000 ? 1000 / longest : 1;
-      return {
-        width: Math.max(1, Math.round(image.naturalWidth * scale)),
-        height: Math.max(1, Math.round(image.naturalHeight * scale)),
-      };
-    });
-    const uniqueSizes = new Set(dimensions.map(({ width, height }) => `${width}x${height}`));
-    const unifyCanvas =
-      uniqueSizes.size > 1 &&
-      window.confirm(
-        "The images have different dimensions.\n\nPlace them at the center of a shared white canvas?",
-      );
-    const commonWidth = Math.max(...dimensions.map(({ width }) => width));
-    const commonHeight = Math.max(...dimensions.map(({ height }) => height));
-    const totalPixels = dimensions.reduce(
-      (sum, size) => sum + (unifyCanvas ? commonWidth * commonHeight : size.width * size.height),
-      0,
+  const projectId = createProjectId(projectFiles);
+  const prepared = [];
+  for (let index = 0; index < sources.length; index += 1) {
+    elements.loadingDetail.textContent = `Preparing ${index + 1} / ${sources.length}`;
+    const source = sources[index];
+    const size = dimensions[index];
+    const width = unifyCanvas ? commonWidth : size.width;
+    const height = unifyCanvas ? commonHeight : size.height;
+    const sourceCanvas = makeWorkingCanvas(
+      source.sourceCanvas,
+      size.width,
+      size.height,
+      width,
+      height,
     );
-    if (
-      totalPixels > 160_000_000 &&
-      !window.confirm(
-        `This project needs about ${Math.round(totalPixels / 1_000_000)} million mask pixels.\n\nContinue loading?`,
-      )
-    ) {
-      return;
-    }
+    const restored = await loadMask(projectId, source.name, width, height).catch(() => null);
+    prepared.push({
+      name: source.name,
+      width,
+      height,
+      originalWidth: source.width,
+      originalHeight: source.height,
+      contentWidth: size.width,
+      contentHeight: size.height,
+      contentX: Math.floor((width - size.width) / 2),
+      contentY: Math.floor((height - size.height) / 2),
+      sourceFormat: source.sourceFormat || "raster",
+      pixelSpacing: source.pixelSpacing || null,
+      sliceSpacing: source.sliceSpacing || null,
+      sourceCanvas,
+      sourcePixels: null,
+      mask: restored ?? new Uint8Array(width * height),
+      overlayCanvas: null,
+      overlayDirty: true,
+      paths: [],
+      activePath: [],
+      activePathColor: null,
+      activePathMode: null,
+      pathRedo: [],
+      undo: [],
+      redo: [],
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
 
-    const projectId = createProjectId(accepted);
-    const prepared = [];
-    for (let index = 0; index < decoded.length; index += 1) {
-      elements.loadingDetail.textContent = `Preparing ${index + 1} / ${decoded.length}`;
-      const source = decoded[index];
-      const size = dimensions[index];
-      const width = unifyCanvas ? commonWidth : size.width;
-      const height = unifyCanvas ? commonHeight : size.height;
-      const sourceCanvas = makeWorkingCanvas(source.image, size.width, size.height, width, height);
-      const restored = await loadMask(projectId, source.file.name, width, height).catch(() => null);
-      prepared.push({
-        name: source.file.name,
-        width,
-        height,
-        originalWidth: source.image.naturalWidth,
-        originalHeight: source.image.naturalHeight,
-        contentWidth: size.width,
-        contentHeight: size.height,
-        contentX: Math.floor((width - size.width) / 2),
-        contentY: Math.floor((height - size.height) / 2),
-        sourceCanvas,
-        sourcePixels: null,
-        mask: restored ?? new Uint8Array(width * height),
-        overlayCanvas: null,
-        overlayDirty: true,
-        paths: [],
-        activePath: [],
-        activePathColor: null,
-        activePathMode: null,
-        pathRedo: [],
-        undo: [],
-        redo: [],
+  state.images = prepared;
+  state.projectId = projectId;
+  state.index = 0;
+  state.projectName = projectName;
+  state.visibleLabels = Array.from({ length: 21 }, (_, label) => label === 1);
+  for (let label = 1; label <= 20; label += 1) {
+    const checkbox = elements.labelList.querySelector(`[data-label="${label}"] input`);
+    if (checkbox) checkbox.checked = label === 1;
+  }
+  setControlsEnabled(true);
+  updateImageUi();
+  requestAnimationFrame(() => fitCurrentImage());
+  const restoredCount = prepared.filter((item) => item.mask.some((value) => value !== 0)).length;
+  setSaveState(restoredCount ? `Restored ${restoredCount} autosaved mask(s)` : "Browser autosave active", "saved");
+  setStatus(
+    `Loaded ${prepared.length} ${sourceDescription}${resizeLarge ? " · resized large images" : ""}${unifyCanvas ? " · unified canvas" : ""}.`,
+  );
+  elements.canvas.focus();
+  navigator.storage?.persist?.().catch(() => {});
+  return true;
+}
+
+async function decodeRasterSources(files) {
+  const sources = [];
+  for (let index = 0; index < files.length; index += 1) {
+    elements.loadingDetail.textContent = `Reading ${index + 1} / ${files.length}`;
+    const decoded = await decodeImage(files[index]);
+    try {
+      sources.push({
+        name: files[index].name,
+        width: decoded.image.naturalWidth,
+        height: decoded.image.naturalHeight,
+        sourceCanvas: imageElementToCanvas(decoded.image),
+        sourceFormat: "raster",
       });
-      URL.revokeObjectURL(source.url);
+    } finally {
+      URL.revokeObjectURL(decoded.url);
+    }
+  }
+  return sources;
+}
+
+function chooseDicomSeries(groups) {
+  if (groups.length === 1) return groups[0];
+  const choices = groups
+    .map((group, index) => {
+      const label = group.description || `Series ${group.seriesNumber || index + 1}`;
+      return `${index + 1}: ${label} (${group.items.length} file(s))`;
+    })
+    .join("\n");
+  const answer = window.prompt(
+    `Found ${groups.length} DICOM series.\n\n${choices}\n\nEnter the series number to load:`,
+    "1",
+  );
+  if (answer === null) return null;
+  const index = Number.parseInt(answer, 10) - 1;
+  if (!Number.isInteger(index) || index < 0 || index >= groups.length) {
+    throw new Error("The selected DICOM series number is invalid.");
+  }
+  return groups[index];
+}
+
+async function decodeDicomSources(files) {
+  const instances = [];
+  const failures = [];
+  for (let index = 0; index < files.length; index += 1) {
+    const file = files[index];
+    elements.loadingDetail.textContent = `Reading DICOM ${index + 1} / ${files.length}`;
+    try {
+      const instance = parseDicomInstance(await file.arrayBuffer(), file.name);
+      instance.file = file;
+      instances.push(instance);
+    } catch (error) {
+      failures.push({ file, error });
+    }
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  if (instances.length === 0) {
+    throw new Error(failures[0]?.error.message || "No readable DICOM images were found.");
+  }
+  if (
+    failures.length > 0 &&
+    !window.confirm(
+      `${failures.length} file(s) could not be read as DICOM.\n\n` +
+        `Continue with ${instances.length} readable file(s)?`,
+    )
+  ) {
+    return null;
+  }
+  const selected = chooseDicomSeries(groupDicomSeries(instances));
+  if (!selected) return null;
+  const decoded = decodeDicomSeries(selected.items);
+  const sources = [];
+  for (let index = 0; index < decoded.frames.length; index += 1) {
+    elements.loadingDetail.textContent = `Preparing DICOM ${index + 1} / ${decoded.frames.length}`;
+    const frame = decoded.frames[index];
+    sources.push({
+      name: frame.name,
+      width: frame.width,
+      height: frame.height,
+      sourceCanvas: await medicalFrameToCanvas(frame),
+      sourceFormat: "dicom",
+      pixelSpacing: decoded.spacing.slice(0, 2),
+      sliceSpacing: decoded.spacing[2],
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  return {
+    sources,
+    files: selected.items.map((instance) => instance.file),
+    description: selected.description || "DICOM series",
+  };
+}
+
+async function prepareNiftiFile(file) {
+  if (!file || state.loading) return;
+  setLoading(true, "Loading NIfTI volume", "Reading volume");
+  try {
+    const volume = parseNiftiVolume(await file.arrayBuffer(), file.name);
+    const sources = [];
+    for (let index = 0; index < volume.frames.length; index += 1) {
+      elements.loadingDetail.textContent = `Preparing slice ${index + 1} / ${volume.frames.length}`;
+      const frame = volume.frames[index];
+      sources.push({
+        name: frame.name,
+        width: frame.width,
+        height: frame.height,
+        sourceCanvas: await medicalFrameToCanvas(frame),
+        sourceFormat: "nifti",
+        pixelSpacing: volume.spacing.slice(0, 2),
+        sliceSpacing: volume.spacing[2],
+      });
       await new Promise((resolve) => setTimeout(resolve, 0));
     }
-
-    state.images = prepared;
-    state.projectId = projectId;
-    state.index = 0;
-    state.projectName = accepted[0].webkitRelativePath?.split("/")[0] || "Image sequence";
-    state.visibleLabels = Array.from({ length: 21 }, (_, label) => label === 1);
-    for (let label = 1; label <= 20; label += 1) {
-      const checkbox = elements.labelList.querySelector(`[data-label="${label}"] input`);
-      if (checkbox) checkbox.checked = label === 1;
-    }
-    setControlsEnabled(true);
-    updateImageUi();
-    requestAnimationFrame(() => fitCurrentImage());
-    const restoredCount = prepared.filter((item) => item.mask.some((value) => value !== 0)).length;
-    setSaveState(restoredCount ? `Restored ${restoredCount} autosaved mask(s)` : "Browser autosave active", "saved");
-    setStatus(
-      `Loaded ${prepared.length} image(s)${resizeLarge ? " · resized large images" : ""}${unifyCanvas ? " · unified canvas" : ""}.`,
+    await prepareImageSequence(
+      sources,
+      [file],
+      file.name.replace(/\.nii(?:\.gz)?$/i, "") || "NIfTI volume",
+      "NIfTI slice(s)",
     );
-    elements.canvas.focus();
-    navigator.storage?.persist?.().catch(() => {});
   } catch (error) {
     console.error(error);
-    setStatus(error.message);
-    showToast("Image loading failed.");
+    setStatus(`NIfTI loading failed: ${error.message}`);
+    window.alert(`NIfTI loading failed.\n\n${error.message}`);
   } finally {
-    for (const entry of decoded) URL.revokeObjectURL(entry.url);
+    setLoading(false);
+    elements.volumeInput.value = "";
+  }
+}
+
+async function prepareFiles(files) {
+  if (state.loading) return;
+  const visibleFiles = files.filter((file) => !file.name.startsWith("."));
+  const niftiFiles = visibleFiles.filter((file) => isNiftiFilename(file.name));
+  const rasterFiles = visibleFiles
+    .filter((file) => /\.(jpe?g|png)$/i.test(file.name))
+    .sort((left, right) => naturalCompare(left.name, right.name));
+  const dicomFiles = visibleFiles
+    .filter((file) => /\.dcm$/i.test(file.name) || !file.name.includes("."))
+    .sort((left, right) => naturalCompare(left.name, right.name));
+  setLoading(true, "Loading images", `Reading 0 / ${visibleFiles.length}`);
+  try {
+    if (niftiFiles.length > 0) {
+      if (niftiFiles.length !== 1 || rasterFiles.length > 0 || dicomFiles.length > 0) {
+        throw new Error("Select one NIfTI file by itself, without other image formats.");
+      }
+      setLoading(false);
+      await prepareNiftiFile(niftiFiles[0]);
+      return;
+    }
+    const explicitDicom = dicomFiles.some((file) => /\.dcm$/i.test(file.name));
+    if (rasterFiles.length > 0 && explicitDicom) {
+      throw new Error("The selected folder mixes raster images and DICOM files. Use separate folders.");
+    }
+    const projectFolder =
+      visibleFiles[0]?.webkitRelativePath?.split("/")[0] || "Image sequence";
+    if (rasterFiles.length > 0) {
+      const sources = await decodeRasterSources(rasterFiles);
+      await prepareImageSequence(sources, rasterFiles, projectFolder, "image(s)");
+      return;
+    }
+    if (dicomFiles.length > 0) {
+      const decoded = await decodeDicomSources(dicomFiles);
+      if (!decoded) {
+        setStatus("DICOM loading canceled.");
+        return;
+      }
+      await prepareImageSequence(
+        decoded.sources,
+        decoded.files,
+        projectFolder === "Image sequence" ? decoded.description : projectFolder,
+        "DICOM frame(s)",
+      );
+      return;
+    }
+    throw new Error("No JPG, PNG, DICOM, or NIfTI images were found.");
+  } catch (error) {
+    console.error(error);
+    setStatus(`Image loading failed: ${error.message}`);
+    window.alert(`Image loading failed.\n\n${error.message}`);
+  } finally {
     setLoading(false);
     elements.folderInput.value = "";
   }
@@ -1315,6 +1546,9 @@ async function loadDemo() {
       contentHeight: sourceCanvas.height,
       contentX: 0,
       contentY: 0,
+      sourceFormat: "demo",
+      pixelSpacing: null,
+      sliceSpacing: null,
       sourceCanvas,
       sourcePixels: null,
       mask: new Uint8Array(sourceCanvas.width * sourceCanvas.height),
@@ -1530,13 +1764,31 @@ function rememberLocalFileNotice() {
   }
 }
 
-function requestLocalFolder() {
+function pendingLocalInput() {
+  return state.pendingPicker === "volume" ? elements.volumeInput : elements.folderInput;
+}
+
+function requestLocalPicker(kind) {
+  state.pendingPicker = kind;
   if (localFileNoticeHidden() || typeof elements.localFileDialog.showModal !== "function") {
-    elements.folderInput.click();
+    pendingLocalInput().click();
     return;
   }
   elements.localFileDontShow.checked = false;
+  const isVolume = kind === "volume";
+  elements.localFileTitle.textContent = isVolume
+    ? "Open a local NIfTI volume"
+    : "Open a local image folder";
+  elements.localFileContinueText.textContent = isVolume ? "Open NIfTI" : "Open Folder";
   elements.localFileDialog.showModal();
+}
+
+function requestLocalFolder() {
+  requestLocalPicker("folder");
+}
+
+function requestLocalVolume() {
+  requestLocalPicker("volume");
 }
 
 function requestMaskImport() {
@@ -1551,13 +1803,16 @@ function requestMaskImport() {
 function bindEvents() {
   elements.loadFolder.addEventListener("click", requestLocalFolder);
   elements.emptyLoad.addEventListener("click", requestLocalFolder);
+  elements.loadVolume.addEventListener("click", requestLocalVolume);
+  elements.emptyVolume.addEventListener("click", requestLocalVolume);
   elements.localFileCancel.addEventListener("click", () => elements.localFileDialog.close());
   elements.localFileContinue.addEventListener("click", () => {
     rememberLocalFileNotice();
     elements.localFileDialog.close();
-    elements.folderInput.click();
+    pendingLocalInput().click();
   });
   elements.folderInput.addEventListener("change", () => prepareFiles([...elements.folderInput.files]));
+  elements.volumeInput.addEventListener("change", () => prepareNiftiFile(elements.volumeInput.files[0]));
   elements.loadMasks.addEventListener("click", requestMaskImport);
   elements.maskImportCancel.addEventListener("click", () => elements.maskImportDialog.close());
   elements.chooseMaskFolder.addEventListener("click", () => {

@@ -56,14 +56,15 @@ Windows, macOS, Linux, iPadOS, and other modern browser platforms. Images and
 masks stay on the device and are not uploaded to a server.
 
 - Load JPG/PNG image folders and edit up to 20 single-label objects
+- Load DICOM folders (`.dcm` or extensionless) and NIfTI `.nii` / `.nii.gz` volumes
 - Free, Click, and edge Snap drawing with Add, Erase, Transfer, Undo, and Redo
 - Browser autosave, label PNG folder/ZIP import, and ZIP export for labels and overlays
 - Project ZIP export/import for restoring label masks and editor settings
 - Mouse-wheel image switching, zoom, pan, and a responsive touch-friendly layout
 
-The Web Beta does not include SAM2, threshold/RGB extraction, NIfTI/TIFF/STL
-export, or 5x/10x slice interpolation yet. Use the Windows GPU/Lite builds for
-those functions.
+The Web Beta does not include SAM2, threshold/RGB extraction, NIfTI export,
+TIFF/STL export, or 5x/10x slice interpolation yet. Use the Windows GPU/Lite
+builds for those functions.
 
 ---
 
@@ -263,6 +264,8 @@ https://github.com/SatoruMuro/SegRef3DViewer
 SegRef3D **Lite Web Beta** を公開。Windows / macOS / Linux / iPadOS などのモダンブラウザで、画像を外部送信せずにラベルマスクを編集できるブラウザ版を追加。GitHub Actions でマスク処理・ZIP出力の自動テストを実行。
 
 Lite WebにラベルPNGのフォルダ／ZIP読込とProject ZIPの保存・復元を追加。ラベル値0〜20、画像名、枚数、寸法を確認してから一括反映し、読込後のマスクもブラウザへ自動保存するよう改善。
+
+Lite WebにDICOM（`.dcm`および拡張子なし）とNIfTI（`.nii`／`.nii.gz`）の画像読込を追加。DICOMのスライス順、window/level、rescale情報と、NIfTIのvoxel datatype・slope/interceptを反映してブラウザ上の編集画像シーケンスへ変換。
 
 **2026.8.10**
 
