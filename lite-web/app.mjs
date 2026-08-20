@@ -590,8 +590,8 @@ function switchImage(delta) {
   if (nextIndex === state.index) return;
   finalizeActivePath();
   state.index = nextIndex;
-  fitCurrentImage();
   updateImageUi();
+  render();
 }
 
 function setDrawMode(mode) {
@@ -1010,43 +1010,67 @@ function handleWheel(event) {
   switchImage(event.deltaY > 0 ? 1 : -1);
 }
 
+function zoomFromKeyboard(factor) {
+  const rect = elements.canvas.getBoundingClientRect();
+  const nextZoom = clamp(state.viewport.zoom * factor, 0.05, 24);
+  state.viewport = zoomAroundPoint(
+    state.viewport,
+    rect.width / 2,
+    rect.height / 2,
+    nextZoom,
+  );
+  render();
+}
+
 function handleKeyDown(event) {
-  const tagName = event.target?.tagName;
-  if (tagName === "INPUT" || tagName === "SELECT" || tagName === "TEXTAREA") return;
+  if (elements.localFileDialog.open) return;
   if (!currentImage()) return;
-  if (event.key === "Enter") {
+  const key = event.key;
+  const lowerKey = key.toLowerCase();
+
+  if ((event.ctrlKey || event.metaKey) && lowerKey === "z") {
+    event.shiftKey ? redoEdit() : undoEdit();
+    event.preventDefault();
+    return;
+  }
+  if (event.ctrlKey || event.metaKey || event.altKey) return;
+
+  if (key === "Enter") {
     finalizeActivePath();
     event.preventDefault();
-  } else if (event.key === "Escape") {
+  } else if (key === "Escape") {
     currentImage().activePath = [];
     currentImage().activePathColor = null;
     currentImage().activePathMode = null;
     render();
     updateHistoryButtons();
-  } else if (["PageDown", "f", "F", "j", "J"].includes(event.key)) {
+  } else if (["pagedown", "f", "j"].includes(lowerKey)) {
     switchImage(1);
     event.preventDefault();
-  } else if (["PageUp", "r", "R", "u", "U"].includes(event.key)) {
+  } else if (["pageup", "r", "u"].includes(lowerKey)) {
     switchImage(-1);
     event.preventDefault();
-  } else if (event.key === "ArrowLeft" || event.key === "a" || event.key === "A") {
-    state.viewport.panX += 28;
+  } else if (["e", "i", "+", "="].includes(lowerKey)) {
+    zoomFromKeyboard(1.25);
+    event.preventDefault();
+  } else if (["q", "p", "-"].includes(lowerKey)) {
+    zoomFromKeyboard(0.8);
+    event.preventDefault();
+  } else if (key === "ArrowLeft" || lowerKey === "a" || lowerKey === "k") {
+    state.viewport.panX += 50;
     render();
     event.preventDefault();
-  } else if (event.key === "ArrowRight" || event.key === "d" || event.key === "D") {
-    state.viewport.panX -= 28;
+  } else if (key === "ArrowRight" || lowerKey === "d" || key === ";") {
+    state.viewport.panX -= 50;
     render();
     event.preventDefault();
-  } else if (event.key === "ArrowUp" || event.key === "w" || event.key === "W") {
-    state.viewport.panY += 28;
+  } else if (key === "ArrowUp" || lowerKey === "w" || lowerKey === "o") {
+    state.viewport.panY += 50;
     render();
     event.preventDefault();
-  } else if (event.key === "ArrowDown" || event.key === "s" || event.key === "S") {
-    state.viewport.panY -= 28;
+  } else if (key === "ArrowDown" || lowerKey === "s" || lowerKey === "l") {
+    state.viewport.panY -= 50;
     render();
-    event.preventDefault();
-  } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
-    event.shiftKey ? redoEdit() : undoEdit();
     event.preventDefault();
   }
 }
