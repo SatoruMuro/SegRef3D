@@ -117,6 +117,17 @@
             <span>Target</span>
             <select id="target-label" disabled></select>
           </label>
+          <label class="compact-field pen-color-field">
+            <span>Pen Color</span>
+            <span class="color-select">
+              <i id="pen-color-swatch" class="pen-color-swatch" aria-hidden="true"></i>
+              <select id="pen-color" aria-label="Pen color">
+                <option value="#808080" selected>Gray</option>
+                <option value="#000000">Black</option>
+                <option value="#ffffff">White</option>
+              </select>
+            </span>
+          </label>
           <div class="mode-control" aria-label="Draw mode">
             <button type="button" data-mode="free" class="selected" disabled>Free</button>
             <button type="button" data-mode="click" disabled>Click</button>
@@ -220,6 +231,43 @@
         <div id="image-meta" class="image-meta">Local processing · no uploads</div>
       </footer>
     </div>
+
+    <dialog id="local-file-dialog" class="local-file-dialog" aria-labelledby="local-file-title">
+      <div class="local-file-dialog-content">
+        <div class="local-file-dialog-heading">
+          <span class="local-file-dialog-icon" aria-hidden="true">
+            <svg><use href="#i-folder"></use></svg>
+          </span>
+          <div>
+            <span class="dialog-kicker">LOCAL PROCESSING</span>
+            <h2 id="local-file-title">Open a local image folder</h2>
+          </div>
+        </div>
+        <div class="local-file-dialog-copy">
+          <p>
+            Your browser may use the word <strong>“upload”</strong> when asking for folder access.
+            This only gives SegRef3D permission to read the selected files in this browser.
+          </p>
+          <p lang="ja">
+            ブラウザには「アップロード」と表示されますが、選択した画像がGitHubや外部サーバーへ送信されることはありません。
+          </p>
+        </div>
+        <div class="local-file-assurance">
+          <strong>Images stay on this device</strong>
+          <span>Editing, autosave, and ZIP generation run locally in your browser.</span>
+        </div>
+        <label class="dialog-checkbox">
+          <input id="local-file-dont-show" type="checkbox" />
+          <span>Do not show this message again</span>
+        </label>
+        <div class="local-file-dialog-actions">
+          <button id="local-file-cancel" class="command-button" type="button">Cancel</button>
+          <button id="local-file-continue" class="command-button accent" type="button" autofocus>
+            <svg><use href="#i-folder"></use></svg><span>Open Folder</span>
+          </button>
+        </div>
+      </div>
+    </dialog>
 
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
     <script type="module" src="./app.mjs"></script>

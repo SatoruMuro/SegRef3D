@@ -131,11 +131,50 @@ export function applyRasterToMask(mask, rasterAlpha, operation, targetLabel) {
   return changed;
 }
 
-export function transferLabel(mask, sourceLabel, destinationLabel) {
+export function traceRegionPath(context, points, { closed = false, smooth = false } = {}) {
+  if (!points.length) return;
+  context.moveTo(points[0].x, points[0].y);
+  if (!smooth || points.length < 3) {
+    for (let index = 1; index < points.length; index += 1) {
+      context.lineTo(points[index].x, points[index].y);
+    }
+    if (closed) context.closePath();
+    return;
+  }
+
+  const tension = 0.75;
+  const segmentCount = closed ? points.length : points.length - 1;
+  const pointAt = (index) => {
+    if (closed) return points[(index + points.length) % points.length];
+    return points[clamp(index, 0, points.length - 1)];
+  };
+
+  for (let index = 0; index < segmentCount; index += 1) {
+    const previous = pointAt(index - 1);
+    const start = pointAt(index);
+    const end = pointAt(index + 1);
+    const following = pointAt(index + 2);
+    const scale = tension / 6;
+    context.bezierCurveTo(
+      start.x + (end.x - previous.x) * scale,
+      start.y + (end.y - previous.y) * scale,
+      end.x - (following.x - start.x) * scale,
+      end.y - (following.y - start.y) * scale,
+      end.x,
+      end.y,
+    );
+  }
+  if (closed) context.closePath();
+}
+
+export function transferLabel(mask, sourceLabel, destinationLabel, rasterAlpha = null) {
   if (sourceLabel === destinationLabel) return 0;
+  if (rasterAlpha && mask.length !== rasterAlpha.length) {
+    throw new Error("Mask and raster dimensions do not match.");
+  }
   let changed = 0;
   for (let index = 0; index < mask.length; index += 1) {
-    if (mask[index] === sourceLabel) {
+    if (mask[index] === sourceLabel && (!rasterAlpha || rasterAlpha[index] !== 0)) {
       mask[index] = destinationLabel;
       changed += 1;
     }

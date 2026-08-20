@@ -93,6 +93,121 @@ svg {
   border: 0;
 }
 
+.local-file-dialog {
+  width: min(520px, calc(100vw - 32px));
+  max-width: none;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: 0 20px 60px rgb(28 36 40 / 28%);
+}
+
+.local-file-dialog::backdrop {
+  background: rgb(32 36 39 / 48%);
+}
+
+.local-file-dialog-content {
+  padding: 24px;
+}
+
+.local-file-dialog-heading {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+}
+
+.local-file-dialog-icon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  place-items: center;
+  border: 1px solid #a6ced1;
+  border-radius: 6px;
+  background: var(--teal-soft);
+  color: var(--teal-dark);
+}
+
+.local-file-dialog-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.dialog-kicker {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--teal-dark);
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.local-file-dialog h2 {
+  margin: 0;
+  font-size: 19px;
+  line-height: 1.25;
+}
+
+.local-file-dialog-copy {
+  margin-top: 19px;
+  color: #3c4449;
+  font-size: 14px;
+  line-height: 1.62;
+}
+
+.local-file-dialog-copy p {
+  margin: 0;
+}
+
+.local-file-dialog-copy p + p {
+  margin-top: 10px;
+}
+
+.local-file-assurance {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 17px;
+  padding: 12px 14px;
+  border-left: 3px solid var(--teal);
+  background: var(--panel-muted);
+  font-size: 13px;
+}
+
+.local-file-assurance span {
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.dialog-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 18px;
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.dialog-checkbox input {
+  width: 17px;
+  height: 17px;
+  margin: 0;
+  accent-color: var(--teal);
+}
+
+.local-file-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 22px;
+}
+
+.local-file-dialog-actions .command-button {
+  min-width: 112px;
+}
+
 .app-shell {
   display: grid;
   grid-template-rows: var(--header-height) auto auto minmax(0, 1fr) var(--status-height);
@@ -377,6 +492,29 @@ svg {
   color: var(--ink);
   font-size: 12px;
   text-transform: none;
+}
+
+.color-select {
+  position: relative;
+  display: inline-flex;
+}
+
+.color-select select {
+  min-width: 96px;
+  padding-left: 31px;
+}
+
+.pen-color-swatch {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  left: 10px;
+  width: 13px;
+  height: 13px;
+  border: 1px solid #6d7479;
+  border-radius: 2px;
+  transform: translateY(-50%);
+  pointer-events: none;
 }
 
 .transfer-field select {
@@ -779,7 +917,7 @@ svg {
     padding: 0 9px;
   }
 
-  .compact-field > span {
+  .compact-field > span:first-child {
     display: none;
   }
 
@@ -903,8 +1041,26 @@ svg {
 }
 
 @media (max-width: 470px) {
+  .local-file-dialog-content {
+    padding: 20px;
+  }
+
+  .local-file-dialog-actions .command-button {
+    width: auto;
+    min-width: 104px;
+    padding: 0 12px;
+  }
+
+  .local-file-dialog-actions .command-button span {
+    display: inline;
+  }
+
   .draw-settings .compact-field {
     display: none;
+  }
+
+  .draw-settings .pen-color-field {
+    display: flex;
   }
 
   .command-bar {

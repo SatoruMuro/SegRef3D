@@ -8,8 +8,31 @@ import {
   naturalCompare,
   screenToImage,
   transferLabel,
+  traceRegionPath,
   zoomAroundPoint,
 } from "../core.mjs";
+
+test("smooth closed regions use a curve through every anchor point", () => {
+  const calls = [];
+  const context = {
+    moveTo: (...values) => calls.push(["moveTo", ...values]),
+    lineTo: (...values) => calls.push(["lineTo", ...values]),
+    bezierCurveTo: (...values) => calls.push(["bezierCurveTo", ...values]),
+    closePath: () => calls.push(["closePath"]),
+  };
+  const points = [
+    { x: 0, y: 0 },
+    { x: 10, y: 0 },
+    { x: 10, y: 10 },
+    { x: 0, y: 10 },
+  ];
+
+  traceRegionPath(context, points, { closed: true, smooth: true });
+
+  assert.equal(calls.filter(([name]) => name === "bezierCurveTo").length, points.length);
+  assert.equal(calls.some(([name]) => name === "lineTo"), false);
+  assert.deepEqual(calls.at(-1), ["closePath"]);
+});
 
 test("natural sorting keeps numbered slices in order", () => {
   const names = ["slice10.png", "slice2.png", "slice1.png"].sort(naturalCompare);
@@ -42,6 +65,13 @@ test("label transfer preserves unrelated labels", () => {
   const mask = new Uint8Array([1, 2, 1, 0]);
   assert.equal(transferLabel(mask, 1, 7), 2);
   assert.deepEqual([...mask], [7, 2, 7, 0]);
+});
+
+test("label transfer changes only source pixels inside the drawn region", () => {
+  const mask = new Uint8Array([1, 1, 2, 1, 0]);
+  const region = new Uint8Array([0, 255, 255, 0, 255]);
+  assert.equal(transferLabel(mask, 1, 7, region), 1);
+  assert.deepEqual([...mask], [1, 7, 2, 1, 0]);
 });
 
 test("project and mask naming are deterministic", () => {

@@ -13,6 +13,7 @@ import {
   pointInsideImage,
   screenToImage,
   timestamp,
+  traceRegionPath,
   transferLabel,
   zoomAroundPoint,
 } from "./core.mjs";
@@ -33,6 +34,8 @@ const elements = {
   imageCounter: document.querySelector("#image-counter"),
   targetLabel: document.querySelector("#target-label"),
   transferLabel: document.querySelector("#transfer-label"),
+  penColor: document.querySelector("#pen-color"),
+  penColorSwatch: document.querySelector("#pen-color-swatch"),
   modeButtons: [...document.querySelectorAll("[data-mode]")],
   addMask: document.querySelector("#add-mask"),
   eraseMask: document.querySelector("#erase-mask"),
@@ -57,8 +60,14 @@ const elements = {
   loadingOverlay: document.querySelector("#loading-overlay"),
   loadingTitle: document.querySelector("#loading-title"),
   loadingDetail: document.querySelector("#loading-detail"),
+  localFileDialog: document.querySelector("#local-file-dialog"),
+  localFileDontShow: document.querySelector("#local-file-dont-show"),
+  localFileCancel: document.querySelector("#local-file-cancel"),
+  localFileContinue: document.querySelector("#local-file-continue"),
   toast: document.querySelector("#toast"),
 };
+
+const LOCAL_FILE_NOTICE_KEY = "segref3d-hide-local-file-notice";
 
 const state = {
   images: [],
@@ -67,6 +76,7 @@ const state = {
   projectName: "No project",
   targetLabel: 1,
   transferLabel: 2,
+  penColor: "#808080",
   visibleLabels: Array.from({ length: 21 }, (_, index) => index === 1),
   drawMode: "free",
   viewport: { zoom: 1, panX: 0, panY: 0 },
@@ -264,32 +274,32 @@ function buildOverlay(image) {
   return overlay;
 }
 
-function drawPath(path, active = false) {
-  if (path.length === 0) return;
-  const color = LABEL_COLORS[state.targetLabel];
+function drawPath(points, { active = false, color = state.penColor, mode = state.drawMode } = {}) {
+  if (points.length === 0) return;
+  const smooth = mode === "click" || mode === "snap";
+  context.save();
   context.beginPath();
-  context.moveTo(path[0].x, path[0].y);
-  for (let index = 1; index < path.length; index += 1) {
-    context.lineTo(path[index].x, path[index].y);
-  }
-  if (!active && path.length >= 3) {
-    context.closePath();
-    context.fillStyle = `${color}35`;
+  traceRegionPath(context, points, { closed: !active, smooth });
+  if (!active && points.length >= 3) {
+    context.fillStyle = color;
+    context.globalAlpha = 0.2;
     context.fill();
+    context.globalAlpha = 1;
   }
   context.strokeStyle = color;
   context.lineWidth = Math.max(1.2 / state.viewport.zoom, 2 / state.viewport.zoom);
   context.stroke();
 
-  if ((state.drawMode === "click" || state.drawMode === "snap") && active) {
+  if (smooth && active) {
     const radius = 3.2 / state.viewport.zoom;
     context.fillStyle = color;
-    for (const point of path) {
+    for (const point of points) {
       context.beginPath();
       context.arc(point.x, point.y, radius, 0, Math.PI * 2);
       context.fill();
     }
   }
+  context.restore();
 }
 
 function render() {
@@ -311,8 +321,14 @@ function render() {
   context.strokeStyle = "rgb(30 35 38 / 45%)";
   context.lineWidth = 1 / state.viewport.zoom;
   context.strokeRect(0, 0, image.width, image.height);
-  for (const path of image.paths) drawPath(path, false);
-  drawPath(image.activePath, true);
+  for (const path of image.paths) {
+    drawPath(path.points, { color: path.color, mode: path.mode });
+  }
+  drawPath(image.activePath, {
+    active: true,
+    color: image.activePathColor ?? state.penColor,
+    mode: image.activePathMode ?? state.drawMode,
+  });
   context.restore();
 
   elements.zoomReadout.textContent = `${Math.round(state.viewport.zoom * 100)}%`;
@@ -346,10 +362,16 @@ function finalizeActivePath() {
   const image = currentImage();
   if (!image || image.activePath.length === 0) return false;
   if (image.activePath.length >= 3) {
-    image.paths.push(image.activePath.map((point) => ({ ...point })));
+    image.paths.push({
+      points: image.activePath.map((point) => ({ ...point })),
+      color: image.activePathColor ?? state.penColor,
+      mode: image.activePathMode ?? state.drawMode,
+    });
     image.pathRedo.length = 0;
   }
   image.activePath = [];
+  image.activePathColor = null;
+  image.activePathMode = null;
   updateHistoryButtons();
   render();
   return true;
@@ -382,6 +404,8 @@ function clearLines() {
   const image = currentImage();
   if (!image) return;
   image.activePath = [];
+  image.activePathColor = null;
+  image.activePathMode = null;
   image.paths = [];
   image.pathRedo = [];
   setStatus("Cleared drawn lines.");
@@ -390,7 +414,6 @@ function clearLines() {
 }
 
 function rasterizePaths(image) {
-  finalizeActivePath();
   if (image.paths.length === 0) return null;
   const rasterCanvas = document.createElement("canvas");
   rasterCanvas.width = image.width;
@@ -398,25 +421,18 @@ function rasterizePaths(image) {
   const rasterContext = rasterCanvas.getContext("2d", { willReadFrequently: true });
   rasterContext.fillStyle = "#ffffff";
   for (const path of image.paths) {
-    if (path.length < 3) continue;
+    if (path.points.length < 3) continue;
     rasterContext.beginPath();
-    rasterContext.moveTo(path[0].x, path[0].y);
-    for (let index = 1; index < path.length; index += 1) {
-      rasterContext.lineTo(path[index].x, path[index].y);
-    }
-    rasterContext.closePath();
+    traceRegionPath(rasterContext, path.points, {
+      closed: true,
+      smooth: path.mode === "click" || path.mode === "snap",
+    });
     rasterContext.fill();
   }
   const rgba = rasterContext.getImageData(0, 0, image.width, image.height).data;
   const alpha = new Uint8Array(image.width * image.height);
   for (let index = 0; index < alpha.length; index += 1) alpha[index] = rgba[index * 4 + 3];
   return alpha;
-}
-
-function pushEditSnapshot(image) {
-  image.undo.push(image.mask.slice());
-  if (image.undo.length > 20) image.undo.shift();
-  image.redo.length = 0;
 }
 
 async function autosave(image, message = "Autosaved in browser") {
@@ -436,68 +452,109 @@ async function autosave(image, message = "Autosaved in browser") {
   return state.saveQueue;
 }
 
-function finishMaskChange(image, status) {
-  image.overlayDirty = true;
+function clearImagePaths(image) {
   image.paths = [];
   image.pathRedo = [];
   image.activePath = [];
+  image.activePathColor = null;
+  image.activePathMode = null;
+}
+
+function recordMaskChange(image, before) {
+  image.undo.push(before);
+  if (image.undo.length > 20) image.undo.shift();
+  image.redo.length = 0;
+  image.overlayDirty = true;
+}
+
+function finishDrawnMaskBatch(processedImages, changedImages, status) {
+  for (const image of processedImages) clearImagePaths(image);
   updateLabelCounts();
   updateHistoryButtons();
   render();
   setStatus(status);
-  autosave(image);
+  for (const image of changedImages) autosave(image);
 }
 
 function commitPaths(operation) {
-  const image = currentImage();
-  if (!image) return;
-  const raster = rasterizePaths(image);
-  if (!raster) {
+  if (!currentImage()) return;
+  finalizeActivePath();
+  const processedImages = state.images.filter((image) => image.paths.length > 0);
+  if (processedImages.length === 0) {
     setStatus("Draw a closed region before editing the mask.");
     showToast("No drawn region to apply.");
     return;
   }
-  const before = image.mask.slice();
-  const changed = applyRasterToMask(image.mask, raster, operation, state.targetLabel);
-  if (changed === 0) {
-    image.mask = before;
-    setStatus(operation === "erase" ? "No pixels of the target label were inside the region." : "Mask unchanged.");
-    return;
+
+  const changedImages = [];
+  let changedPixels = 0;
+  for (const image of processedImages) {
+    const raster = rasterizePaths(image);
+    if (!raster) continue;
+    const before = image.mask.slice();
+    const changed = applyRasterToMask(image.mask, raster, operation, state.targetLabel);
+    if (changed > 0) {
+      recordMaskChange(image, before);
+      changedImages.push(image);
+      changedPixels += changed;
+    }
   }
-  image.undo.push(before);
-  if (image.undo.length > 20) image.undo.shift();
-  image.redo.length = 0;
-  finishMaskChange(
-    image,
-    `${operation === "add" ? "Added to" : "Erased from"} Obj ${state.targetLabel}: ${changed.toLocaleString()} px.`,
+
+  if (operation === "add") {
+    state.visibleLabels[state.targetLabel] = true;
+    const checkbox = elements.labelList.querySelector(`[data-label="${state.targetLabel}"] input`);
+    if (checkbox) checkbox.checked = true;
+  }
+  finishDrawnMaskBatch(
+    processedImages,
+    changedImages,
+    `${operation === "add" ? "Added to" : "Erased from"} Obj ${state.targetLabel} on ${processedImages.length} image(s): ${changedPixels.toLocaleString()} px changed.`,
   );
 }
 
 function transferCurrentLabel() {
-  const image = currentImage();
-  if (!image) return;
+  if (!currentImage()) return;
   if (state.targetLabel === state.transferLabel) {
     showToast("Choose a different destination label.");
     return;
   }
-  const before = image.mask.slice();
-  const changed = transferLabel(image.mask, state.targetLabel, state.transferLabel);
-  if (changed === 0) {
-    setStatus(`Obj ${state.targetLabel} has no pixels on this image.`);
+
+  finalizeActivePath();
+  const processedImages = state.images.filter((image) => image.paths.length > 0);
+  if (processedImages.length === 0) {
+    setStatus("Draw a closed region before transferring a label.");
+    showToast("No drawn region to transfer.");
     return;
   }
-  image.undo.push(before);
-  if (image.undo.length > 20) image.undo.shift();
-  image.redo.length = 0;
+
+  const changedImages = [];
+  let changedPixels = 0;
+  for (const image of processedImages) {
+    const raster = rasterizePaths(image);
+    if (!raster) continue;
+    const before = image.mask.slice();
+    const changed = transferLabel(
+      image.mask,
+      state.targetLabel,
+      state.transferLabel,
+      raster,
+    );
+    if (changed > 0) {
+      recordMaskChange(image, before);
+      changedImages.push(image);
+      changedPixels += changed;
+    }
+  }
+
   state.visibleLabels[state.transferLabel] = true;
   const checkbox = elements.labelList.querySelector(
     `[data-label="${state.transferLabel}"] input`,
   );
   if (checkbox) checkbox.checked = true;
-  for (const item of state.images) item.overlayDirty = true;
-  finishMaskChange(
-    image,
-    `Transferred ${changed.toLocaleString()} px from Obj ${state.targetLabel} to Obj ${state.transferLabel}.`,
+  finishDrawnMaskBatch(
+    processedImages,
+    changedImages,
+    `Transferred Obj ${state.targetLabel} to Obj ${state.transferLabel} inside drawn regions on ${processedImages.length} image(s): ${changedPixels.toLocaleString()} px changed.`,
   );
 }
 
@@ -731,6 +788,8 @@ async function prepareFiles(files) {
         overlayDirty: true,
         paths: [],
         activePath: [],
+        activePathColor: null,
+        activePathMode: null,
         pathRedo: [],
         undo: [],
         redo: [],
@@ -826,6 +885,8 @@ async function loadDemo() {
       overlayDirty: true,
       paths: [],
       activePath: [],
+      activePathColor: null,
+      activePathMode: null,
       pathRedo: [],
       undo: [],
       redo: [],
@@ -867,10 +928,16 @@ function handlePointerDown(event) {
   const point = imagePointerPosition(event, state.drawMode === "snap");
   if (state.drawMode === "free") {
     image.activePath = [point];
+    image.activePathColor = state.penColor;
+    image.activePathMode = state.drawMode;
     state.pointer.drawing = true;
     state.pointer.id = event.pointerId;
     elements.canvas.setPointerCapture(event.pointerId);
   } else {
+    if (image.activePath.length === 0) {
+      image.activePathColor = state.penColor;
+      image.activePathMode = state.drawMode;
+    }
     image.activePath.push(point);
     image.pathRedo.length = 0;
   }
@@ -952,6 +1019,8 @@ function handleKeyDown(event) {
     event.preventDefault();
   } else if (event.key === "Escape") {
     currentImage().activePath = [];
+    currentImage().activePathColor = null;
+    currentImage().activePathMode = null;
     render();
     updateHistoryButtons();
   } else if (["PageDown", "f", "F", "j", "J"].includes(event.key)) {
@@ -982,16 +1051,52 @@ function handleKeyDown(event) {
   }
 }
 
+function localFileNoticeHidden() {
+  try {
+    return localStorage.getItem(LOCAL_FILE_NOTICE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function rememberLocalFileNotice() {
+  if (!elements.localFileDontShow.checked) return;
+  try {
+    localStorage.setItem(LOCAL_FILE_NOTICE_KEY, "1");
+  } catch {
+    // Folder selection still works when browser storage is unavailable.
+  }
+}
+
+function requestLocalFolder() {
+  if (localFileNoticeHidden() || typeof elements.localFileDialog.showModal !== "function") {
+    elements.folderInput.click();
+    return;
+  }
+  elements.localFileDontShow.checked = false;
+  elements.localFileDialog.showModal();
+}
+
 function bindEvents() {
-  const openFolder = () => elements.folderInput.click();
-  elements.loadFolder.addEventListener("click", openFolder);
-  elements.emptyLoad.addEventListener("click", openFolder);
+  elements.loadFolder.addEventListener("click", requestLocalFolder);
+  elements.emptyLoad.addEventListener("click", requestLocalFolder);
+  elements.localFileCancel.addEventListener("click", () => elements.localFileDialog.close());
+  elements.localFileContinue.addEventListener("click", () => {
+    rememberLocalFileNotice();
+    elements.localFileDialog.close();
+    elements.folderInput.click();
+  });
   elements.folderInput.addEventListener("change", () => prepareFiles([...elements.folderInput.files]));
   elements.loadDemo.addEventListener("click", loadDemo);
   elements.fitView.addEventListener("click", fitCurrentImage);
   elements.previousImage.addEventListener("click", () => switchImage(-1));
   elements.nextImage.addEventListener("click", () => switchImage(1));
   elements.targetLabel.addEventListener("change", () => selectTargetLabel(Number(elements.targetLabel.value)));
+  elements.penColor.addEventListener("change", () => {
+    state.penColor = elements.penColor.value;
+    elements.penColorSwatch.style.background = state.penColor;
+    render();
+  });
   elements.transferLabel.addEventListener("change", () => {
     state.transferLabel = Number(elements.transferLabel.value);
   });
@@ -1027,6 +1132,7 @@ function bindEvents() {
 }
 
 initializeLabels();
+elements.penColorSwatch.style.background = state.penColor;
 bindEvents();
 setControlsEnabled(false);
 resizeCanvas();
