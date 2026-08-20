@@ -1,0 +1,30 @@
+name: SegRef3D Lite Web CI
+
+on:
+  pull_request:
+    paths:
+      - "lite-web/**"
+      - ".github/workflows/lite-web.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "lite-web/**"
+      - ".github/workflows/lite-web.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Test mask and export logic
+        run: node --test "lite-web/tests/*.test.mjs"

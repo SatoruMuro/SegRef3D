@@ -47,6 +47,25 @@ Watch the **Basic Workflow** video to learn how to use SegRef3D, from loading im
 
 ---
 
+## SegRef3D Lite Web (Beta)
+
+**[Open SegRef3D Lite Web](https://satorumuro.github.io/SegRef3D/lite-web/)**
+
+The lightweight mask-editing workflow is also available as a browser app on
+Windows, macOS, Linux, iPadOS, and other modern browser platforms. Images and
+masks stay on the device and are not uploaded to a server.
+
+- Load JPG/PNG image folders and edit up to 20 single-label objects
+- Free, Click, and edge Snap drawing with Add, Erase, Transfer, Undo, and Redo
+- Browser autosave and ZIP export for label PNG and overlay PNG sequences
+- Mouse-wheel image switching, zoom, pan, and a responsive touch-friendly layout
+
+The Web Beta does not include SAM2, threshold/RGB extraction, NIfTI/TIFF/STL
+export, or 5x/10x slice interpolation yet. Use the Windows GPU/Lite builds for
+those functions.
+
+---
+
 ## ⚙️ System Requirements
 
 * **Operating System:** Windows 10/11 (64-bit)  
@@ -238,6 +257,10 @@ https://github.com/SatoruMuro/SegRef3DViewer
 ---
 
 # Update  
+**2026.8.20**
+
+SegRef3D **Lite Web Beta** を公開。Windows / macOS / Linux / iPadOS などのモダンブラウザで、画像を外部送信せずにラベルマスクを編集できるブラウザ版を追加。GitHub Actions でマスク処理・ZIP出力の自動テストを実行。
+
 **2026.8.10**
 
 SegRef3D **ver.1.2.3** を公開。

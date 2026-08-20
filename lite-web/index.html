@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="SegRef3D Lite Web - ブラウザだけで動くローカル画像マスク編集ツール"
+    />
+    <meta name="theme-color" content="#f4f5f6" />
+    <title>SegRef3D Lite Web</title>
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <svg class="svg-defs" aria-hidden="true">
+      <symbol id="i-folder" viewBox="0 0 24 24">
+        <path d="M3 6.5h6l2 2h10v9.5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6.5Z" />
+        <path d="M3 10h18" />
+      </symbol>
+      <symbol id="i-fit" viewBox="0 0 24 24">
+        <path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5" />
+      </symbol>
+      <symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6" /></symbol>
+      <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6" /></symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></symbol>
+      <symbol id="i-eraser" viewBox="0 0 24 24">
+        <path d="m7 20-4-4 10-10a2.8 2.8 0 0 1 4 0l1 1a2.8 2.8 0 0 1 0 4L9 20H7Z" />
+        <path d="m11 8 5 5M7 20h13" />
+      </symbol>
+      <symbol id="i-transfer" viewBox="0 0 24 24">
+        <path d="M4 7h13M14 4l3 3-3 3M20 17H7M10 14l-3 3 3 3" />
+      </symbol>
+      <symbol id="i-undo" viewBox="0 0 24 24">
+        <path d="M9 7 4 12l5 5" /><path d="M4 12h10a6 6 0 0 1 6 6" />
+      </symbol>
+      <symbol id="i-redo" viewBox="0 0 24 24">
+        <path d="m15 7 5 5-5 5" /><path d="M20 12H10a6 6 0 0 0-6 6" />
+      </symbol>
+      <symbol id="i-trash" viewBox="0 0 24 24">
+        <path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5" />
+      </symbol>
+      <symbol id="i-download" viewBox="0 0 24 24">
+        <path d="M12 3v12M7 10l5 5 5-5M4 20h16" />
+      </symbol>
+      <symbol id="i-layers" viewBox="0 0 24 24">
+        <path d="m12 3 9 5-9 5-9-5 9-5Z" /><path d="m3 12 9 5 9-5M3 16l9 5 9-5" />
+      </symbol>
+      <symbol id="i-image" viewBox="0 0 24 24">
+        <rect x="3" y="4" width="18" height="16" rx="1" /><circle cx="8" cy="9" r="1.5" />
+        <path d="m4 17 5-5 4 4 2-2 5 4" />
+      </symbol>
+      <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16" /></symbol>
+      <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" /></symbol>
+      <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M12 11v6M12 7h.01" /></symbol>
+    </svg>
+
+    <div id="app" class="app-shell">
+      <header class="app-header">
+        <div class="brand-lockup">
+          <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+          <div>
+            <strong>SegRef3D</strong>
+            <span>Lite Web <b>Beta</b></span>
+          </div>
+        </div>
+        <div class="project-summary" aria-live="polite">
+          <span id="project-name">No project</span>
+          <span id="autosave-indicator" class="save-state">Browser autosave ready</span>
+        </div>
+        <div class="header-actions">
+          <a
+            class="icon-link"
+            href="https://github.com/SatoruMuro/SegRef3D"
+            target="_blank"
+            rel="noreferrer"
+            title="Open SegRef3D on GitHub"
+          >GitHub</a>
+          <button id="labels-toggle" class="icon-button mobile-only" type="button" title="Show labels">
+            <svg><use href="#i-menu"></use></svg>
+          </button>
+        </div>
+      </header>
+
+      <section class="command-bar" aria-label="Image and drawing controls">
+        <div class="command-group command-primary">
+          <button id="load-folder" class="command-button accent" type="button">
+            <svg><use href="#i-folder"></use></svg><span>Load Images</span>
+          </button>
+          <input
+            id="folder-input"
+            class="visually-hidden"
+            type="file"
+            accept="image/jpeg,image/png,.jpg,.jpeg,.png"
+            webkitdirectory
+            multiple
+          />
+          <button id="fit-view" class="icon-button" type="button" title="Fit image to window" disabled>
+            <svg><use href="#i-fit"></use></svg>
+          </button>
+          <div class="image-navigation" aria-label="Image navigation">
+            <button id="previous-image" class="icon-button" type="button" title="Previous image" disabled>
+              <svg><use href="#i-chevron-left"></use></svg>
+            </button>
+            <output id="image-counter" class="image-counter">0 / 0</output>
+            <button id="next-image" class="icon-button" type="button" title="Next image" disabled>
+              <svg><use href="#i-chevron-right"></use></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="command-divider"></div>
+
+        <div class="command-group draw-settings">
+          <label class="compact-field">
+            <span>Target</span>
+            <select id="target-label" disabled></select>
+          </label>
+          <div class="mode-control" aria-label="Draw mode">
+            <button type="button" data-mode="free" class="selected" disabled>Free</button>
+            <button type="button" data-mode="click" disabled>Click</button>
+            <button type="button" data-mode="snap" disabled>Snap</button>
+          </div>
+        </div>
+
+        <div class="command-group edit-actions">
+          <button id="add-mask" class="command-button add" type="button" disabled>
+            <svg><use href="#i-plus"></use></svg><span>Add</span>
+          </button>
+          <button id="erase-mask" class="command-button erase" type="button" disabled>
+            <svg><use href="#i-eraser"></use></svg><span>Erase</span>
+          </button>
+          <label class="compact-field transfer-field">
+            <span>Transfer to</span>
+            <select id="transfer-label" disabled></select>
+          </label>
+          <button id="transfer-mask" class="icon-button" type="button" title="Transfer current target label" disabled>
+            <svg><use href="#i-transfer"></use></svg>
+          </button>
+        </div>
+      </section>
+
+      <section class="secondary-bar" aria-label="History and export controls">
+        <div class="history-section">
+          <span class="bar-label">LINE</span>
+          <button id="undo-line" class="icon-button" type="button" title="Undo line" disabled>
+            <svg><use href="#i-undo"></use></svg>
+          </button>
+          <button id="redo-line" class="icon-button" type="button" title="Redo line" disabled>
+            <svg><use href="#i-redo"></use></svg>
+          </button>
+          <button id="clear-lines" class="icon-button" type="button" title="Clear drawn lines" disabled>
+            <svg><use href="#i-trash"></use></svg>
+          </button>
+          <span class="bar-separator"></span>
+          <span class="bar-label">EDIT</span>
+          <button id="undo-edit" class="icon-button" type="button" title="Undo mask edit" disabled>
+            <svg><use href="#i-undo"></use></svg>
+          </button>
+          <button id="redo-edit" class="icon-button" type="button" title="Redo mask edit" disabled>
+            <svg><use href="#i-redo"></use></svg>
+          </button>
+        </div>
+        <div class="export-section">
+          <button id="export-labels" class="command-button" type="button" disabled>
+            <svg><use href="#i-download"></use></svg><span>Label PNG</span>
+          </button>
+          <button id="export-overlays" class="command-button" type="button" disabled>
+            <svg><use href="#i-layers"></use></svg><span>Overlay PNG</span>
+          </button>
+        </div>
+      </section>
+
+      <main class="workspace">
+        <section id="canvas-panel" class="canvas-panel" aria-label="Image editor">
+          <canvas id="editor-canvas" tabindex="0"></canvas>
+          <div id="empty-state" class="empty-state">
+            <div class="empty-icon"><svg><use href="#i-image"></use></svg></div>
+            <h1>Open an image sequence</h1>
+            <p>JPG or PNG folder</p>
+            <div class="empty-actions">
+              <button id="empty-load" class="command-button accent" type="button">
+                <svg><use href="#i-folder"></use></svg><span>Load Images</span>
+              </button>
+              <button id="load-demo" class="command-button" type="button">Demo</button>
+            </div>
+          </div>
+          <div id="zoom-readout" class="zoom-readout" hidden>100%</div>
+          <div id="loading-overlay" class="loading-overlay" hidden>
+            <div class="spinner"></div>
+            <strong id="loading-title">Loading images</strong>
+            <span id="loading-detail">Preparing 0 / 0</span>
+          </div>
+        </section>
+
+        <aside id="labels-panel" class="labels-panel" aria-label="Object labels">
+          <div class="panel-heading">
+            <div>
+              <span>OBJECTS</span>
+              <strong>Label visibility</strong>
+            </div>
+            <button id="labels-close" class="icon-button mobile-only" type="button" title="Close labels">
+              <svg><use href="#i-close"></use></svg>
+            </button>
+          </div>
+          <div id="label-list" class="label-list"></div>
+          <div class="label-summary">
+            <span>Current mask</span>
+            <strong id="mask-summary">No labels</strong>
+          </div>
+        </aside>
+      </main>
+
+      <footer class="status-bar">
+        <div class="status-message">
+          <svg><use href="#i-info"></use></svg>
+          <span id="status-text">Load a JPG or PNG folder to begin.</span>
+        </div>
+        <div id="image-meta" class="image-meta">Local processing · no uploads</div>
+      </footer>
+    </div>
+
+    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+    <script type="module" src="./app.mjs"></script>
+  </body>
+</html>

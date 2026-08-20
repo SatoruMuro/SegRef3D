@@ -37,6 +37,21 @@ SegRef3Dの基本的な操作手順をご覧いただける動画を掲載して
 
 ---
 
+## SegRef3D Lite Web（Beta）
+
+**[ブラウザで SegRef3D Lite Web を開く](https://satorumuro.github.io/SegRef3D/lite-web/)**
+
+Lite版のマスク編集の主要ワークフローを、Windows、macOS、Linux、iPadOS などのモダンブラウザで利用できます。画像とマスクはサーバーへ送信されず、デバイス内で処理されます。
+
+- JPG/PNG 画像フォルダの読み込みと20オブジェクトのラベル編集
+- Free / Click / Snap 描画、Add / Erase / Transfer、Undo / Redo
+- ブラウザ自動保存とラベルPNG・オーバーレイPNGのZIP出力
+- マウスホイールの画像切り替え、拡大縮小、パン操作、モバイル対応UI
+
+SAM2、閾値/RGB抽出、NIfTI/TIFF/STL出力、5x/10xスライス補間は現在のWeb Betaには含まれません。これらはWindowsのGPU版/Lite版を利用してください。
+
+---
+
 ## 🌉 SliceBridge — NIfTI基準スライス作成ツール
 
 **[ブラウザでSliceBridgeを開く](https://satorumuro.github.io/SegRef3D/slice-bridge/)**
