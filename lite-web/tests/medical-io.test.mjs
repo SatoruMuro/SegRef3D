@@ -38,6 +38,13 @@ function syntheticNifti({ timePoints = 1 } = {}) {
   view.setFloat32(108, voxOffset, true);
   view.setFloat32(112, 2, true);
   view.setFloat32(116, 5, true);
+  view.setInt16(254, 1, true);
+  view.setFloat32(280, 0.5, true);
+  view.setFloat32(292, 12.5, true);
+  view.setFloat32(300, 0.75, true);
+  view.setFloat32(308, -4, true);
+  view.setFloat32(320, 2.5, true);
+  view.setFloat32(324, 8.25, true);
   bytes.set([0x6e, 0x2b, 0x31, 0], 344);
   new Int16Array(bytes.buffer, voxOffset, values.length).set(values);
   return bytes.buffer;
@@ -99,10 +106,13 @@ function syntheticDicom(instanceNumber, pixelValues) {
   const dataSet = joinBytes([
     explicitElement(0x0020, 0x000e, "UI", "1.2.3.4.5"),
     explicitElement(0x0020, 0x0013, "IS", String(instanceNumber)),
+    explicitElement(0x0020, 0x0032, "DS", "10\\20\\30"),
+    explicitElement(0x0018, 0x0050, "DS", "2"),
     explicitElement(0x0028, 0x0002, "US", uint16Bytes(1)),
     explicitElement(0x0028, 0x0004, "CS", "MONOCHROME2"),
     explicitElement(0x0028, 0x0010, "US", uint16Bytes(2)),
     explicitElement(0x0028, 0x0011, "US", uint16Bytes(2)),
+    explicitElement(0x0028, 0x0030, "DS", "0.5\\0.75"),
     explicitElement(0x0028, 0x0100, "US", uint16Bytes(16)),
     explicitElement(0x0028, 0x0101, "US", uint16Bytes(12)),
     explicitElement(0x0028, 0x0102, "US", uint16Bytes(11)),
@@ -126,6 +136,7 @@ test("decodes NIfTI-1 int16 volumes and applies scaling", () => {
   const volume = parseNiftiVolume(syntheticNifti(), "scan.nii");
   assert.deepEqual([volume.width, volume.height, volume.depth], [3, 2, 2]);
   assert.deepEqual(volume.spacing, [0.5, 0.75, 2.5]);
+  assert.deepEqual(volume.origin, [12.5, -4, 8.25]);
   assert.equal(volume.frames.length, 2);
   assert.equal(volume.frames[0].name, "scan_slice0001.png");
   assert.equal(volume.frames[0].pixels[0], 0);
@@ -153,6 +164,8 @@ test("parses extensionless uncompressed DICOM and windows grayscale pixels", () 
   assert.equal(instance.instanceNumber, 2);
   const series = decodeDicomSeries([instance], dicomParser);
   assert.equal(series.frames.length, 1);
+  assert.deepEqual(series.spacing, [0.75, 0.5, 2]);
+  assert.deepEqual(series.origin, [10, 20, 30]);
   assert.deepEqual([...series.frames[0].pixels], [0, 85, 170, 255]);
 });
 

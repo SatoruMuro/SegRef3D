@@ -314,6 +314,186 @@ svg {
   margin-top: 14px;
 }
 
+.tools-dialog {
+  width: min(760px, calc(100vw - 32px));
+  max-width: none;
+  max-height: min(760px, calc(100dvh - 32px));
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: 0 20px 60px rgb(28 36 40 / 28%);
+}
+
+.tools-dialog::backdrop {
+  background: rgb(32 36 39 / 48%);
+}
+
+.tools-dialog-shell {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  max-height: min(760px, calc(100dvh - 34px));
+}
+
+.tools-dialog-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 22px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.tools-dialog-header h2 {
+  margin: 0;
+  font-size: 19px;
+}
+
+.tools-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  border-bottom: 1px solid var(--line);
+  background: var(--panel-muted);
+}
+
+.tools-tabs button {
+  min-width: 0;
+  height: 40px;
+  border: 0;
+  border-right: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.tools-tabs button:last-child {
+  border-right: 0;
+}
+
+.tools-tabs button[aria-selected="true"] {
+  box-shadow: inset 0 -3px var(--teal);
+  background: var(--panel);
+  color: var(--teal-dark);
+}
+
+.tool-panel {
+  min-height: 300px;
+  padding: 22px;
+  overflow: auto;
+}
+
+.tool-panel[hidden] {
+  display: none;
+}
+
+.tool-grid {
+  display: grid;
+  gap: 18px 22px;
+}
+
+.display-tool-grid,
+.calibration-grid,
+.extraction-grid,
+.stl-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.range-field,
+.number-field,
+.tool-select-field,
+.color-field {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.range-field > span {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.range-field output {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.range-field input[type="range"] {
+  width: 100%;
+  accent-color: var(--teal);
+}
+
+.number-field input,
+.tool-select-field select,
+.color-field input {
+  width: 100%;
+  height: 36px;
+  padding: 0 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: 5px;
+  background: var(--panel);
+  color: var(--ink);
+}
+
+.color-field input {
+  padding: 4px;
+}
+
+.tool-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 22px;
+}
+
+.extract-block + .extract-block,
+.volume-export-group + .volume-export-group {
+  margin-top: 24px;
+  padding-top: 22px;
+  border-top: 1px solid var(--line);
+}
+
+.extract-block h3,
+.volume-export-group h3 {
+  margin: 0 0 16px;
+  font-size: 13px;
+}
+
+.volume-export-group > .command-button {
+  margin-top: 18px;
+}
+
+.vol-info-section {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+
+.vol-info-heading {
+  display: grid;
+  gap: 6px;
+}
+
+.vol-info-heading > span {
+  color: var(--teal-dark);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.vol-info-heading output {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
 .app-shell {
   display: grid;
   grid-template-rows: var(--header-height) auto auto minmax(0, 1fr) var(--status-height);
@@ -637,6 +817,10 @@ svg {
 
 .transfer-field select {
   min-width: 72px;
+}
+
+.auto-field select {
+  min-width: 88px;
 }
 
 .mode-control {
@@ -1158,6 +1342,36 @@ svg {
   .status-bar {
     justify-content: flex-start;
   }
+
+  .tools-dialog {
+    width: calc(100vw - 20px);
+    max-height: calc(100dvh - 20px);
+  }
+
+  .tools-dialog-shell {
+    max-height: calc(100dvh - 22px);
+  }
+
+  .tools-dialog-header {
+    padding: 16px;
+  }
+
+  .tools-tabs {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .tools-tabs button:nth-child(2) {
+    border-right: 0;
+  }
+
+  .tools-tabs button:nth-child(-n + 2) {
+    border-bottom: 1px solid var(--line);
+  }
+
+  .tool-panel {
+    min-height: 0;
+    padding: 18px 16px;
+  }
 }
 
 @media (max-width: 470px) {
@@ -1176,6 +1390,13 @@ svg {
   }
 
   .mask-import-options {
+    grid-template-columns: 1fr;
+  }
+
+  .display-tool-grid,
+  .calibration-grid,
+  .extraction-grid,
+  .stl-grid {
     grid-template-columns: 1fr;
   }
 

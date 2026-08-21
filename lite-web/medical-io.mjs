@@ -274,6 +274,12 @@ export function parseNiftiVolume(input, fileName = "volume.nii") {
   if (image.byteLength < expectedBytes) throw new Error(`${fileName} has incomplete voxel data.`);
 
   const spacing = [1, 2, 3].map((index) => Math.abs(Number(header.pixDims[index])) || 1);
+  const origin = [0, 1, 2].map((index) => {
+    const affineValue = Number(header.affine?.[index]?.[3]);
+    if (Number.isFinite(affineValue)) return affineValue;
+    const offsetValue = Number(header[`qoffset_${["x", "y", "z"][index]}`]);
+    return Number.isFinite(offsetValue) ? offsetValue : 0;
+  });
   const frames = [];
   const base = filenameBase(fileName);
   if (colorChannels > 0) {
@@ -348,6 +354,7 @@ export function parseNiftiVolume(input, fileName = "volume.nii") {
     height,
     depth,
     spacing,
+    origin,
     datatype,
     frames,
   };
@@ -493,6 +500,7 @@ export function decodeDicomSeries(instances, parser = globalThis.dicomParser) {
     height: first.rows,
     depth: frames.length,
     spacing: [first.pixelSpacing[1] || 1, first.pixelSpacing[0] || 1, first.sliceSpacing || 1],
+    origin: first.imagePosition.length >= 3 ? first.imagePosition.slice(0, 3) : [0, 0, 0],
     frames,
   };
 }

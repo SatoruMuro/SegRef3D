@@ -57,6 +57,15 @@
       <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16" /></symbol>
       <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" /></symbol>
       <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M12 11v6M12 7h.01" /></symbol>
+      <symbol id="i-sliders" viewBox="0 0 24 24">
+        <path d="M4 7h10M18 7h2M4 17h2M10 17h10M14 4v6M6 14v6" />
+      </symbol>
+      <symbol id="i-ruler" viewBox="0 0 24 24">
+        <path d="m4 16 12-12 4 4L8 20H4v-4ZM13 7l4 4M10 10l2 2M7 13l2 2" />
+      </symbol>
+      <symbol id="i-box" viewBox="0 0 24 24">
+        <path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3ZM4 7.5l8 4.5 8-4.5M12 12v9" />
+      </symbol>
     </svg>
 
     <div id="app" class="app-shell">
@@ -177,6 +186,15 @@
           <button id="transfer-mask" class="icon-button" type="button" title="Transfer current target label" disabled>
             <svg><use href="#i-transfer"></use></svg>
           </button>
+          <label class="compact-field auto-field">
+            <span>Auto</span>
+            <select id="auto-apply-mode" aria-label="Automatic mask operation" disabled>
+              <option value="off" selected>Off</option>
+              <option value="add">Add</option>
+              <option value="erase">Erase</option>
+              <option value="transfer">Transfer</option>
+            </select>
+          </label>
         </div>
       </section>
 
@@ -205,6 +223,9 @@
           </button>
         </div>
         <div class="export-section">
+          <button id="image-tools" class="command-button" type="button" disabled>
+            <svg><use href="#i-sliders"></use></svg><span>Image Tools</span>
+          </button>
           <button id="export-labels" class="command-button" type="button" disabled>
             <svg><use href="#i-download"></use></svg><span>Label PNG</span>
           </button>
@@ -382,6 +403,189 @@
             <svg><use href="#i-trash"></use></svg><span>Clear Masks</span>
           </button>
         </div>
+      </div>
+    </dialog>
+
+    <dialog id="tools-dialog" class="tools-dialog" aria-labelledby="tools-title">
+      <div class="tools-dialog-shell">
+        <header class="tools-dialog-header">
+          <div>
+            <span class="dialog-kicker">IMAGE AND VOLUME TOOLS</span>
+            <h2 id="tools-title">Image Tools</h2>
+          </div>
+          <button id="tools-close" class="icon-button" type="button" title="Close image tools">
+            <svg><use href="#i-close"></use></svg>
+          </button>
+        </header>
+
+        <div class="tools-tabs" role="tablist" aria-label="Image tool views">
+          <button type="button" role="tab" data-tool-tab="display" aria-selected="true">Display</button>
+          <button type="button" role="tab" data-tool-tab="extract" aria-selected="false">Extract</button>
+          <button type="button" role="tab" data-tool-tab="calibration" aria-selected="false">Calibration</button>
+          <button type="button" role="tab" data-tool-tab="volume" aria-selected="false">Volume &amp; 3D</button>
+        </div>
+
+        <section class="tool-panel" data-tool-panel="display">
+          <div class="tool-grid display-tool-grid">
+            <label class="range-field">
+              <span>Window center <output id="window-center-value">127.5</output></span>
+              <input id="window-center" type="range" min="0" max="255" step="0.5" value="127.5" />
+            </label>
+            <label class="range-field">
+              <span>Window width <output id="window-width-value">255</output></span>
+              <input id="window-width" type="range" min="1" max="510" step="1" value="255" />
+            </label>
+            <label class="range-field">
+              <span>Brightness <output id="brightness-value">0</output></span>
+              <input id="brightness" type="range" min="-255" max="255" step="1" value="0" />
+            </label>
+            <label class="range-field">
+              <span>Contrast <output id="contrast-value">1.00</output></span>
+              <input id="contrast" type="range" min="0.1" max="3" step="0.05" value="1" />
+            </label>
+          </div>
+          <div class="tool-actions">
+            <button id="reset-display" class="command-button" type="button">
+              <svg><use href="#i-undo"></use></svg><span>Reset Display</span>
+            </button>
+          </div>
+        </section>
+
+        <section class="tool-panel" data-tool-panel="extract" hidden>
+          <div class="extract-block">
+            <h3>Threshold</h3>
+            <div class="tool-grid extraction-grid">
+              <label class="range-field">
+                <span>Minimum <output id="threshold-min-value">180</output></span>
+                <input id="threshold-min" type="range" min="0" max="255" step="1" value="180" />
+              </label>
+              <label class="range-field">
+                <span>Maximum <output id="threshold-max-value">255</output></span>
+                <input id="threshold-max" type="range" min="0" max="255" step="1" value="255" />
+              </label>
+              <label class="tool-select-field">
+                <span>Operation</span>
+                <select id="threshold-operation">
+                  <option value="add" selected>Add</option>
+                  <option value="erase">Erase</option>
+                </select>
+              </label>
+              <label class="tool-select-field">
+                <span>Images</span>
+                <select id="threshold-scope">
+                  <option value="current" selected>Current</option>
+                  <option value="all">All</option>
+                </select>
+              </label>
+            </div>
+            <button id="apply-threshold" class="command-button add" type="button">Apply Threshold</button>
+          </div>
+
+          <div class="extract-block">
+            <h3>RGB</h3>
+            <div class="tool-grid extraction-grid">
+              <label class="color-field">
+                <span>Target color</span>
+                <input id="rgb-target" type="color" value="#808080" />
+              </label>
+              <label class="range-field">
+                <span>Tolerance <output id="rgb-tolerance-value">20</output></span>
+                <input id="rgb-tolerance" type="range" min="0" max="255" step="1" value="20" />
+              </label>
+              <label class="tool-select-field">
+                <span>Operation</span>
+                <select id="rgb-operation">
+                  <option value="add" selected>Add</option>
+                  <option value="erase">Erase</option>
+                </select>
+              </label>
+              <label class="tool-select-field">
+                <span>Images</span>
+                <select id="rgb-scope">
+                  <option value="current" selected>Current</option>
+                  <option value="all">All</option>
+                </select>
+              </label>
+            </div>
+            <div class="tool-actions">
+              <button id="pick-rgb" class="command-button" type="button">
+                <svg><use href="#i-image"></use></svg><span>Pick from Image</span>
+              </button>
+              <button id="apply-rgb" class="command-button add" type="button">Apply RGB</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="tool-panel" data-tool-panel="calibration" hidden>
+          <div class="tool-grid calibration-grid">
+            <label class="number-field"><span>X spacing (mm/px)</span><input id="spacing-x" type="number" min="0.000001" step="0.001" value="1" /></label>
+            <label class="number-field"><span>Y spacing (mm/px)</span><input id="spacing-y" type="number" min="0.000001" step="0.001" value="1" /></label>
+            <label class="number-field"><span>Z spacing (mm)</span><input id="spacing-z" type="number" min="0.000001" step="0.001" value="1" /></label>
+            <label class="number-field"><span>Reference length (mm)</span><input id="reference-length" type="number" min="0.000001" step="0.1" value="10" /></label>
+          </div>
+          <div class="tool-actions">
+            <button id="draw-calibration" class="command-button accent" type="button">
+              <svg><use href="#i-ruler"></use></svg><span>Draw Reference Line</span>
+            </button>
+          </div>
+          <div class="vol-info-section">
+            <div class="vol-info-heading">
+              <span>VOLINFO CSV</span>
+              <output id="vol-info-summary">No volume information loaded.</output>
+            </div>
+            <div class="tool-actions">
+              <button id="import-vol-info" class="command-button" type="button">
+                <svg><use href="#i-folder"></use></svg><span>Import Vol CSV</span>
+              </button>
+              <input
+                id="vol-info-input"
+                class="visually-hidden"
+                type="file"
+                accept=".csv,text/csv"
+              />
+              <button id="export-vol-info" class="command-button" type="button">
+                <svg><use href="#i-download"></use></svg><span>Export Vol CSV</span>
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section class="tool-panel" data-tool-panel="volume" hidden>
+          <div class="volume-export-group">
+            <h3>Label volume</h3>
+            <div class="tool-actions">
+              <button id="export-nifti" class="command-button" type="button">
+                <svg><use href="#i-download"></use></svg><span>Export NIfTI</span>
+              </button>
+              <button id="export-tiff" class="command-button" type="button">
+                <svg><use href="#i-download"></use></svg><span>Export TIFF</span>
+              </button>
+            </div>
+          </div>
+          <div class="volume-export-group">
+            <h3>STL</h3>
+            <div class="tool-grid stl-grid">
+              <label class="tool-select-field">
+                <span>Slice interpolation</span>
+                <select id="stl-factor">
+                  <option value="1">1x</option>
+                  <option value="5" selected>5x</option>
+                  <option value="10">10x</option>
+                </select>
+              </label>
+              <label class="tool-select-field">
+                <span>Objects</span>
+                <select id="stl-scope">
+                  <option value="target" selected>Current target</option>
+                  <option value="visible">Visible objects</option>
+                </select>
+              </label>
+            </div>
+            <button id="export-stl" class="command-button accent" type="button">
+              <svg><use href="#i-box"></use></svg><span>Export STL</span>
+            </button>
+          </div>
+        </section>
       </div>
     </dialog>
 

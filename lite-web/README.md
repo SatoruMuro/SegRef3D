@@ -12,8 +12,12 @@ Public beta: <https://satorumuro.github.io/SegRef3D/lite-web/>
 - Optional resize for images larger than 2000 px
 - Optional shared white canvas for mixed image dimensions
 - Edit 20 single-label objects with Free, Click, and edge Snap drawing
-- Add, Erase, and Transfer label operations
+- Add, Erase, and Transfer label operations, with optional Auto Add/Erase/Transfer on path completion
 - Separate Undo/Redo histories for drawn lines and committed mask edits
+- Post-load window/level, brightness, and contrast controls
+- Threshold and clicked-color RGB extraction for the current image or full sequence
+- Pixel and slice-spacing calibration, including two-point reference-line calibration
+- Desktop-compatible VolInfo CSV import/export with automatic export for DICOM/NIfTI and reference-line calibration
 - Browser autosave with IndexedDB
 - Load grayscale label PNG sequences with Replace/Merge modes and clear all project masks
 - Export and restore Project ZIP files containing label masks and editor settings
@@ -22,6 +26,8 @@ Public beta: <https://satorumuro.github.io/SegRef3D/lite-web/>
 - Middle-button drag and WASD/arrow-key canvas pan
 - Label visibility controls
 - Label PNG and visible-overlay PNG sequence export as ZIP
+- NIfTI label-volume and multi-page TIFF stack export
+- 1x/5x/10x signed-distance slice interpolation and binary STL export
 - Responsive desktop/mobile layout and offline cache
 
 All Lite Web image processing happens locally in the browser. Seg on Web is a separate Google
@@ -29,6 +35,12 @@ Colab workflow where users explicitly upload images for SAM2 segmentation.
 
 Project ZIP files do not contain the source images. Load the original image folder first, then
 open the Project ZIP from **Load Masks** to restore its masks and editor settings.
+
+VolInfo CSV uses the same six-row `Width/Height/Depth`, `X/Y/Z Spacing`, and `X/Y/Z Origin`
+format as the Windows app. Imported spacing is used by NIfTI and STL export, and origin is written
+to the NIfTI sform. A CSV is
+downloaded automatically after DICOM/NIfTI loading and after reference-line calibration; the
+Calibration tab also provides manual Import/Export controls.
 
 **Replace** replaces each matched image mask. **Merge** treats imported label `0` as transparent,
 keeps existing labels outside imported regions, and lets imported non-zero labels win on overlap.
@@ -42,6 +54,7 @@ the entire loaded project after confirmation.
 - NIfTI: common integer and floating-point scalar datatypes plus RGB/RGBA volumes
 - DICOM window center/width and rescale slope/intercept are applied when available
 - NIfTI slope/intercept are applied before grayscale display conversion
+- Post-load display and threshold values operate on the normalized 0-255 image used by the editor
 
 JPEG-LS, JPEG 2000, RLE, other compressed DICOM transfer syntaxes, and 4D NIfTI volumes are
 currently rejected with a clear error instead of being rendered incorrectly.
@@ -68,7 +81,6 @@ node --test "lite-web/tests/*.test.mjs"
 
 ## Planned expansion
 
-- Threshold and RGB extraction
-- TIFF import/export and NIfTI export
-- 5x/10x signed-distance slice interpolation
-- STL generation and Three.js preview
+- TIFF volume import
+- Three.js STL preview
+- Volume statistics per object as CSV

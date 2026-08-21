@@ -57,16 +57,19 @@ masks stay on the device and are not uploaded to a server.
 
 - Load JPG/PNG image folders and edit up to 20 single-label objects
 - Load DICOM folders (`.dcm` or extensionless) and NIfTI `.nii` / `.nii.gz` volumes
-- Free, Click, and edge Snap drawing with Add, Erase, Transfer, Undo, and Redo
+- Free, Click, and edge Snap drawing with Add, Erase, Transfer, optional automatic apply, Undo, and Redo
 - Browser autosave, Replace/Merge label PNG import, mask reset, and ZIP export for labels and overlays
 - Project ZIP export/import for restoring label masks and editor settings
+- Window/level, brightness/contrast, reference-line calibration, threshold extraction, and RGB extraction
+- Windows-compatible VolInfo CSV import/export, including automatic export after medical-volume loading and calibration
+- NIfTI/TIFF label-volume export and 1x/5x/10x signed-distance interpolation with STL export
 - Seg on Web link for Colab SAM2, followed by returned label-mask import
 - Mouse-wheel image switching, zoom, pan, and a responsive touch-friendly layout
 
 The Web Beta does not run SAM2 inside the browser. Use the Seg on Web link to create
 rough label masks in Colab first, then load the returned label PNGs into Lite Web for
-manual refinement. Threshold/RGB extraction, NIfTI/TIFF/STL export, and 5x/10x slice
-interpolation are not included yet.
+manual refinement. Display, extraction, calibration, label-volume export, and STL generation
+run locally in the browser without uploading the working images.
 
 ---
 
@@ -262,6 +265,12 @@ https://github.com/SatoruMuro/SegRef3DViewer
 
 # Update  
 **2026.8.21**
+
+Lite Webに**Auto Add / Auto Erase / Auto Transfer**、読み込み後のwindow/level・明るさ・コントラスト調整、基準線キャリブレーション、Threshold/RGB抽出を追加。抽出は現在画像または全画像へAdd/Eraseでき、マスク編集履歴とブラウザ自動保存へ反映。
+
+Lite WebにラベルマスクのNIfTI／マルチページTIFF書き出しと、1x／5x／10xのsigned-distanceスライス補完を使ったSTL書き出しを追加。
+
+Lite WebにWindows版互換の**VolInfo CSV Import / Export**を追加。DICOM／NIfTI読込時と基準線キャリブレーション完了時に`*_volinf.csv`を自動出力し、SpacingをNIfTI／STL、OriginをNIfTIのsformへ反映。
 
 Lite Webに**Seg on Web**リンクを追加。Google Colabで画像系列をSAM2セグメンテーションし、出力されたラベルPNGをLite Webの`Load Masks`で読み込んで手動修正する一方向ワークフローに対応。
 

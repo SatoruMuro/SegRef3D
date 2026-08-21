@@ -31,6 +31,23 @@ import {
 } from "./medical-io.mjs";
 import { clearProjectMasks, loadMask, saveMask } from "./storage.mjs";
 import { createZip, parseZip } from "./zip.mjs";
+import {
+  adjustedRgba,
+  hexToRgb,
+  rgbAt,
+  rgbRaster,
+  rgbToHex,
+  thresholdRaster,
+} from "./image-tools.mjs";
+import {
+  createBinaryStl,
+  createNiftiLabelVolume,
+  createTiffLabelStack,
+  createVolInfoCsv,
+  interpolateLabelVolume,
+  marchingTetrahedra,
+  parseVolInfoCsv,
+} from "./volume-tools.mjs";
 
 const elements = {
   canvas: document.querySelector("#editor-canvas"),
@@ -58,12 +75,14 @@ const elements = {
   addMask: document.querySelector("#add-mask"),
   eraseMask: document.querySelector("#erase-mask"),
   transferMask: document.querySelector("#transfer-mask"),
+  autoApplyMode: document.querySelector("#auto-apply-mode"),
   undoLine: document.querySelector("#undo-line"),
   redoLine: document.querySelector("#redo-line"),
   clearLines: document.querySelector("#clear-lines"),
   undoEdit: document.querySelector("#undo-edit"),
   redoEdit: document.querySelector("#redo-edit"),
   clearMasks: document.querySelector("#clear-masks"),
+  imageTools: document.querySelector("#image-tools"),
   exportLabels: document.querySelector("#export-labels"),
   exportOverlays: document.querySelector("#export-overlays"),
   exportProject: document.querySelector("#export-project"),
@@ -96,6 +115,47 @@ const elements = {
   clearMasksCount: document.querySelector("#clear-masks-count"),
   clearMasksCancel: document.querySelector("#clear-masks-cancel"),
   clearMasksConfirm: document.querySelector("#clear-masks-confirm"),
+  toolsDialog: document.querySelector("#tools-dialog"),
+  toolsClose: document.querySelector("#tools-close"),
+  toolTabs: [...document.querySelectorAll("[data-tool-tab]")],
+  toolPanels: [...document.querySelectorAll("[data-tool-panel]")],
+  windowCenter: document.querySelector("#window-center"),
+  windowCenterValue: document.querySelector("#window-center-value"),
+  windowWidth: document.querySelector("#window-width"),
+  windowWidthValue: document.querySelector("#window-width-value"),
+  brightness: document.querySelector("#brightness"),
+  brightnessValue: document.querySelector("#brightness-value"),
+  contrast: document.querySelector("#contrast"),
+  contrastValue: document.querySelector("#contrast-value"),
+  resetDisplay: document.querySelector("#reset-display"),
+  thresholdMin: document.querySelector("#threshold-min"),
+  thresholdMinValue: document.querySelector("#threshold-min-value"),
+  thresholdMax: document.querySelector("#threshold-max"),
+  thresholdMaxValue: document.querySelector("#threshold-max-value"),
+  thresholdOperation: document.querySelector("#threshold-operation"),
+  thresholdScope: document.querySelector("#threshold-scope"),
+  applyThreshold: document.querySelector("#apply-threshold"),
+  rgbTarget: document.querySelector("#rgb-target"),
+  rgbTolerance: document.querySelector("#rgb-tolerance"),
+  rgbToleranceValue: document.querySelector("#rgb-tolerance-value"),
+  rgbOperation: document.querySelector("#rgb-operation"),
+  rgbScope: document.querySelector("#rgb-scope"),
+  pickRgb: document.querySelector("#pick-rgb"),
+  applyRgb: document.querySelector("#apply-rgb"),
+  spacingX: document.querySelector("#spacing-x"),
+  spacingY: document.querySelector("#spacing-y"),
+  spacingZ: document.querySelector("#spacing-z"),
+  referenceLength: document.querySelector("#reference-length"),
+  drawCalibration: document.querySelector("#draw-calibration"),
+  volInfoSummary: document.querySelector("#vol-info-summary"),
+  importVolInfo: document.querySelector("#import-vol-info"),
+  exportVolInfo: document.querySelector("#export-vol-info"),
+  volInfoInput: document.querySelector("#vol-info-input"),
+  exportNifti: document.querySelector("#export-nifti"),
+  exportTiff: document.querySelector("#export-tiff"),
+  stlFactor: document.querySelector("#stl-factor"),
+  stlScope: document.querySelector("#stl-scope"),
+  exportStl: document.querySelector("#export-stl"),
   toast: document.querySelector("#toast"),
 };
 
@@ -111,6 +171,7 @@ const state = {
   penColor: "#808080",
   visibleLabels: Array.from({ length: 21 }, (_, index) => index === 1),
   drawMode: "free",
+  autoApplyMode: "off",
   viewport: { zoom: 1, panX: 0, panY: 0 },
   pointer: {
     drawing: false,
@@ -125,6 +186,14 @@ const state = {
   loading: false,
   pendingPicker: "folder",
   maskImportMode: "replace",
+  displaySettings: { windowCenter: 127.5, windowWidth: 255, brightness: 0, contrast: 1 },
+  displayVersion: 0,
+  calibration: { xSpacing: 1, ySpacing: 1, zSpacing: 1, referenceLength: 10 },
+  volumeOrigin: [0, 0, 0],
+  volumeInfoSource: "Default spacing",
+  calibrationMode: false,
+  calibrationPoints: [],
+  rgbPickMode: false,
 };
 
 const context = elements.canvas.getContext("2d", { alpha: false });
@@ -227,8 +296,10 @@ function setControlsEnabled(enabled) {
     elements.addMask,
     elements.eraseMask,
     elements.transferMask,
+    elements.autoApplyMode,
     elements.loadMasks,
     elements.clearMasks,
+    elements.imageTools,
     elements.exportLabels,
     elements.exportOverlays,
     elements.exportProject,
@@ -287,6 +358,23 @@ function fitCurrentImage() {
   const rect = elements.canvasPanel.getBoundingClientRect();
   state.viewport = fitViewport(rect.width, rect.height, image.width, image.height, 22);
   render();
+}
+
+function canvasRgba(canvas) {
+  return canvas
+    .getContext("2d", { willReadFrequently: true })
+    .getImageData(0, 0, canvas.width, canvas.height).data.slice();
+}
+
+function ensureDisplayImage(image) {
+  if (!image.basePixels || image.displayVersion === state.displayVersion) return;
+  const output = adjustedRgba(image.basePixels, state.displaySettings);
+  const outputContext = image.sourceCanvas.getContext("2d");
+  const imageData = outputContext.createImageData(image.width, image.height);
+  imageData.data.set(output);
+  outputContext.putImageData(imageData, 0, 0);
+  image.sourcePixels = null;
+  image.displayVersion = state.displayVersion;
 }
 
 function buildOverlay(image) {
@@ -350,6 +438,7 @@ function render() {
   context.fillRect(0, 0, width, height);
   const image = currentImage();
   if (!image) return;
+  ensureDisplayImage(image);
 
   context.save();
   context.translate(state.viewport.panX, state.viewport.panY);
@@ -368,6 +457,17 @@ function render() {
     color: image.activePathColor ?? state.penColor,
     mode: image.activePathMode ?? state.drawMode,
   });
+  if (image.calibrationLine?.length === 2) {
+    const [start, end] = image.calibrationLine;
+    context.beginPath();
+    context.moveTo(start.x, start.y);
+    context.lineTo(end.x, end.y);
+    context.strokeStyle = "#0d6269";
+    context.lineWidth = 2 / state.viewport.zoom;
+    context.setLineDash([7 / state.viewport.zoom, 5 / state.viewport.zoom]);
+    context.stroke();
+    context.setLineDash([]);
+  }
   context.restore();
 
   elements.zoomReadout.textContent = `${Math.round(state.viewport.zoom * 100)}%`;
@@ -400,6 +500,7 @@ function imagePointerPosition(event, snap = false) {
 function finalizeActivePath() {
   const image = currentImage();
   if (!image || image.activePath.length === 0) return false;
+  let finalizedPath = false;
   if (image.activePath.length >= 3) {
     image.paths.push({
       points: image.activePath.map((point) => ({ ...point })),
@@ -407,10 +508,15 @@ function finalizeActivePath() {
       mode: image.activePathMode ?? state.drawMode,
     });
     image.pathRedo.length = 0;
+    finalizedPath = true;
   }
   image.activePath = [];
   image.activePathColor = null;
   image.activePathMode = null;
+  if (finalizedPath && state.autoApplyMode !== "off") {
+    applyAutoModeToLatestPath(image);
+    return true;
+  }
   updateHistoryButtons();
   render();
   return true;
@@ -452,14 +558,14 @@ function clearLines() {
   render();
 }
 
-function rasterizePaths(image) {
-  if (image.paths.length === 0) return null;
+function rasterizePaths(image, paths = image.paths) {
+  if (paths.length === 0) return null;
   const rasterCanvas = document.createElement("canvas");
   rasterCanvas.width = image.width;
   rasterCanvas.height = image.height;
   const rasterContext = rasterCanvas.getContext("2d", { willReadFrequently: true });
   rasterContext.fillStyle = "#ffffff";
-  for (const path of image.paths) {
+  for (const path of paths) {
     if (path.points.length < 3) continue;
     rasterContext.beginPath();
     traceRegionPath(rasterContext, path.points, {
@@ -506,6 +612,58 @@ function recordMaskChange(image, before) {
   image.overlayDirty = true;
 }
 
+function ensureLabelVisible(label) {
+  state.visibleLabels[label] = true;
+  const checkbox = elements.labelList.querySelector(`[data-label="${label}"] input`);
+  if (checkbox) checkbox.checked = true;
+}
+
+function applyAutoModeToLatestPath(image) {
+  const mode = state.autoApplyMode;
+  const path = image.paths.at(-1);
+  if (!path || mode === "off") return false;
+
+  const raster = rasterizePaths(image, [path]);
+  image.paths.pop();
+  image.pathRedo.length = 0;
+  if (!raster) {
+    updateHistoryButtons();
+    render();
+    return false;
+  }
+
+  if (mode === "transfer" && state.targetLabel === state.transferLabel) {
+    setStatus("Auto Transfer skipped: choose a different destination label.");
+    showToast("Choose a different destination label.");
+    updateHistoryButtons();
+    render();
+    return false;
+  }
+
+  const before = image.mask.slice();
+  let changed = 0;
+  let status = "";
+  if (mode === "transfer") {
+    changed = transferLabel(image.mask, state.targetLabel, state.transferLabel, raster);
+    ensureLabelVisible(state.transferLabel);
+    status = `Auto Transferred Obj ${state.targetLabel} to Obj ${state.transferLabel}`;
+  } else {
+    changed = applyRasterToMask(image.mask, raster, mode, state.targetLabel);
+    if (mode === "add") ensureLabelVisible(state.targetLabel);
+    status = `${mode === "add" ? "Auto Added to" : "Auto Erased from"} Obj ${state.targetLabel}`;
+  }
+
+  if (changed > 0) {
+    recordMaskChange(image, before);
+    autosave(image, "Auto edit autosaved");
+  }
+  updateLabelCounts();
+  updateHistoryButtons();
+  render();
+  setStatus(`${status}: ${changed.toLocaleString()} px changed.`);
+  return changed > 0;
+}
+
 function finishDrawnMaskBatch(processedImages, changedImages, status) {
   for (const image of processedImages) clearImagePaths(image);
   updateLabelCounts();
@@ -540,9 +698,7 @@ function commitPaths(operation) {
   }
 
   if (operation === "add") {
-    state.visibleLabels[state.targetLabel] = true;
-    const checkbox = elements.labelList.querySelector(`[data-label="${state.targetLabel}"] input`);
-    if (checkbox) checkbox.checked = true;
+    ensureLabelVisible(state.targetLabel);
   }
   finishDrawnMaskBatch(
     processedImages,
@@ -585,11 +741,7 @@ function transferCurrentLabel() {
     }
   }
 
-  state.visibleLabels[state.transferLabel] = true;
-  const checkbox = elements.labelList.querySelector(
-    `[data-label="${state.transferLabel}"] input`,
-  );
-  if (checkbox) checkbox.checked = true;
+  ensureLabelVisible(state.transferLabel);
   finishDrawnMaskBatch(
     processedImages,
     changedImages,
@@ -642,6 +794,298 @@ function setDrawMode(mode) {
   setStatus(`${mode[0].toUpperCase()}${mode.slice(1)} drawing mode.`);
 }
 
+function setAutoApplyMode(mode, { announce = true } = {}) {
+  state.autoApplyMode = ["add", "erase", "transfer"].includes(mode) ? mode : "off";
+  elements.autoApplyMode.value = state.autoApplyMode;
+  if (!announce) return;
+  const label =
+    state.autoApplyMode === "off"
+      ? "Off"
+      : `${state.autoApplyMode[0].toUpperCase()}${state.autoApplyMode.slice(1)}`;
+  setStatus(
+    state.autoApplyMode === "off"
+      ? "Automatic mask editing is off."
+      : `Auto ${label} enabled. Each completed region is applied to the current image.`,
+  );
+}
+
+async function applyPixelExtraction(kind) {
+  if (!currentImage() || state.loading) return;
+  const isThreshold = kind === "threshold";
+  const scope = isThreshold ? elements.thresholdScope.value : elements.rgbScope.value;
+  const operation = isThreshold
+    ? elements.thresholdOperation.value
+    : elements.rgbOperation.value;
+  const images = scope === "all" ? state.images : [currentImage()];
+  const targetColor = isThreshold ? null : hexToRgb(elements.rgbTarget.value);
+  let changedPixels = 0;
+  let changedImages = 0;
+  elements.toolsDialog.close();
+  setLoading(true, isThreshold ? "Applying threshold" : "Applying RGB extraction", `0 / ${images.length}`);
+  try {
+    for (let index = 0; index < images.length; index += 1) {
+      const image = images[index];
+      elements.loadingDetail.textContent = `${index + 1} / ${images.length}`;
+      const raster = isThreshold
+        ? thresholdRaster(image.basePixels, elements.thresholdMin.value, elements.thresholdMax.value)
+        : rgbRaster(image.basePixels, targetColor, elements.rgbTolerance.value);
+      const before = image.mask.slice();
+      const changed = applyRasterToMask(image.mask, raster, operation, state.targetLabel);
+      if (changed > 0) {
+        recordMaskChange(image, before);
+        changedPixels += changed;
+        changedImages += 1;
+        await autosave(image, `${isThreshold ? "Threshold" : "RGB"} edit autosaved`);
+      }
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    if (operation === "add") ensureLabelVisible(state.targetLabel);
+    updateLabelCounts();
+    updateHistoryButtons();
+    render();
+    setStatus(
+      `${isThreshold ? "Threshold" : "RGB"} ${operation === "add" ? "added to" : "erased from"} ` +
+        `Obj ${state.targetLabel}: ${changedPixels.toLocaleString()} px on ${changedImages} image(s).`,
+    );
+    showToast(`${isThreshold ? "Threshold" : "RGB"} extraction complete.`);
+  } catch (error) {
+    console.error(error);
+    setStatus(`${isThreshold ? "Threshold" : "RGB"} extraction failed: ${error.message}`);
+    showToast("Extraction failed.");
+  } finally {
+    setLoading(false);
+  }
+}
+
+function beginRgbPicker() {
+  if (!currentImage()) return;
+  state.rgbPickMode = true;
+  state.calibrationMode = false;
+  state.calibrationPoints = [];
+  elements.toolsDialog.close();
+  elements.canvas.focus();
+  setStatus("Click the image to pick the RGB extraction color.");
+}
+
+function beginCalibration() {
+  if (!currentImage()) return;
+  updateCalibrationFromControls();
+  state.calibrationMode = true;
+  state.calibrationPoints = [];
+  state.rgbPickMode = false;
+  currentImage().calibrationLine = null;
+  elements.toolsDialog.close();
+  elements.canvas.focus();
+  setStatus("Click two points for the calibration reference line.");
+  render();
+}
+
+function syncDisplayControls() {
+  const settings = state.displaySettings;
+  elements.windowCenter.value = String(settings.windowCenter);
+  elements.windowWidth.value = String(settings.windowWidth);
+  elements.brightness.value = String(settings.brightness);
+  elements.contrast.value = String(settings.contrast);
+  elements.windowCenterValue.textContent = Number(settings.windowCenter).toFixed(1);
+  elements.windowWidthValue.textContent = Number(settings.windowWidth).toFixed(0);
+  elements.brightnessValue.textContent = Number(settings.brightness).toFixed(0);
+  elements.contrastValue.textContent = Number(settings.contrast).toFixed(2);
+}
+
+function updateDisplaySettingsFromControls() {
+  state.displaySettings = {
+    windowCenter: Number(elements.windowCenter.value),
+    windowWidth: Math.max(1, Number(elements.windowWidth.value)),
+    brightness: Number(elements.brightness.value),
+    contrast: Math.max(0.1, Number(elements.contrast.value)),
+  };
+  state.displayVersion += 1;
+  syncDisplayControls();
+  render();
+}
+
+function resetDisplaySettings({ announce = true } = {}) {
+  state.displaySettings = { windowCenter: 127.5, windowWidth: 255, brightness: 0, contrast: 1 };
+  state.displayVersion += 1;
+  syncDisplayControls();
+  render();
+  if (announce) setStatus("Display settings reset.");
+}
+
+function syncCalibrationControls() {
+  elements.spacingX.value = String(state.calibration.xSpacing);
+  elements.spacingY.value = String(state.calibration.ySpacing);
+  elements.spacingZ.value = String(state.calibration.zSpacing);
+  elements.referenceLength.value = String(state.calibration.referenceLength);
+}
+
+function syncExtractionControls() {
+  elements.thresholdMinValue.textContent = elements.thresholdMin.value;
+  elements.thresholdMaxValue.textContent = elements.thresholdMax.value;
+  elements.rgbToleranceValue.textContent = elements.rgbTolerance.value;
+}
+
+function updateCalibrationFromControls() {
+  const positive = (element, fallback) => {
+    const value = Number(element.value);
+    return Number.isFinite(value) && value > 0 ? value : fallback;
+  };
+  state.calibration = {
+    xSpacing: positive(elements.spacingX, state.calibration.xSpacing),
+    ySpacing: positive(elements.spacingY, state.calibration.ySpacing),
+    zSpacing: positive(elements.spacingZ, state.calibration.zSpacing),
+    referenceLength: positive(elements.referenceLength, state.calibration.referenceLength),
+  };
+  syncCalibrationControls();
+  syncVolInfoSummary();
+}
+
+function initializeCalibrationFromImages() {
+  const image = state.images[0];
+  const xSpacing = Number(image?.pixelSpacing?.[0]);
+  const ySpacing = Number(image?.pixelSpacing?.[1]);
+  const zSpacing = Number(image?.sliceSpacing);
+  state.calibration = {
+    xSpacing: Number.isFinite(xSpacing) && xSpacing > 0 ? xSpacing : 1,
+    ySpacing: Number.isFinite(ySpacing) && ySpacing > 0 ? ySpacing : 1,
+    zSpacing: Number.isFinite(zSpacing) && zSpacing > 0 ? zSpacing : 1,
+    referenceLength: 10,
+  };
+  state.volumeOrigin = [0, 1, 2].map((index) => {
+    const value = Number(image?.volumeOrigin?.[index]);
+    return Number.isFinite(value) ? value : 0;
+  });
+  state.volumeInfoSource = image?.sourceFormat === "dicom"
+    ? "DICOM metadata"
+    : image?.sourceFormat === "nifti"
+      ? "NIfTI metadata"
+      : "Default spacing";
+  syncCalibrationControls();
+  syncVolInfoSummary();
+}
+
+function currentVolInfo() {
+  if (state.images.length === 0) throw new Error("No images are loaded.");
+  const width = state.images[0].width;
+  const height = state.images[0].height;
+  const mismatch = state.images.find((image) => image.width !== width || image.height !== height);
+  if (mismatch) {
+    throw new Error(
+      "VolInfo requires equal image dimensions. Reload the sequence on a shared canvas.",
+    );
+  }
+  return {
+    width,
+    height,
+    depth: state.images.length,
+    spacing: [
+      state.calibration.xSpacing,
+      state.calibration.ySpacing,
+      state.calibration.zSpacing,
+    ],
+    origin: state.volumeOrigin.slice(0, 3),
+  };
+}
+
+function syncVolInfoSummary() {
+  if (!elements.volInfoSummary) return;
+  if (state.images.length === 0) {
+    elements.volInfoSummary.textContent = "No volume information loaded.";
+    return;
+  }
+  try {
+    const info = currentVolInfo();
+    elements.volInfoSummary.textContent =
+      `${info.width} × ${info.height} × ${info.depth} · spacing ` +
+      `${info.spacing.map((value) => Number(value).toPrecision(6)).join(" × ")} mm · ` +
+      `origin ${info.origin.map((value) => Number(value).toPrecision(6)).join(", ")} · ` +
+      state.volumeInfoSource;
+  } catch (error) {
+    elements.volInfoSummary.textContent = error.message;
+  }
+}
+
+function exportVolInfoCsv({ automatic = false } = {}) {
+  try {
+    updateCalibrationFromControls();
+    const info = currentVolInfo();
+    const filename = `${sanitizeFilename(state.projectName)}_volinf.csv`;
+    downloadBlob(
+      new Blob([createVolInfoCsv(info)], { type: "text/csv;charset=utf-8" }),
+      filename,
+    );
+    setStatus(`${automatic ? "Auto-exported" : "Exported"} VolInfo CSV: ${filename}`);
+    showToast(`${automatic ? "Auto-downloaded" : "Downloaded"} ${filename}`);
+    return filename;
+  } catch (error) {
+    console.error(error);
+    setStatus(`VolInfo export failed: ${error.message}`);
+    if (!automatic) window.alert(`VolInfo export failed.\n\n${error.message}`);
+    return null;
+  }
+}
+
+async function importVolInfoCsv(file) {
+  if (!file || state.images.length === 0) return;
+  try {
+    const imported = parseVolInfoCsv(await file.text());
+    const current = currentVolInfo();
+    const dimensionsMatch =
+      imported.width === current.width &&
+      imported.height === current.height &&
+      imported.depth === current.depth;
+    if (
+      !dimensionsMatch &&
+      !window.confirm(
+        `VolInfo dimensions are ${imported.width} × ${imported.height} × ${imported.depth}, ` +
+          `but the loaded sequence is ${current.width} × ${current.height} × ${current.depth}.\n\n` +
+          "Apply the imported spacing and origin anyway?",
+      )
+    ) {
+      setStatus("VolInfo import canceled. Calibration was not changed.");
+      return;
+    }
+    state.calibration = {
+      ...state.calibration,
+      xSpacing: imported.spacing[0],
+      ySpacing: imported.spacing[1],
+      zSpacing: imported.spacing[2],
+    };
+    state.volumeOrigin = imported.origin.slice();
+    state.volumeInfoSource = file.name;
+    syncCalibrationControls();
+    syncVolInfoSummary();
+    setStatus(
+      `VolInfo loaded: spacing ${imported.spacing.map((value) => value.toPrecision(6)).join(" × ")} mm.`,
+    );
+    showToast(`Loaded ${file.name}`);
+    openImageTools("calibration");
+  } catch (error) {
+    console.error(error);
+    setStatus(`VolInfo import failed: ${error.message}`);
+    window.alert(`VolInfo import failed.\n\n${error.message}`);
+  } finally {
+    elements.volInfoInput.value = "";
+  }
+}
+
+function selectToolTab(name) {
+  for (const tab of elements.toolTabs) {
+    const selected = tab.dataset.toolTab === name;
+    tab.setAttribute("aria-selected", String(selected));
+  }
+  for (const panel of elements.toolPanels) panel.hidden = panel.dataset.toolPanel !== name;
+}
+
+function openImageTools(name = "display") {
+  if (!currentImage() || state.loading) return;
+  selectToolTab(name);
+  syncDisplayControls();
+  syncCalibrationControls();
+  syncVolInfoSummary();
+  elements.toolsDialog.showModal();
+}
+
 function canvasToBlob(canvas, type = "image/png", quality) {
   return new Promise((resolve, reject) => {
     canvas.toBlob(
@@ -682,6 +1126,7 @@ async function labelPngBlob(image) {
 }
 
 async function overlayPngBlob(image) {
+  ensureDisplayImage(image);
   const canvas = document.createElement("canvas");
   canvas.width = image.width;
   canvas.height = image.height;
@@ -717,6 +1162,130 @@ async function exportSequence(kind) {
     console.error(error);
     setStatus(`Export failed: ${error.message}`);
     showToast("Export failed.");
+  } finally {
+    setLoading(false);
+  }
+}
+
+function labelVolumeGeometry() {
+  if (state.images.length === 0) throw new Error("No images are loaded.");
+  const width = state.images[0].width;
+  const height = state.images[0].height;
+  const mismatch = state.images.find((image) => image.width !== width || image.height !== height);
+  if (mismatch) {
+    throw new Error(
+      "Volume export requires equal image dimensions. Reload the sequence on a shared canvas.",
+    );
+  }
+  updateCalibrationFromControls();
+  return {
+    width,
+    height,
+    masks: state.images.map((image) => image.mask),
+    spacing: [
+      state.calibration.xSpacing,
+      state.calibration.ySpacing,
+      state.calibration.zSpacing,
+    ],
+    origin: state.volumeOrigin.slice(0, 3),
+  };
+}
+
+async function exportLabelVolume(format) {
+  if (state.loading) return;
+  elements.toolsDialog.close();
+  setLoading(true, `Exporting ${format.toUpperCase()}`, "Preparing label volume");
+  try {
+    const { masks, width, height, spacing, origin } = labelVolumeGeometry();
+    const bytes =
+      format === "nifti"
+        ? createNiftiLabelVolume(masks, width, height, spacing, origin)
+        : createTiffLabelStack(masks, width, height);
+    const extension = format === "nifti" ? "nii" : "tiff";
+    const mimeType = format === "nifti" ? "application/octet-stream" : "image/tiff";
+    const filename = `${sanitizeFilename(state.projectName)}_labels_${timestamp()}.${extension}`;
+    downloadBlob(new Blob([bytes], { type: mimeType }), filename);
+    setStatus(`Exported ${masks.length}-slice label volume as ${extension.toUpperCase()}.`);
+    showToast(`Downloaded ${filename}`);
+  } catch (error) {
+    console.error(error);
+    setStatus(`Volume export failed: ${error.message}`);
+    window.alert(`Volume export failed.\n\n${error.message}`);
+  } finally {
+    setLoading(false);
+  }
+}
+
+function labelIsUsed(label, masks) {
+  return masks.some((mask) => mask.includes(label));
+}
+
+async function exportStlMeshes() {
+  if (state.loading) return;
+  const factor = Number(elements.stlFactor.value);
+  elements.toolsDialog.close();
+  setLoading(true, "Exporting STL", "Preparing label volume");
+  try {
+    const { masks, width, height, spacing } = labelVolumeGeometry();
+    const labels =
+      elements.stlScope.value === "visible"
+        ? Array.from({ length: 20 }, (_, index) => index + 1).filter(
+            (label) => state.visibleLabels[label] && labelIsUsed(label, masks),
+          )
+        : [state.targetLabel].filter((label) => labelIsUsed(label, masks));
+    if (labels.length === 0) throw new Error("The selected object set has no label pixels.");
+    const interpolatedDepth = (masks.length - 1) * factor + 1;
+    const voxelCount = width * height * interpolatedDepth;
+    if (voxelCount > 200_000_000) {
+      throw new Error("The interpolated volume is too large for safe browser processing.");
+    }
+    if (
+      voxelCount > 50_000_000 &&
+      !window.confirm(
+        `The ${factor}x interpolated volume contains about ${Math.round(voxelCount / 1_000_000)} million voxels.\n\nContinue STL generation?`,
+      )
+    ) {
+      setStatus("STL export canceled.");
+      return;
+    }
+
+    const entries = [];
+    for (let index = 0; index < labels.length; index += 1) {
+      const label = labels[index];
+      elements.loadingDetail.textContent = `Obj ${label}: interpolation`;
+      const interpolated = interpolateLabelVolume(masks, width, height, label, factor);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      elements.loadingDetail.textContent = `Obj ${label}: meshing`;
+      const triangles = marchingTetrahedra(interpolated.data, width, height, interpolated.depth, [
+        spacing[0],
+        spacing[1],
+        spacing[2] / factor,
+      ]);
+      if (triangles.length === 0) continue;
+      const name = `obj${String(label).padStart(2, "0")}_${factor}x.stl`;
+      entries.push({
+        name,
+        blob: new Blob([createBinaryStl(triangles, `SegRef3D Obj ${label}`)], {
+          type: "model/stl",
+        }),
+      });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    if (entries.length === 0) throw new Error("No STL surface could be generated.");
+    if (entries.length === 1) {
+      downloadBlob(entries[0].blob, entries[0].name);
+      showToast(`Downloaded ${entries[0].name}`);
+    } else {
+      elements.loadingDetail.textContent = "Creating STL ZIP";
+      const filename = `${sanitizeFilename(state.projectName)}_STL_${factor}x_${timestamp()}.zip`;
+      downloadBlob(await createZip(entries), filename);
+      showToast(`Downloaded ${filename}`);
+    }
+    setStatus(`Exported ${entries.length} STL file(s) with ${factor}x signed-distance interpolation.`);
+  } catch (error) {
+    console.error(error);
+    setStatus(`STL export failed: ${error.message}`);
+    window.alert(`STL export failed.\n\n${error.message}`);
   } finally {
     setLoading(false);
   }
@@ -954,12 +1523,56 @@ function applyProjectSettings(settings = {}) {
   const penColor = ["#808080", "#000000", "#ffffff"].includes(settings.penColor)
     ? settings.penColor
     : state.penColor;
+  const autoApplyMode = ["add", "erase", "transfer"].includes(settings.autoApplyMode)
+    ? settings.autoApplyMode
+    : "off";
+  const savedDisplay = settings.displaySettings || {};
+  const savedCalibration = settings.calibration || {};
+  const savedVolumeOrigin = Array.isArray(settings.volumeOrigin) ? settings.volumeOrigin : null;
   const savedVisibility = Array.isArray(settings.visibleLabels) ? settings.visibleLabels : null;
 
   if (targetLabel >= 1 && targetLabel <= 20) state.targetLabel = targetLabel;
   if (transferLabelValue >= 1 && transferLabelValue <= 20) state.transferLabel = transferLabelValue;
   state.drawMode = drawMode;
   state.penColor = penColor;
+  setAutoApplyMode(autoApplyMode, { announce: false });
+  state.displaySettings = {
+    windowCenter: Number.isFinite(Number(savedDisplay.windowCenter))
+      ? Number(savedDisplay.windowCenter)
+      : 127.5,
+    windowWidth: Math.max(1, Number(savedDisplay.windowWidth) || 255),
+    brightness: Number.isFinite(Number(savedDisplay.brightness))
+      ? Number(savedDisplay.brightness)
+      : 0,
+    contrast: Math.max(0.1, Number(savedDisplay.contrast) || 1),
+  };
+  state.displayVersion += 1;
+  state.calibration = {
+    xSpacing: Number(savedCalibration.xSpacing) > 0
+      ? Number(savedCalibration.xSpacing)
+      : state.calibration.xSpacing,
+    ySpacing: Number(savedCalibration.ySpacing) > 0
+      ? Number(savedCalibration.ySpacing)
+      : state.calibration.ySpacing,
+    zSpacing: Number(savedCalibration.zSpacing) > 0
+      ? Number(savedCalibration.zSpacing)
+      : state.calibration.zSpacing,
+    referenceLength: Number(savedCalibration.referenceLength) > 0
+      ? Number(savedCalibration.referenceLength)
+      : state.calibration.referenceLength,
+  };
+  if (savedVolumeOrigin?.length >= 3) {
+    state.volumeOrigin = [0, 1, 2].map((index) => {
+      const value = Number(savedVolumeOrigin[index]);
+      return Number.isFinite(value) ? value : 0;
+    });
+    state.volumeInfoSource = typeof settings.volumeInfoSource === "string"
+      ? settings.volumeInfoSource.slice(0, 120)
+      : "Project ZIP";
+  }
+  syncDisplayControls();
+  syncCalibrationControls();
+  syncVolInfoSummary();
   elements.targetLabel.value = String(state.targetLabel);
   elements.transferLabel.value = String(state.transferLabel);
   elements.penColor.value = state.penColor;
@@ -1111,6 +1724,7 @@ async function exportProjectZip() {
         sourceFormat: image.sourceFormat,
         pixelSpacing: image.pixelSpacing,
         sliceSpacing: image.sliceSpacing,
+        volumeOrigin: image.volumeOrigin,
         mask: `label_png/${maskFilename(index)}`,
       })),
       settings: {
@@ -1119,6 +1733,11 @@ async function exportProjectZip() {
         visibleLabels: state.visibleLabels.slice(1),
         drawMode: state.drawMode,
         penColor: state.penColor,
+        autoApplyMode: state.autoApplyMode,
+        displaySettings: { ...state.displaySettings },
+        calibration: { ...state.calibration },
+        volumeOrigin: state.volumeOrigin.slice(),
+        volumeInfoSource: state.volumeInfoSource,
       },
     };
     const entries = [
@@ -1223,7 +1842,13 @@ async function medicalFrameToCanvas(frame) {
   return canvas;
 }
 
-async function prepareImageSequence(sources, projectFiles, projectName, sourceDescription) {
+async function prepareImageSequence(
+  sources,
+  projectFiles,
+  projectName,
+  sourceDescription,
+  { autoExportVolInfo = false } = {},
+) {
   if (sources.length === 0) throw new Error("No readable image slices were found.");
   const largeCount = sources.filter(
     (source) => Math.max(source.width, source.height) > 2000,
@@ -1278,6 +1903,13 @@ async function prepareImageSequence(sources, projectFiles, projectName, sourceDe
       width,
       height,
     );
+    const sourceSpacing = source.pixelSpacing;
+    const pixelSpacing = sourceSpacing
+      ? [
+          Number(sourceSpacing[0]) * (source.width / size.width),
+          Number(sourceSpacing[1]) * (source.height / size.height),
+        ]
+      : null;
     const restored = await loadMask(projectId, source.name, width, height).catch(() => null);
     prepared.push({
       name: source.name,
@@ -1290,9 +1922,12 @@ async function prepareImageSequence(sources, projectFiles, projectName, sourceDe
       contentX: Math.floor((width - size.width) / 2),
       contentY: Math.floor((height - size.height) / 2),
       sourceFormat: source.sourceFormat || "raster",
-      pixelSpacing: source.pixelSpacing || null,
+      pixelSpacing,
       sliceSpacing: source.sliceSpacing || null,
+      volumeOrigin: source.volumeOrigin || null,
       sourceCanvas,
+      basePixels: canvasRgba(sourceCanvas),
+      displayVersion: -1,
       sourcePixels: null,
       mask: restored ?? new Uint8Array(width * height),
       overlayCanvas: null,
@@ -1313,6 +1948,8 @@ async function prepareImageSequence(sources, projectFiles, projectName, sourceDe
   state.index = 0;
   state.projectName = projectName;
   state.visibleLabels = Array.from({ length: 21 }, (_, label) => label === 1);
+  resetDisplaySettings({ announce: false });
+  initializeCalibrationFromImages();
   for (let label = 1; label <= 20; label += 1) {
     const checkbox = elements.labelList.querySelector(`[data-label="${label}"] input`);
     if (checkbox) checkbox.checked = label === 1;
@@ -1327,6 +1964,7 @@ async function prepareImageSequence(sources, projectFiles, projectName, sourceDe
   );
   elements.canvas.focus();
   navigator.storage?.persist?.().catch(() => {});
+  if (autoExportVolInfo) exportVolInfoCsv({ automatic: true });
   return true;
 }
 
@@ -1412,6 +2050,7 @@ async function decodeDicomSources(files) {
       sourceFormat: "dicom",
       pixelSpacing: decoded.spacing.slice(0, 2),
       sliceSpacing: decoded.spacing[2],
+      volumeOrigin: decoded.origin,
     });
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
@@ -1439,6 +2078,7 @@ async function prepareNiftiFile(file) {
         sourceFormat: "nifti",
         pixelSpacing: volume.spacing.slice(0, 2),
         sliceSpacing: volume.spacing[2],
+        volumeOrigin: volume.origin,
       });
       await new Promise((resolve) => setTimeout(resolve, 0));
     }
@@ -1447,6 +2087,7 @@ async function prepareNiftiFile(file) {
       [file],
       file.name.replace(/\.nii(?:\.gz)?$/i, "") || "NIfTI volume",
       "NIfTI slice(s)",
+      { autoExportVolInfo: true },
     );
   } catch (error) {
     console.error(error);
@@ -1500,6 +2141,7 @@ async function prepareFiles(files) {
         decoded.files,
         projectFolder === "Image sequence" ? decoded.description : projectFolder,
         "DICOM frame(s)",
+        { autoExportVolInfo: true },
       );
       return;
     }
@@ -1573,7 +2215,10 @@ async function loadDemo() {
       sourceFormat: "demo",
       pixelSpacing: null,
       sliceSpacing: null,
+      volumeOrigin: null,
       sourceCanvas,
+      basePixels: canvasRgba(sourceCanvas),
+      displayVersion: -1,
       sourcePixels: null,
       mask: new Uint8Array(sourceCanvas.width * sourceCanvas.height),
       overlayCanvas: null,
@@ -1592,6 +2237,8 @@ async function loadDemo() {
   state.projectId = "segref3d-lite-demo-v1";
   state.projectName = "Demo sequence";
   state.index = 0;
+  resetDisplaySettings({ announce: false });
+  initializeCalibrationFromImages();
   setControlsEnabled(true);
   updateImageUi();
   setLoading(false);
@@ -1620,6 +2267,44 @@ function handlePointerDown(event) {
   if (!pointInsideImage(rawPoint, image.width, image.height)) return;
   event.preventDefault();
   elements.canvas.focus();
+  if (state.rgbPickMode) {
+    const color = rgbAt(image.basePixels, image.width, image.height, rawPoint.x, rawPoint.y);
+    elements.rgbTarget.value = rgbToHex(color);
+    state.rgbPickMode = false;
+    setStatus(`Picked RGB (${color.red}, ${color.green}, ${color.blue}).`);
+    openImageTools("extract");
+    return;
+  }
+  if (state.calibrationMode) {
+    const point = imagePointerPosition(event, false);
+    state.calibrationPoints.push(point);
+    if (state.calibrationPoints.length === 2) {
+      const [start, end] = state.calibrationPoints;
+      const pixelLength = Math.hypot(end.x - start.x, end.y - start.y);
+      if (pixelLength > 0) {
+        const spacing = state.calibration.referenceLength / pixelLength;
+        state.calibration.xSpacing = spacing;
+        state.calibration.ySpacing = spacing;
+        state.volumeInfoSource = "Reference line calibration";
+        image.calibrationLine = [start, end];
+        syncCalibrationControls();
+        syncVolInfoSummary();
+        setStatus(
+          `Calibrated ${state.calibration.referenceLength.toLocaleString()} mm over ` +
+            `${pixelLength.toFixed(2)} px: ${spacing.toPrecision(6)} mm/px.`,
+        );
+        exportVolInfoCsv({ automatic: true });
+      } else {
+        setStatus("Calibration points must be different.");
+      }
+      state.calibrationMode = false;
+      state.calibrationPoints = [];
+    } else {
+      setStatus("Click the second calibration point.");
+    }
+    render();
+    return;
+  }
   const point = imagePointerPosition(event, state.drawMode === "snap");
   if (state.drawMode === "free") {
     image.activePath = [point];
@@ -1721,7 +2406,8 @@ function handleKeyDown(event) {
   if (
     elements.localFileDialog.open ||
     elements.maskImportDialog.open ||
-    elements.clearMasksDialog.open
+    elements.clearMasksDialog.open ||
+    elements.toolsDialog.open
   ) {
     return;
   }
@@ -1931,6 +2617,9 @@ function bindEvents() {
   elements.transferLabel.addEventListener("change", () => {
     state.transferLabel = Number(elements.transferLabel.value);
   });
+  elements.autoApplyMode.addEventListener("change", () => {
+    setAutoApplyMode(elements.autoApplyMode.value);
+  });
   for (const button of elements.modeButtons) {
     button.addEventListener("click", () => setDrawMode(button.dataset.mode));
   }
@@ -1943,6 +2632,50 @@ function bindEvents() {
   elements.undoEdit.addEventListener("click", undoEdit);
   elements.redoEdit.addEventListener("click", redoEdit);
   elements.clearMasks.addEventListener("click", requestClearAllMasks);
+  elements.imageTools.addEventListener("click", () => openImageTools("display"));
+  elements.toolsClose.addEventListener("click", () => elements.toolsDialog.close());
+  for (const tab of elements.toolTabs) {
+    tab.addEventListener("click", () => selectToolTab(tab.dataset.toolTab));
+  }
+  for (const input of [
+    elements.windowCenter,
+    elements.windowWidth,
+    elements.brightness,
+    elements.contrast,
+  ]) {
+    input.addEventListener("input", updateDisplaySettingsFromControls);
+  }
+  elements.resetDisplay.addEventListener("click", () => resetDisplaySettings());
+  elements.thresholdMin.addEventListener("input", syncExtractionControls);
+  elements.thresholdMax.addEventListener("input", syncExtractionControls);
+  elements.rgbTolerance.addEventListener("input", syncExtractionControls);
+  elements.applyThreshold.addEventListener("click", () => applyPixelExtraction("threshold"));
+  elements.pickRgb.addEventListener("click", beginRgbPicker);
+  elements.applyRgb.addEventListener("click", () => applyPixelExtraction("rgb"));
+  for (const input of [
+    elements.spacingX,
+    elements.spacingY,
+    elements.spacingZ,
+    elements.referenceLength,
+  ]) {
+    input.addEventListener("change", () => {
+      updateCalibrationFromControls();
+      state.volumeInfoSource = "Manual settings";
+      syncVolInfoSummary();
+    });
+  }
+  elements.drawCalibration.addEventListener("click", beginCalibration);
+  elements.importVolInfo.addEventListener("click", () => {
+    elements.toolsDialog.close();
+    elements.volInfoInput.click();
+  });
+  elements.exportVolInfo.addEventListener("click", () => exportVolInfoCsv());
+  elements.volInfoInput.addEventListener("change", () =>
+    importVolInfoCsv(elements.volInfoInput.files[0]),
+  );
+  elements.exportNifti.addEventListener("click", () => exportLabelVolume("nifti"));
+  elements.exportTiff.addEventListener("click", () => exportLabelVolume("tiff"));
+  elements.exportStl.addEventListener("click", exportStlMeshes);
   elements.exportLabels.addEventListener("click", () => exportSequence("labels"));
   elements.exportOverlays.addEventListener("click", () => exportSequence("overlays"));
   elements.exportProject.addEventListener("click", exportProjectZip);
@@ -1966,7 +2699,12 @@ function bindEvents() {
 
 initializeLabels();
 elements.penColorSwatch.style.background = state.penColor;
+setAutoApplyMode("off", { announce: false });
 setMaskImportMode("replace");
+syncDisplayControls();
+syncExtractionControls();
+syncCalibrationControls();
+syncVolInfoSummary();
 bindEvents();
 setControlsEnabled(false);
 resizeCanvas();
