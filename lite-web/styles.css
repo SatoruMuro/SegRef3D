@@ -135,6 +135,16 @@ svg {
   height: 22px;
 }
 
+.destructive-dialog-icon {
+  border-color: #df9b96;
+  background: var(--coral-soft);
+  color: #92372f;
+}
+
+.destructive-kicker {
+  color: #92372f;
+}
+
 .dialog-kicker {
   display: block;
   margin-bottom: 3px;
@@ -180,6 +190,11 @@ svg {
   line-height: 1.45;
 }
 
+.destructive-assurance {
+  border-left-color: var(--coral);
+  background: #fff5f4;
+}
+
 .dialog-checkbox {
   display: flex;
   align-items: center;
@@ -213,6 +228,81 @@ svg {
   grid-template-columns: 1fr 1fr;
   gap: 10px;
   margin-top: 20px;
+}
+
+.mask-import-mode {
+  min-width: 0;
+  padding: 0;
+  margin: 18px 0 0;
+  border: 0;
+}
+
+.mask-import-mode legend {
+  padding: 0;
+  margin-bottom: 7px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.mask-import-segments {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  width: 100%;
+}
+
+.mask-import-segments label {
+  position: relative;
+  cursor: pointer;
+}
+
+.mask-import-segments input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.mask-import-segments span {
+  display: grid;
+  height: 38px;
+  place-items: center;
+  border: 1px solid var(--line-strong);
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.mask-import-segments label:first-child span {
+  border-radius: 5px 0 0 5px;
+}
+
+.mask-import-segments label:last-child span {
+  margin-left: -1px;
+  border-radius: 0 5px 5px 0;
+}
+
+.mask-import-segments input:checked + span {
+  position: relative;
+  z-index: 1;
+  border-color: var(--teal-dark);
+  background: var(--teal-soft);
+  color: var(--teal-dark);
+}
+
+.mask-import-segments input:focus-visible + span {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
+}
+
+.mask-import-mode > p {
+  min-height: 18px;
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .mask-import-options .command-button {
@@ -453,6 +543,17 @@ svg {
   border-color: #dc726a;
   background: var(--coral-soft);
   color: #92372f;
+}
+
+.command-button.danger {
+  border-color: #9f3e37;
+  background: var(--coral);
+  color: #fff;
+}
+
+.command-button.danger:hover:not(:disabled) {
+  border-color: #7f2e29;
+  background: #b9423a;
 }
 
 .icon-button {

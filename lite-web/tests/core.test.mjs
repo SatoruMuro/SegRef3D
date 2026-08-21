@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   applyRasterToMask,
+  combineLabelMasks,
   createProjectId,
   fitViewport,
   maskFilename,
@@ -92,6 +93,24 @@ test("grayscale PNG pixels become validated single-label masks", () => {
   assert.throws(
     () => rgbaToLabelMask(new Uint8ClampedArray([1, 3, 1, 255]), 1, 1),
     /must be grayscale/,
+  );
+});
+
+test("mask import can replace or merge without mutating either source", () => {
+  const current = new Uint8Array([1, 1, 0, 4, 0]);
+  const imported = new Uint8Array([0, 2, 3, 0, 5]);
+
+  assert.deepEqual([...combineLabelMasks(current, imported, "replace")], [0, 2, 3, 0, 5]);
+  assert.deepEqual([...combineLabelMasks(current, imported, "merge")], [1, 2, 3, 4, 5]);
+  assert.deepEqual([...current], [1, 1, 0, 4, 0]);
+  assert.deepEqual([...imported], [0, 2, 3, 0, 5]);
+  assert.throws(
+    () => combineLabelMasks(new Uint8Array(2), new Uint8Array(3), "merge"),
+    /dimensions do not match/,
+  );
+  assert.throws(
+    () => combineLabelMasks(current, imported, "append"),
+    /Unsupported mask import mode/,
   );
 });
 

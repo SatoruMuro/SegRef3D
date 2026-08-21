@@ -82,6 +82,20 @@ export function rgbaToLabelMask(rgba, width, height, maximumLabel = 20) {
   return mask;
 }
 
+export function combineLabelMasks(currentMask, importedMask, mode = "replace") {
+  if (currentMask.length !== importedMask.length) {
+    throw new Error("Current and imported mask dimensions do not match.");
+  }
+  if (mode === "replace") return importedMask.slice();
+  if (mode !== "merge") throw new Error(`Unsupported mask import mode: ${mode}`);
+
+  const output = currentMask.slice();
+  for (let index = 0; index < output.length; index += 1) {
+    if (importedMask[index] !== 0) output[index] = importedMask[index];
+  }
+  return output;
+}
+
 export function placeLabelMask(mask, sourceWidth, sourceHeight, targetWidth, targetHeight, x, y) {
   if (mask.length !== sourceWidth * sourceHeight) {
     throw new Error("Source mask dimensions do not match its pixel data.");

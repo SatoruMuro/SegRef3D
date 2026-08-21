@@ -15,7 +15,7 @@ Public beta: <https://satorumuro.github.io/SegRef3D/lite-web/>
 - Add, Erase, and Transfer label operations
 - Separate Undo/Redo histories for drawn lines and committed mask edits
 - Browser autosave with IndexedDB
-- Load grayscale label PNG sequences from a folder or ZIP, with value and dimension checks
+- Load grayscale label PNG sequences with Replace/Merge modes and clear all project masks
 - Export and restore Project ZIP files containing label masks and editor settings
 - Open Seg on Web in Colab and import its returned label masks for manual refinement
 - Plain wheel image navigation, Ctrl/Command+wheel zoom, Shift+wheel horizontal pan
@@ -29,6 +29,11 @@ Colab workflow where users explicitly upload images for SAM2 segmentation.
 
 Project ZIP files do not contain the source images. Load the original image folder first, then
 open the Project ZIP from **Load Masks** to restore its masks and editor settings.
+
+**Replace** replaces each matched image mask. **Merge** treats imported label `0` as transparent,
+keeps existing labels outside imported regions, and lets imported non-zero labels win on overlap.
+The **Clear Masks** trash button clears masks, edit history, drawn lines, and browser autosave for
+the entire loaded project after confirmation.
 
 ### Medical image support
 

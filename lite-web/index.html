@@ -200,6 +200,9 @@
           <button id="redo-edit" class="icon-button" type="button" title="Redo mask edit" disabled>
             <svg><use href="#i-redo"></use></svg>
           </button>
+          <button id="clear-masks" class="icon-button" type="button" title="Clear all masks" aria-label="Clear all masks" disabled>
+            <svg><use href="#i-trash"></use></svg>
+          </button>
         </div>
         <div class="export-section">
           <button id="export-labels" class="command-button" type="button" disabled>
@@ -325,8 +328,22 @@
         </div>
         <div class="local-file-dialog-copy">
           <p>Open grayscale label PNGs with values 0-20. Files stay on this device.</p>
-          <p>Project ZIP restores masks and editor settings after the original image folder is loaded.</p>
+          <p>Project ZIP restores editor settings only when Replace is selected.</p>
         </div>
+        <fieldset class="mask-import-mode">
+          <legend>Import behavior</legend>
+          <div class="mask-import-segments">
+            <label>
+              <input type="radio" name="mask-import-mode" value="replace" checked />
+              <span>Replace</span>
+            </label>
+            <label>
+              <input type="radio" name="mask-import-mode" value="merge" />
+              <span>Merge</span>
+            </label>
+          </div>
+          <p id="mask-import-mode-description">Replace each matched frame with the imported mask.</p>
+        </fieldset>
         <div class="mask-import-options">
           <button id="choose-mask-folder" class="command-button" type="button">
             <svg><use href="#i-folder"></use></svg><span>Mask Folder</span>
@@ -337,6 +354,33 @@
         </div>
         <div class="local-file-dialog-actions compact-dialog-actions">
           <button id="mask-import-cancel" class="command-button" type="button">Cancel</button>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="clear-masks-dialog" class="local-file-dialog" aria-labelledby="clear-masks-title">
+      <div class="local-file-dialog-content">
+        <div class="local-file-dialog-heading">
+          <span class="local-file-dialog-icon destructive-dialog-icon" aria-hidden="true">
+            <svg><use href="#i-trash"></use></svg>
+          </span>
+          <div>
+            <span class="dialog-kicker destructive-kicker">RESET PROJECT MASKS</span>
+            <h2 id="clear-masks-title">Clear all masks?</h2>
+          </div>
+        </div>
+        <div class="local-file-dialog-copy">
+          <p id="clear-masks-count">All label masks in this project will be cleared.</p>
+        </div>
+        <div class="local-file-assurance destructive-assurance">
+          <strong>This action cannot be undone</strong>
+          <span>Mask edit history, drawn lines, and browser autosave masks will also be removed.</span>
+        </div>
+        <div class="local-file-dialog-actions">
+          <button id="clear-masks-cancel" class="command-button" type="button">Cancel</button>
+          <button id="clear-masks-confirm" class="command-button danger" type="button">
+            <svg><use href="#i-trash"></use></svg><span>Clear Masks</span>
+          </button>
         </div>
       </div>
     </dialog>

@@ -3,6 +3,7 @@ import {
   applyRasterToMask,
   clamp,
   colorToRgb,
+  combineLabelMasks,
   createProjectId,
   fitViewport,
   labelPixelCounts,
@@ -28,7 +29,7 @@ import {
   parseDicomInstance,
   parseNiftiVolume,
 } from "./medical-io.mjs";
-import { loadMask, saveMask } from "./storage.mjs";
+import { clearProjectMasks, loadMask, saveMask } from "./storage.mjs";
 import { createZip, parseZip } from "./zip.mjs";
 
 const elements = {
@@ -62,6 +63,7 @@ const elements = {
   clearLines: document.querySelector("#clear-lines"),
   undoEdit: document.querySelector("#undo-edit"),
   redoEdit: document.querySelector("#redo-edit"),
+  clearMasks: document.querySelector("#clear-masks"),
   exportLabels: document.querySelector("#export-labels"),
   exportOverlays: document.querySelector("#export-overlays"),
   exportProject: document.querySelector("#export-project"),
@@ -88,6 +90,12 @@ const elements = {
   chooseMaskFolder: document.querySelector("#choose-mask-folder"),
   chooseMaskZip: document.querySelector("#choose-mask-zip"),
   maskImportCancel: document.querySelector("#mask-import-cancel"),
+  maskImportModes: [...document.querySelectorAll('input[name="mask-import-mode"]')],
+  maskImportModeDescription: document.querySelector("#mask-import-mode-description"),
+  clearMasksDialog: document.querySelector("#clear-masks-dialog"),
+  clearMasksCount: document.querySelector("#clear-masks-count"),
+  clearMasksCancel: document.querySelector("#clear-masks-cancel"),
+  clearMasksConfirm: document.querySelector("#clear-masks-confirm"),
   toast: document.querySelector("#toast"),
 };
 
@@ -116,6 +124,7 @@ const state = {
   toastTimer: null,
   loading: false,
   pendingPicker: "folder",
+  maskImportMode: "replace",
 };
 
 const context = elements.canvas.getContext("2d", { alpha: false });
@@ -219,6 +228,7 @@ function setControlsEnabled(enabled) {
     elements.eraseMask,
     elements.transferMask,
     elements.loadMasks,
+    elements.clearMasks,
     elements.exportLabels,
     elements.exportOverlays,
     elements.exportProject,
@@ -837,19 +847,25 @@ function enableLabelsUsedByMasks(imported) {
   for (const image of state.images) image.overlayDirty = true;
 }
 
-async function applyImportedMasks(imported, { settings = null, projectName = null } = {}) {
+async function applyImportedMasks(
+  imported,
+  { settings = null, projectName = null, mode = "replace" } = {},
+) {
   const changedImages = [];
+  const applied = [];
   for (const { image, mask } of imported) {
     clearImagePaths(image);
-    if (masksEqual(image.mask, mask)) continue;
+    const nextMask = combineLabelMasks(image.mask, mask, mode);
+    applied.push({ image, mask: nextMask });
+    if (masksEqual(image.mask, nextMask)) continue;
     const before = image.mask.slice();
-    image.mask = mask;
+    image.mask = nextMask;
     recordMaskChange(image, before);
     changedImages.push(image);
   }
-  if (settings) applyProjectSettings(settings);
-  else enableLabelsUsedByMasks(imported);
-  if (projectName) state.projectName = projectName;
+  if (settings && mode === "replace") applyProjectSettings(settings);
+  else enableLabelsUsedByMasks(applied);
+  if (projectName && mode === "replace") state.projectName = projectName;
   updateImageUi();
   render();
   for (const image of changedImages) await autosave(image, "Imported masks autosaved");
@@ -894,7 +910,7 @@ async function prepareImportedMasks(mappings) {
   }));
 }
 
-async function importLabelEntries(entries, sourceName) {
+async function importLabelEntries(entries, sourceName, mode = "replace") {
   const selected = selectLabelPngEntries(entries);
   if (selected.length === 0) throw new Error("No label PNG files were found.");
   const importCount = Math.min(selected.length, state.images.length);
@@ -920,11 +936,12 @@ async function importLabelEntries(entries, sourceName) {
     showToast("Mask import canceled.");
     return false;
   }
-  const changedCount = await applyImportedMasks(imported);
+  const changedCount = await applyImportedMasks(imported, { mode });
+  const action = mode === "merge" ? "Merged" : "Replaced";
   setStatus(
-    `Loaded ${imported.length} label PNG mask(s) from ${sourceName}. ${changedCount} image(s) changed and autosaved.`,
+    `${action} ${imported.length} label PNG mask(s) from ${sourceName}. ${changedCount} image(s) changed and autosaved.`,
   );
-  showToast(`Loaded ${imported.length} mask(s).`);
+  showToast(`${action} ${imported.length} mask(s).`);
   return true;
 }
 
@@ -976,7 +993,7 @@ function validateProjectManifest(manifest) {
   }
 }
 
-async function importProjectEntries(entries, manifestEntry, sourceName) {
+async function importProjectEntries(entries, manifestEntry, sourceName, mode = "replace") {
   let manifest;
   try {
     manifest = JSON.parse(new TextDecoder().decode(manifestEntry.bytes));
@@ -1016,13 +1033,17 @@ async function importProjectEntries(entries, manifestEntry, sourceName) {
     return false;
   }
   const changedCount = await applyImportedMasks(imported, {
-    settings: manifest.settings,
-    projectName: manifest.projectName || state.projectName,
+    settings: mode === "replace" ? manifest.settings : null,
+    projectName: mode === "replace" ? manifest.projectName || state.projectName : null,
+    mode,
   });
+  const action = mode === "merge" ? "Merged masks from" : "Restored project";
   setStatus(
-    `Restored project ${manifest.projectName || sourceName}: ${imported.length} mask(s), ${changedCount} changed and autosaved.`,
+    `${action} ${manifest.projectName || sourceName}: ${imported.length} mask(s), ${changedCount} changed and autosaved.`,
   );
-  showToast("Project masks and settings restored.");
+  showToast(
+    mode === "merge" ? "Project masks merged; current settings preserved." : "Project masks and settings restored.",
+  );
   return true;
 }
 
@@ -1034,7 +1055,7 @@ async function importMaskFolder(files) {
   }));
   setLoading(true, "Loading label masks", "Checking folder");
   try {
-    await importLabelEntries(entries, "selected folder");
+    await importLabelEntries(entries, "selected folder", state.maskImportMode);
   } catch (error) {
     console.error(error);
     setStatus(`Mask loading failed: ${error.message}`);
@@ -1053,8 +1074,11 @@ async function importMaskZip(file) {
     const manifestEntry = entries.find(
       (entry) => entryBasename(entry.name).toLowerCase() === "segref3d-project.json",
     );
-    if (manifestEntry) await importProjectEntries(entries, manifestEntry, file.name);
-    else await importLabelEntries(entries, file.name);
+    if (manifestEntry) {
+      await importProjectEntries(entries, manifestEntry, file.name, state.maskImportMode);
+    } else {
+      await importLabelEntries(entries, file.name, state.maskImportMode);
+    }
   } catch (error) {
     console.error(error);
     setStatus(`Mask ZIP loading failed: ${error.message}`);
@@ -1694,7 +1718,13 @@ function zoomFromKeyboard(factor) {
 }
 
 function handleKeyDown(event) {
-  if (elements.localFileDialog.open || elements.maskImportDialog.open) return;
+  if (
+    elements.localFileDialog.open ||
+    elements.maskImportDialog.open ||
+    elements.clearMasksDialog.open
+  ) {
+    return;
+  }
   if (!currentImage()) return;
   const key = event.key;
   const lowerKey = key.toLowerCase();
@@ -1800,6 +1830,62 @@ function requestMaskImport() {
   }
 }
 
+function setMaskImportMode(mode) {
+  state.maskImportMode = mode === "merge" ? "merge" : "replace";
+  for (const input of elements.maskImportModes) {
+    input.checked = input.value === state.maskImportMode;
+  }
+  elements.maskImportModeDescription.textContent =
+    state.maskImportMode === "merge"
+      ? "Add imported non-zero labels. Imported labels win where masks overlap."
+      : "Replace each matched frame with the imported mask.";
+}
+
+function requestClearAllMasks() {
+  if (state.images.length === 0 || state.loading) return;
+  const changedImages = state.images.filter((image) => image.mask.some((value) => value !== 0));
+  if (changedImages.length === 0) {
+    setStatus("All label masks are already empty.");
+    showToast("Masks are already empty.");
+    return;
+  }
+  elements.clearMasksCount.textContent =
+    `Label masks on ${changedImages.length} of ${state.images.length} image(s) will be cleared.`;
+  elements.clearMasksDialog.showModal();
+}
+
+async function clearAllMasks() {
+  if (state.images.length === 0 || state.loading) return;
+  const changedImages = state.images.filter((image) => image.mask.some((value) => value !== 0));
+  elements.clearMasksDialog.close();
+  if (changedImages.length === 0) return;
+  setLoading(true, "Clearing label masks", `Resetting ${changedImages.length} image(s)`);
+  try {
+    await state.saveQueue;
+    for (const image of state.images) {
+      image.mask.fill(0);
+      image.undo.length = 0;
+      image.redo.length = 0;
+      image.overlayDirty = true;
+      clearImagePaths(image);
+    }
+    if (state.projectId) await clearProjectMasks(state.projectId);
+    updateLabelCounts();
+    updateHistoryButtons();
+    render();
+    setSaveState("All masks cleared", "saved");
+    setStatus(`Cleared label masks from ${changedImages.length} image(s) and reset browser autosave.`);
+    showToast("All masks cleared.");
+  } catch (error) {
+    console.error(error);
+    for (const image of changedImages) await autosave(image, "Cleared masks autosaved");
+    setStatus(`Masks were cleared, but autosave reset needed a fallback: ${error.message}`);
+    showToast("Masks cleared with autosave fallback.");
+  } finally {
+    setLoading(false);
+  }
+}
+
 function bindEvents() {
   elements.loadFolder.addEventListener("click", requestLocalFolder);
   elements.emptyLoad.addEventListener("click", requestLocalFolder);
@@ -1815,6 +1901,11 @@ function bindEvents() {
   elements.volumeInput.addEventListener("change", () => prepareNiftiFile(elements.volumeInput.files[0]));
   elements.loadMasks.addEventListener("click", requestMaskImport);
   elements.maskImportCancel.addEventListener("click", () => elements.maskImportDialog.close());
+  elements.clearMasksCancel.addEventListener("click", () => elements.clearMasksDialog.close());
+  elements.clearMasksConfirm.addEventListener("click", clearAllMasks);
+  for (const input of elements.maskImportModes) {
+    input.addEventListener("change", () => setMaskImportMode(input.value));
+  }
   elements.chooseMaskFolder.addEventListener("click", () => {
     elements.maskImportDialog.close();
     elements.maskFolderInput.click();
@@ -1851,6 +1942,7 @@ function bindEvents() {
   elements.clearLines.addEventListener("click", clearLines);
   elements.undoEdit.addEventListener("click", undoEdit);
   elements.redoEdit.addEventListener("click", redoEdit);
+  elements.clearMasks.addEventListener("click", requestClearAllMasks);
   elements.exportLabels.addEventListener("click", () => exportSequence("labels"));
   elements.exportOverlays.addEventListener("click", () => exportSequence("overlays"));
   elements.exportProject.addEventListener("click", exportProjectZip);
@@ -1874,6 +1966,7 @@ function bindEvents() {
 
 initializeLabels();
 elements.penColorSwatch.style.background = state.penColor;
+setMaskImportMode("replace");
 bindEvents();
 setControlsEnabled(false);
 resizeCanvas();

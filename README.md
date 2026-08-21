@@ -58,7 +58,7 @@ masks stay on the device and are not uploaded to a server.
 - Load JPG/PNG image folders and edit up to 20 single-label objects
 - Load DICOM folders (`.dcm` or extensionless) and NIfTI `.nii` / `.nii.gz` volumes
 - Free, Click, and edge Snap drawing with Add, Erase, Transfer, Undo, and Redo
-- Browser autosave, label PNG folder/ZIP import, and ZIP export for labels and overlays
+- Browser autosave, Replace/Merge label PNG import, mask reset, and ZIP export for labels and overlays
 - Project ZIP export/import for restoring label masks and editor settings
 - Seg on Web link for Colab SAM2, followed by returned label-mask import
 - Mouse-wheel image switching, zoom, pan, and a responsive touch-friendly layout
@@ -264,6 +264,8 @@ https://github.com/SatoruMuro/SegRef3DViewer
 **2026.8.21**
 
 Lite Webに**Seg on Web**リンクを追加。Google Colabで画像系列をSAM2セグメンテーションし、出力されたラベルPNGをLite Webの`Load Masks`で読み込んで手動修正する一方向ワークフローに対応。
+
+Lite Webの`Load Masks`に**Replace / Merge**を追加。Mergeでは読み込んだ非ゼロラベルを既存マスクへ重ね、重複部分は読み込んだラベルを優先。全画像のマスク・編集履歴・ブラウザ自動保存を確認付きで削除する`Clear Masks`も追加。
 
 **2026.8.20**
 
