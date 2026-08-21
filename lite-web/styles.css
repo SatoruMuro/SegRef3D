@@ -429,6 +429,7 @@ svg {
   font-size: 12px;
   font-weight: 650;
   white-space: nowrap;
+  text-decoration: none;
 }
 
 .command-button.accent {

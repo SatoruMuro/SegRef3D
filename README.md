@@ -60,11 +60,13 @@ masks stay on the device and are not uploaded to a server.
 - Free, Click, and edge Snap drawing with Add, Erase, Transfer, Undo, and Redo
 - Browser autosave, label PNG folder/ZIP import, and ZIP export for labels and overlays
 - Project ZIP export/import for restoring label masks and editor settings
+- Seg on Web link for Colab SAM2, followed by returned label-mask import
 - Mouse-wheel image switching, zoom, pan, and a responsive touch-friendly layout
 
-The Web Beta does not include SAM2, threshold/RGB extraction, NIfTI export,
-TIFF/STL export, or 5x/10x slice interpolation yet. Use the Windows GPU/Lite
-builds for those functions.
+The Web Beta does not run SAM2 inside the browser. Use the Seg on Web link to create
+rough label masks in Colab first, then load the returned label PNGs into Lite Web for
+manual refinement. Threshold/RGB extraction, NIfTI/TIFF/STL export, and 5x/10x slice
+interpolation are not included yet.
 
 ---
 
@@ -213,9 +215,9 @@ If you do not have a CUDA-compatible GPU, you can still use SegRef3D through a h
 
 ### 📷 Notes for Web-based Workflow
 
-* The web version currently supports `.jpg` images as input.
-* When DICOM images are loaded into SegRef3D, corresponding `.jpg` images are automatically saved in a new folder.
-* These `.jpg` images can be uploaded to Google Colab for automatic segmentation.
+* Lite Web accepts JPG, PNG, DICOM, and NIfTI input.
+* Open **Seg on Web** first and upload the image sequence to Google Colab for SAM2 segmentation.
+* Download the generated label PNG masks, then load them into Lite Web for manual refinement.
 * The web version outputs **standard PNG label masks** with the same image size as the original input images.
 
 ### 🔁 Final Integration
@@ -259,6 +261,10 @@ https://github.com/SatoruMuro/SegRef3DViewer
 ---
 
 # Update  
+**2026.8.21**
+
+Lite Webに**Seg on Web**リンクを追加。Google Colabで画像系列をSAM2セグメンテーションし、出力されたラベルPNGをLite Webの`Load Masks`で読み込んで手動修正する一方向ワークフローに対応。
+
 **2026.8.20**
 
 SegRef3D **Lite Web Beta** を公開。Windows / macOS / Linux / iPadOS などのモダンブラウザで、画像を外部送信せずにラベルマスクを編集できるブラウザ版を追加。GitHub Actions でマスク処理・ZIP出力の自動テストを実行。

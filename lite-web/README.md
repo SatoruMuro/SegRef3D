@@ -17,13 +17,15 @@ Public beta: <https://satorumuro.github.io/SegRef3D/lite-web/>
 - Browser autosave with IndexedDB
 - Load grayscale label PNG sequences from a folder or ZIP, with value and dimension checks
 - Export and restore Project ZIP files containing label masks and editor settings
+- Open Seg on Web in Colab and import its returned label masks for manual refinement
 - Plain wheel image navigation, Ctrl/Command+wheel zoom, Shift+wheel horizontal pan
 - Middle-button drag and WASD/arrow-key canvas pan
 - Label visibility controls
 - Label PNG and visible-overlay PNG sequence export as ZIP
 - Responsive desktop/mobile layout and offline cache
 
-All image processing happens locally in the browser. Images are not uploaded.
+All Lite Web image processing happens locally in the browser. Seg on Web is a separate Google
+Colab workflow where users explicitly upload images for SAM2 segmentation.
 
 Project ZIP files do not contain the source images. Load the original image folder first, then
 open the Project ZIP from **Load Masks** to restore its masks and editor settings.
@@ -38,6 +40,12 @@ open the Project ZIP from **Load Masks** to restore its masks and editor setting
 
 JPEG-LS, JPEG 2000, RLE, other compressed DICOM transfer syntaxes, and 4D NIfTI volumes are
 currently rejected with a clear error instead of being rendered incorrectly.
+
+### Seg on Web workflow
+
+Open **Seg on Web** first, upload the image sequence to Google Colab, and run SAM2 to create rough
+label masks. Download the Label mask PNG ZIP, then load it together with the same source images in
+Lite Web and use **Load Masks** to refine the segmentation.
 
 ## Local development
 
