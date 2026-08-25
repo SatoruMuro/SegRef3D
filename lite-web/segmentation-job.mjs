@@ -102,18 +102,33 @@ export function validateSegmentationManifest(source, expectedKind = null) {
     requireValue(!objectIds.has(id), `Duplicate object id: ${id}.`);
     objectIds.add(id);
     requireValue(typeof object.name === "string" && object.name.trim(), `${field}.name is missing.`);
-    const promptFrame = integer(object.prompt_frame, `${field}.prompt_frame`, 0);
     const trackingStart = integer(object.tracking_start, `${field}.tracking_start`, 0);
     const trackingEnd = integer(object.tracking_end, `${field}.tracking_end`, 0);
     requireValue(trackingEnd < count, `${field}.tracking_end is outside the image sequence.`);
-    requireValue(trackingStart <= promptFrame && promptFrame <= trackingEnd, `${field}.prompt_frame must be inside its tracking range.`);
+    requireValue(trackingStart <= trackingEnd, `${field}.tracking_start must not exceed tracking_end.`);
+    requireValue(Array.isArray(object.prompts) && object.prompts.length > 0, `${field}.prompts must contain at least one box prompt.`);
+    const promptFrames = new Set();
+    const prompts = object.prompts.map((prompt, promptPosition) => {
+      const promptField = `${field}.prompts[${promptPosition}]`;
+      requireValue(prompt && typeof prompt === "object" && !Array.isArray(prompt), `${promptField} must be an object.`);
+      requireValue(prompt.type === "box", `${promptField}.type must be box.`);
+      const frame = integer(prompt.frame, `${promptField}.frame`, 0);
+      requireValue(frame < count, `${promptField}.frame is outside the image sequence.`);
+      requireValue(trackingStart <= frame && frame <= trackingEnd, `${promptField}.frame must be inside its tracking range.`);
+      requireValue(!promptFrames.has(frame), `${field}.prompts contains duplicate frame ${frame}.`);
+      promptFrames.add(frame);
+      return {
+        ...prompt,
+        type: "box",
+        frame,
+        box: normalizedBox(prompt.box, `${promptField}.box`, width, height),
+      };
+    }).sort((left, right) => left.frame - right.frame);
+    const primary = prompts[0];
+    const promptFrame = integer(object.prompt_frame, `${field}.prompt_frame`, 0);
     const box = normalizedBox(object.box, `${field}.box`, width, height);
-    requireValue(Array.isArray(object.prompts) && object.prompts.length > 0, `${field}.prompts must contain the box prompt.`);
-    const primary = object.prompts.find((prompt) => prompt && prompt.type === "box");
-    requireValue(primary, `${field}.prompts does not contain a box prompt.`);
-    requireValue(primary.frame === promptFrame, `${field}.prompts box frame does not match prompt_frame.`);
-    const promptBox = normalizedBox(primary.box, `${field}.prompts box`, width, height);
-    requireValue(promptBox.every((value, index) => value === box[index]), `${field}.prompts box does not match box.`);
+    requireValue(primary.frame === promptFrame, `${field}.prompt_frame must match prompts[0].frame.`);
+    requireValue(primary.box.every((value, index) => value === box[index]), `${field}.box must match prompts[0].box.`);
     return {
       ...object,
       id,
@@ -122,7 +137,7 @@ export function validateSegmentationManifest(source, expectedKind = null) {
       box,
       tracking_start: trackingStart,
       tracking_end: trackingEnd,
-      prompts: object.prompts.map((prompt) => prompt === primary ? { ...prompt, box: promptBox } : prompt),
+      prompts,
     };
   });
 
@@ -162,16 +177,24 @@ export function createSegmentationJobManifest({ images, objects, source = {}, cr
     };
   });
   const normalizedObjects = objects.map((object) => {
-    const box = object.box.map(Number);
-    const promptFrame = Number(object.promptFrame);
+    const prompts = (
+      Array.isArray(object.prompts)
+        ? object.prompts
+        : [{ type: "box", frame: Number(object.promptFrame), box: object.box.map(Number) }]
+    ).map((prompt) => ({
+      type: String(prompt.type || "box"),
+      frame: Number(prompt.frame),
+      box: Array.isArray(prompt.box) ? prompt.box.map(Number) : prompt.box,
+    })).sort((left, right) => left.frame - right.frame);
+    const primary = prompts[0];
     return {
       id: Number(object.id),
       name: String(object.name || `Object ${object.id}`).trim(),
-      prompt_frame: promptFrame,
-      box,
+      prompt_frame: primary?.frame,
+      box: primary?.box?.slice(),
       tracking_start: Number(object.trackingStart),
       tracking_end: Number(object.trackingEnd),
-      prompts: [{ type: "box", frame: promptFrame, box: box.slice() }],
+      prompts,
     };
   });
   return validateSegmentationManifest({

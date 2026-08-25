@@ -7,10 +7,13 @@ import {
   decodeDicomSeries,
   groupDicomSeries,
   isNiftiFilename,
+  isTiffFilename,
   parseDicomInstance,
   parseNiftiVolume,
+  parseTiffStack,
   sortDicomInstances,
 } from "../medical-io.mjs";
+import { createTiffLabelStack } from "../volume-tools.mjs";
 
 const require = createRequire(import.meta.url);
 const dicomParser = require("../vendor/dicom-parser.min.js");
@@ -126,10 +129,82 @@ function syntheticDicom(instanceNumber, pixelValues) {
   return joinBytes([preamble, metaLength, transferSyntax, dataSet]).buffer;
 }
 
+function syntheticTiff({ width = 2, height = 2, bits = 8, samples = 1, pixels }) {
+  const entries = samples === 3 ? 10 : 9;
+  const ifdOffset = 8;
+  const ifdSize = 2 + entries * 12 + 4;
+  const bitsOffset = ifdOffset + ifdSize;
+  const bitsBytes = samples === 3 ? 6 : 0;
+  const pixelOffset = bitsOffset + bitsBytes;
+  const bytes = new Uint8Array(pixelOffset + pixels.length);
+  const view = new DataView(bytes.buffer);
+  bytes.set([0x49, 0x49], 0);
+  view.setUint16(2, 42, true);
+  view.setUint32(4, ifdOffset, true);
+  view.setUint16(ifdOffset, entries, true);
+  const records = [
+    [256, 4, 1, width],
+    [257, 4, 1, height],
+    [258, 3, samples, samples === 3 ? bitsOffset : bits],
+    [259, 3, 1, 1],
+    [262, 3, 1, samples === 3 ? 2 : 1],
+    [273, 4, 1, pixelOffset],
+    [277, 3, 1, samples],
+    [278, 4, 1, height],
+    [279, 4, 1, pixels.length],
+  ];
+  if (samples === 3) records.push([284, 3, 1, 1]);
+  records.sort((left, right) => left[0] - right[0]);
+  records.forEach(([tag, type, count, value], index) => {
+    const offset = ifdOffset + 2 + index * 12;
+    view.setUint16(offset, tag, true);
+    view.setUint16(offset + 2, type, true);
+    view.setUint32(offset + 4, count, true);
+    if (type === 3 && count === 1) view.setUint16(offset + 8, value, true);
+    else view.setUint32(offset + 8, value, true);
+  });
+  view.setUint32(ifdOffset + 2 + entries * 12, 0, true);
+  if (samples === 3) {
+    view.setUint16(bitsOffset, bits, true);
+    view.setUint16(bitsOffset + 2, bits, true);
+    view.setUint16(bitsOffset + 4, bits, true);
+  }
+  bytes.set(pixels, pixelOffset);
+  return bytes.buffer;
+}
+
 test("recognizes NIfTI file extensions", () => {
   assert.equal(isNiftiFilename("scan.nii"), true);
   assert.equal(isNiftiFilename("scan.NII.GZ"), true);
   assert.equal(isNiftiFilename("scan.dcm"), false);
+});
+
+test("recognizes TIFF extensions and decodes a multi-page grayscale stack", () => {
+  assert.equal(isTiffFilename("stack.TIFF"), true);
+  assert.equal(isTiffFilename("stack.tif"), true);
+  const masks = [new Uint8Array([0, 1, 2, 3]), new Uint8Array([4, 5, 6, 7])];
+  const volume = parseTiffStack(createTiffLabelStack(masks, 2, 2), "stack.tiff");
+  assert.deepEqual([volume.width, volume.height, volume.depth], [2, 2, 2]);
+  assert.deepEqual([...volume.frames[0].pixels], [0, 1, 2, 3]);
+  assert.deepEqual([...volume.frames[1].pixels], [4, 5, 6, 7]);
+});
+
+test("decodes 16-bit grayscale and RGB TIFF pixels", () => {
+  const grayPixels = new Uint8Array(8);
+  const grayView = new DataView(grayPixels.buffer);
+  [0, 16384, 32768, 65535].forEach((value, index) => grayView.setUint16(index * 2, value, true));
+  const gray = parseTiffStack(syntheticTiff({ bits: 16, pixels: grayPixels }), "gray16.tif");
+  assert.equal(gray.frames[0].kind, "gray");
+  assert.deepEqual([...gray.frames[0].pixels], [0, 64, 128, 255]);
+
+  const rgbPixels = new Uint8Array([255, 0, 0, 0, 255, 0, 0, 0, 255, 120, 130, 140]);
+  const rgb = parseTiffStack(syntheticTiff({ bits: 8, samples: 3, pixels: rgbPixels }), "rgb.tif");
+  assert.equal(rgb.frames[0].kind, "rgba");
+  assert.deepEqual([...rgb.frames[0].pixels.slice(0, 12)], [255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255]);
+});
+
+test("rejects invalid TIFF data", () => {
+  assert.throws(() => parseTiffStack(new Uint8Array([1, 2, 3, 4]).buffer, "bad.tif"), /valid TIFF|no TIFF image pages/);
 });
 
 test("decodes NIfTI-1 int16 volumes and applies scaling", () => {

@@ -45,8 +45,8 @@ def _binary_mask(logit, expected_shape: tuple[int, int]) -> np.ndarray:
     return mask.astype(bool, copy=False)
 
 
-def _add_box_prompt(predictor, inference_state, obj: dict, frame_idx: int):
-    box = np.asarray(obj["box"], dtype=np.float32)
+def _add_box_prompt(predictor, inference_state, obj: dict, prompt: dict, frame_idx: int):
+    box = np.asarray(prompt["box"], dtype=np.float32)
     return predictor.add_new_points_or_box(
         inference_state=inference_state,
         frame_idx=frame_idx,
@@ -55,98 +55,129 @@ def _add_box_prompt(predictor, inference_state, obj: dict, frame_idx: int):
     )
 
 
-def _propagate_forward(
-    predictor,
-    image_dir: Path,
+def _prompt_mask(output, object_id: int, expected_shape: tuple[int, int]):
+    if not isinstance(output, (tuple, list)) or len(output) < 3:
+        raise SegOnWebProcessingError("SAM2 returned an invalid box-prompt result.")
+    object_ids, logits = output[-2], output[-1]
+    for position, returned_id in enumerate(object_ids):
+        if int(returned_id) == int(object_id):
+            return _binary_mask(logits[position], expected_shape)
+    raise SegOnWebProcessingError(f"SAM2 did not return object {object_id} for its box prompt.")
+
+
+def _prepare_tracking_frames(
+    image_records: list[dict],
     obj: dict,
-    expected_shape: tuple[int, int],
-    callback,
+    source_root: Path,
+    target_root: Path,
+    *,
+    reverse: bool,
 ):
-    try:
-        state = predictor.init_state(video_path=str(image_dir))
-        predictor.reset_state(state)
-        _add_box_prompt(predictor, state, obj, int(obj["prompt_frame"]))
-    except Exception as exc:
-        raise SegOnWebProcessingError(
-            f"SAM2 initialization failed for object {obj['id']}: {exc}"
-        ) from exc
-
-    masks = {}
-    frame_idx = int(obj["prompt_frame"])
-    try:
-        for frame_idx, object_ids, logits in predictor.propagate_in_video(state):
-            frame_idx = int(frame_idx)
-            if frame_idx > int(obj["tracking_end"]):
-                break
-            if frame_idx < int(obj["tracking_start"]):
-                continue
-            for position, object_id in enumerate(object_ids):
-                if int(object_id) == int(obj["id"]):
-                    masks[frame_idx] = _binary_mask(logits[position], expected_shape)
-                    _emit(callback, event="frame", direction="forward", object=obj, frame=frame_idx)
-                    break
-    except SegOnWebProcessingError:
-        raise
-    except Exception as exc:
-        raise SegOnWebProcessingError(
-            f"Forward tracking failed for object {obj['id']} at frame {frame_idx + 1}: {exc}"
-        ) from exc
-    return masks
-
-
-def _prepare_reversed_frames(image_records: list[dict], obj: dict, source_root: Path, reverse_root: Path):
-    frame_indices = list(range(int(obj["prompt_frame"]), int(obj["tracking_start"]) - 1, -1))
-    reverse_root.mkdir(parents=True, exist_ok=True)
-    for reverse_index, original_index in enumerate(frame_indices, start=1):
+    frame_indices = list(range(int(obj["tracking_start"]), int(obj["tracking_end"]) + 1))
+    if reverse:
+        frame_indices.reverse()
+    if target_root.exists():
+        shutil.rmtree(target_root)
+    target_root.mkdir(parents=True)
+    for local_index, original_index in enumerate(frame_indices, start=1):
         source = source_root / image_records[original_index]["archive_path"]
-        target = reverse_root / f"{reverse_index:06d}.jpg"
+        target = target_root / f"{local_index:06d}.jpg"
         shutil.copyfile(source, target)
     return frame_indices
 
 
-def _propagate_backward(
+def _propagate_direction(
     predictor,
-    image_records: list[dict],
-    extracted_root: Path,
-    reverse_root: Path,
+    image_dir: Path,
+    frame_indices: list[int],
     obj: dict,
     expected_shape: tuple[int, int],
     callback,
+    *,
+    direction: str,
 ):
-    frame_indices = _prepare_reversed_frames(
-        image_records,
-        obj,
-        extracted_root,
-        reverse_root,
-    )
-    try:
-        state = predictor.init_state(video_path=str(reverse_root))
-        predictor.reset_state(state)
-        _add_box_prompt(predictor, state, obj, 0)
-    except Exception as exc:
-        raise SegOnWebProcessingError(
-            f"SAM2 backward initialization failed for object {obj['id']}: {exc}"
-        ) from exc
-
+    original_to_local = {original: local for local, original in enumerate(frame_indices)}
     masks = {}
     try:
-        for reverse_index, object_ids, logits in predictor.propagate_in_video(state):
-            reverse_index = int(reverse_index)
-            if reverse_index >= len(frame_indices):
+        state = predictor.init_state(video_path=str(image_dir))
+        predictor.reset_state(state)
+        mapped_prompts = sorted(
+            ((original_to_local[int(prompt["frame"])], prompt) for prompt in obj["prompts"]),
+            key=lambda item: item[0],
+        )
+        for prompt_position, (local_frame, prompt) in enumerate(mapped_prompts, start=1):
+            original_frame = int(prompt["frame"])
+            output = _add_box_prompt(predictor, state, obj, prompt, local_frame)
+            masks[original_frame] = _prompt_mask(output, int(obj["id"]), expected_shape)
+            _emit(
+                callback,
+                event="prompt",
+                direction=direction,
+                object=obj,
+                prompt=prompt,
+                prompt_position=prompt_position,
+                prompt_count=len(obj["prompts"]),
+                frame=original_frame,
+            )
+    except Exception as exc:
+        if isinstance(exc, SegOnWebProcessingError):
+            raise
+        raise SegOnWebProcessingError(
+            f"SAM2 {direction} initialization failed for object {obj['id']}: {exc}"
+        ) from exc
+
+    original_frame = frame_indices[0]
+    try:
+        for local_frame, object_ids, logits in predictor.propagate_in_video(state):
+            local_frame = int(local_frame)
+            if local_frame >= len(frame_indices):
                 break
-            original_index = frame_indices[reverse_index]
+            if local_frame < 0:
+                continue
+            original_frame = frame_indices[local_frame]
             for position, object_id in enumerate(object_ids):
                 if int(object_id) == int(obj["id"]):
-                    masks[original_index] = _binary_mask(logits[position], expected_shape)
-                    _emit(callback, event="frame", direction="backward", object=obj, frame=original_index)
+                    # Keep the direct add_new_points_or_box result on every
+                    # conditioning frame; propagation fills the other frames.
+                    masks.setdefault(original_frame, _binary_mask(logits[position], expected_shape))
+                    _emit(callback, event="frame", direction=direction, object=obj, frame=original_frame)
                     break
     except SegOnWebProcessingError:
         raise
     except Exception as exc:
         raise SegOnWebProcessingError(
-            f"Backward tracking failed for object {obj['id']}: {exc}"
+            f"{direction.title()} tracking failed for object {obj['id']} at frame {original_frame + 1}: {exc}"
         ) from exc
     return masks
+
+
+def _propagate_object(
+    predictor,
+    image_records: list[dict],
+    extracted_root: Path,
+    direction_root: Path,
+    obj: dict,
+    expected_shape: tuple[int, int],
+    callback,
+    *,
+    direction: str,
+):
+    frame_indices = _prepare_tracking_frames(
+        image_records,
+        obj,
+        extracted_root,
+        direction_root,
+        reverse=direction == "backward",
+    )
+    return _propagate_direction(
+        predictor,
+        direction_root,
+        frame_indices,
+        obj,
+        expected_shape,
+        callback,
+        direction=direction,
+    )
 
 
 def _write_status(path: Path, manifest: dict, completed_ids: list[int], current_id: int | None, state: str):
@@ -234,7 +265,6 @@ def process_segmentation_job(
 
     image_records = manifest["images"]["files"]
     extracted_root = work_root / "input"
-    image_dir = extracted_root / "images"
     expected_shape = (manifest["images"]["height"], manifest["images"]["width"])
     label_volume = np.zeros((manifest["images"]["count"], *expected_shape), dtype=np.uint8)
     completed_ids = []
@@ -247,8 +277,7 @@ def process_segmentation_job(
         object_count=len(manifest["objects"]),
         frame_count=manifest["images"]["count"],
         total_work=sum(
-            (obj["tracking_end"] - obj["prompt_frame"] + 1)
-            + (obj["prompt_frame"] - obj["tracking_start"] + 1)
+            2 * (obj["tracking_end"] - obj["tracking_start"] + 1)
             for obj in manifest["objects"]
         ),
     )
@@ -265,24 +294,31 @@ def process_segmentation_job(
             object_count=len(manifest["objects"]),
         )
 
-        forward_masks = _propagate_forward(
-            predictor,
-            image_dir,
-            obj,
-            expected_shape,
-            progress_callback,
-        )
-        reverse_root = work_root / "reversed" / f"object_{object_id:03d}"
-        backward_masks = _propagate_backward(
+        # Strategy A: register every conditioning keyframe in one state for each
+        # direction. Reversed states remap every original frame to a local index.
+        forward_masks = _propagate_object(
             predictor,
             image_records,
             extracted_root,
-            reverse_root,
+            work_root / "forward" / f"object_{object_id:03d}",
             obj,
             expected_shape,
             progress_callback,
+            direction="forward",
         )
-        object_masks = {**forward_masks, **backward_masks}
+        backward_masks = _propagate_object(
+            predictor,
+            image_records,
+            extracted_root,
+            work_root / "reversed" / f"object_{object_id:03d}",
+            obj,
+            expected_shape,
+            progress_callback,
+            direction="backward",
+        )
+        # Forward masks win where directions overlap, matching the legacy split
+        # where forward propagation owned frames at/after the primary prompt.
+        object_masks = {**backward_masks, **forward_masks}
         if not object_masks:
             raise SegOnWebProcessingError(f"SAM2 returned no masks for object {object_id}.")
         for frame_index, mask in object_masks.items():

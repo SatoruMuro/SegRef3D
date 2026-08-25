@@ -11,7 +11,7 @@
     <title>SegRef3D Lite Web</title>
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
     <link rel="manifest" href="./manifest.webmanifest" />
-    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./styles.css?v=17" />
   </head>
   <body>
     <svg class="svg-defs" aria-hidden="true">
@@ -66,6 +66,10 @@
       <symbol id="i-box" viewBox="0 0 24 24">
         <path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3ZM4 7.5l8 4.5 8-4.5M12 12v9" />
       </symbol>
+      <symbol id="i-more" viewBox="0 0 24 24">
+        <circle cx="5" cy="12" r="1" /><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" />
+      </symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6" /></symbol>
     </svg>
 
     <div id="app" class="app-shell">
@@ -108,13 +112,13 @@
             multiple
           />
           <button id="load-volume" class="command-button" type="button">
-            <svg><use href="#i-image"></use></svg><span>Load NIfTI</span>
+            <svg><use href="#i-image"></use></svg><span>Load Volume</span>
           </button>
           <input
             id="volume-input"
             class="visually-hidden"
             type="file"
-            accept=".nii,.nii.gz,application/gzip,application/octet-stream"
+            accept=".nii,.nii.gz,.tif,.tiff,image/tiff,application/gzip,application/octet-stream"
           />
           <button id="load-masks" class="command-button" type="button" disabled>
             <svg><use href="#i-layers"></use></svg><span>Load Masks</span>
@@ -222,45 +226,29 @@
             <svg><use href="#i-trash"></use></svg>
           </button>
         </div>
-        <div class="export-section">
+        <div class="export-section workflow-actions">
           <button id="image-tools" class="command-button" type="button" disabled>
-            <svg><use href="#i-sliders"></use></svg><span>Image Tools</span>
+            <svg><use href="#i-sliders"></use></svg><span>Tools</span>
           </button>
-          <button id="export-labels" class="command-button" type="button" disabled>
-            <svg><use href="#i-download"></use></svg><span>Label PNG</span>
+          <button id="segonweb-workflow" class="command-button" type="button" title="Open Seg on Web workflow">
+            <svg><use href="#i-box"></use></svg><span>Seg on Web</span>
           </button>
-          <button id="export-overlays" class="command-button" type="button" disabled>
-            <svg><use href="#i-layers"></use></svg><span>Overlay PNG</span>
-          </button>
-          <button id="export-project" class="command-button" type="button" disabled>
-            <svg><use href="#i-download"></use></svg><span>Project ZIP</span>
-          </button>
-          <button id="segonweb-jobs" class="command-button" type="button" title="Edit SegOnWeb batch jobs" disabled>
-            <svg><use href="#i-box"></use></svg><span>Batch Jobs</span>
-          </button>
-          <button id="export-segonweb" class="command-button" type="button" title="Export SegOnWeb input ZIP" disabled>
-            <svg><use href="#i-download"></use></svg><span>Export SegOnWeb</span>
-          </button>
-          <button id="import-segonweb" class="command-button" type="button" title="Import SegOnWeb result ZIP">
-            <svg><use href="#i-layers"></use></svg><span>Import Result</span>
-          </button>
-          <input
-            id="segonweb-result-input"
-            class="visually-hidden"
-            type="file"
-            accept="application/zip,.zip"
-          />
-          <a
-            id="seg-on-web"
-            class="command-button"
-            href="https://satorumuro.github.io/SegRef3D/ColabNotebooks/segonweb.html"
-            target="_blank"
-            rel="noopener noreferrer"
-            title="Open Seg on Web for SAM2 segmentation"
-            aria-label="Open Seg on Web for SAM2 segmentation"
-          >
-            <svg><use href="#i-external"></use></svg><span>Seg on Web</span>
-          </a>
+          <details id="export-menu" class="toolbar-menu">
+            <summary class="command-button"><svg><use href="#i-download"></use></svg><span>Export</span></summary>
+            <div class="toolbar-menu-panel" role="menu" aria-label="Export options">
+              <span class="menu-heading">Masks</span>
+              <button id="export-labels" type="button" role="menuitem" disabled>Label PNG</button>
+              <button id="export-overlays" type="button" role="menuitem" disabled>Overlay PNG</button>
+              <span class="menu-heading">Project</span>
+              <button id="export-project" type="button" role="menuitem" disabled>Project ZIP</button>
+              <span class="menu-heading">Volumes</span>
+              <button id="export-menu-nifti" type="button" role="menuitem" disabled>NIfTI</button>
+              <button id="export-menu-tiff" type="button" role="menuitem" disabled>TIFF</button>
+              <button id="export-menu-statistics" type="button" role="menuitem" disabled>Volume Statistics CSV</button>
+              <span class="menu-heading">3D</span>
+              <button id="export-menu-stl" type="button" role="menuitem" disabled>STL</button>
+            </div>
+          </details>
         </div>
       </section>
 
@@ -270,16 +258,20 @@
           <div id="empty-state" class="empty-state">
             <div class="empty-icon"><svg><use href="#i-image"></use></svg></div>
             <h1>Open an image sequence</h1>
-            <p>JPG / PNG / DICOM folder or NIfTI volume</p>
+            <p>JPG / PNG / TIFF / DICOM folder or NIfTI volume</p>
             <div class="empty-actions">
               <button id="empty-load" class="command-button accent" type="button">
                 <svg><use href="#i-folder"></use></svg><span>Load Images</span>
               </button>
-              <button id="empty-volume" class="command-button" type="button">Load NIfTI</button>
+              <button id="empty-volume" class="command-button" type="button">Load Volume</button>
               <button id="load-demo" class="command-button" type="button">Demo</button>
             </div>
           </div>
           <div id="zoom-readout" class="zoom-readout" hidden>100%</div>
+          <div id="editing-state" class="editing-state" hidden>
+            <strong id="editing-object">Obj 1</strong>
+            <span id="editing-mode">FREE · ADD</span>
+          </div>
           <div id="loading-overlay" class="loading-overlay" hidden>
             <div class="spinner"></div>
             <strong id="loading-title">Loading images</strong>
@@ -308,7 +300,7 @@
       <footer class="status-bar">
         <div class="status-message">
           <svg><use href="#i-info"></use></svg>
-          <span id="status-text">Load a JPG, PNG, DICOM folder, or NIfTI volume to begin.</span>
+          <span id="status-text">Load a JPG, PNG, TIFF, DICOM folder, or NIfTI volume to begin.</span>
         </div>
         <div id="image-meta" class="image-meta">Local processing · no uploads</div>
       </footer>
@@ -421,12 +413,99 @@
       </div>
     </dialog>
 
+    <dialog id="label-manager-dialog" class="workflow-dialog" aria-labelledby="label-manager-title">
+      <div class="workflow-dialog-shell label-manager-shell">
+        <header class="tools-dialog-header">
+          <div>
+            <span class="dialog-kicker">OBJECT MANAGEMENT</span>
+            <h2 id="label-manager-title">Manage Object</h2>
+          </div>
+          <button id="label-manager-close" class="icon-button" type="button" title="Close object manager">
+            <svg><use href="#i-close"></use></svg>
+          </button>
+        </header>
+        <div class="label-manager-body">
+          <div class="label-manager-identity">
+            <span id="label-manager-swatch" class="label-swatch"></span>
+            <strong id="label-manager-object">Obj 1</strong>
+          </div>
+          <label class="number-field"><span>Object name</span><input id="label-manager-name" type="text" maxlength="80" /></label>
+          <button id="label-manager-rename" class="command-button accent" type="button">Rename</button>
+          <div class="label-manager-action-row">
+            <label class="tool-select-field"><span>Destination object</span><select id="label-manager-target"></select></label>
+            <button id="label-manager-relabel" class="command-button" type="button">Relabel</button>
+            <button id="label-manager-merge" class="command-button" type="button">Merge</button>
+          </div>
+          <div class="label-manager-danger">
+            <span>Remove this object's mask pixels from every frame.</span>
+            <button id="label-manager-clear" class="command-button danger" type="button">Clear from All Frames</button>
+          </div>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="project-check-dialog" class="workflow-dialog project-check-dialog" aria-labelledby="project-check-title">
+      <div class="workflow-dialog-shell">
+        <header class="tools-dialog-header">
+          <div>
+            <span class="dialog-kicker">PROJECT VALIDATION</span>
+            <h2 id="project-check-title">Project Check</h2>
+          </div>
+          <button id="project-check-close" class="icon-button" type="button" title="Close project check">
+            <svg><use href="#i-close"></use></svg>
+          </button>
+        </header>
+        <div id="project-check-summary" class="workflow-summary">Run a project check to review this sequence.</div>
+        <div id="project-check-results" class="project-check-results"></div>
+      </div>
+    </dialog>
+
+    <dialog id="segonweb-workflow-dialog" class="workflow-dialog" aria-labelledby="segonweb-workflow-title">
+      <div class="workflow-dialog-shell">
+        <header class="tools-dialog-header">
+          <div>
+            <span class="dialog-kicker">AI SEGMENTATION WORKFLOW</span>
+            <h2 id="segonweb-workflow-title">Seg on Web</h2>
+          </div>
+          <button id="segonweb-workflow-close" class="icon-button" type="button" title="Close Seg on Web workflow">
+            <svg><use href="#i-close"></use></svg>
+          </button>
+        </header>
+        <div class="workflow-summary" id="segonweb-workflow-summary">No AI tracking setup yet.</div>
+        <ol class="workflow-steps">
+          <li>
+            <span class="workflow-step-number">1</span>
+            <div><strong>Prepare AI Tracking</strong><span>Set objects, ranges, and box prompts.</span></div>
+            <button id="segonweb-jobs" class="command-button" type="button" disabled>Edit Setup</button>
+          </li>
+          <li>
+            <span class="workflow-step-number">2</span>
+            <div><strong>Create Input ZIP</strong><span>Images and setup stay local until you upload the ZIP in Colab.</span></div>
+            <button id="export-segonweb" class="command-button" type="button" disabled>Create Input ZIP</button>
+          </li>
+          <li>
+            <span class="workflow-step-number">3</span>
+            <div><strong>Run SAM2</strong><span>Open the Colab backend and upload the input ZIP.</span></div>
+            <a id="seg-on-web" class="command-button" href="https://satorumuro.github.io/SegRef3D/ColabNotebooks/segonweb.html" target="_blank" rel="noopener noreferrer">
+              <svg><use href="#i-external"></use></svg><span>Open Seg on Web</span>
+            </a>
+          </li>
+          <li>
+            <span class="workflow-step-number">4</span>
+            <div><strong>Load Result</strong><span>Return the downloaded label masks to this project.</span></div>
+            <button id="import-segonweb" class="command-button" type="button">Import AI Result</button>
+          </li>
+        </ol>
+        <input id="segonweb-result-input" class="visually-hidden" type="file" accept="application/zip,.zip" />
+      </div>
+    </dialog>
+
     <dialog id="segonweb-jobs-dialog" class="tools-dialog segonweb-jobs-dialog" aria-labelledby="segonweb-jobs-title">
       <div class="segonweb-jobs-shell">
         <header class="tools-dialog-header">
           <div>
-            <span class="dialog-kicker">SEGONWEB JOB</span>
-            <h2 id="segonweb-jobs-title">Batch Tracking Jobs</h2>
+            <span class="dialog-kicker">SEG ON WEB SETUP</span>
+            <h2 id="segonweb-jobs-title">AI Tracking Setup</h2>
           </div>
           <button id="segonweb-jobs-close" class="icon-button" type="button" title="Close batch jobs">
             <svg><use href="#i-close"></use></svg>
@@ -437,11 +516,11 @@
           <div class="segonweb-job-table-wrap">
             <table class="segonweb-job-table">
               <thead>
-                <tr><th>Object</th><th>Prompt Frame</th><th>Tracking Range</th><th></th></tr>
+                <tr><th>Object</th><th>Prompts</th><th>Tracking Range</th><th></th></tr>
               </thead>
               <tbody id="segonweb-job-rows"></tbody>
             </table>
-            <p id="segonweb-job-empty" class="segonweb-job-empty">No batch objects.</p>
+            <p id="segonweb-job-empty" class="segonweb-job-empty">No tracking objects.</p>
           </div>
 
           <div class="segonweb-job-editor">
@@ -453,10 +532,6 @@
               <label class="compact-field segonweb-name-field">
                 <span>Object name</span>
                 <input id="segonweb-object-name" type="text" maxlength="80" />
-              </label>
-              <label class="compact-field">
-                <span>Prompt frame</span>
-                <input id="segonweb-prompt-frame" type="number" min="1" step="1" />
               </label>
               <label class="compact-field">
                 <span>Tracking start</span>
@@ -482,22 +557,30 @@
                 <svg><use href="#i-chevron-right"></use></svg>
               </button>
             </div>
-            <fieldset class="segonweb-box-fields">
-              <legend>Box prompt (pixels)</legend>
-              <label><span>X1</span><input id="segonweb-box-x1" type="number" min="0" step="0.1" /></label>
-              <label><span>Y1</span><input id="segonweb-box-y1" type="number" min="0" step="0.1" /></label>
-              <label><span>X2</span><input id="segonweb-box-x2" type="number" min="0" step="0.1" /></label>
-              <label><span>Y2</span><input id="segonweb-box-y2" type="number" min="0" step="0.1" /></label>
-            </fieldset>
+            <section class="segonweb-prompts-section" aria-labelledby="segonweb-prompts-heading">
+              <div class="segonweb-prompts-heading">
+                <div>
+                  <span>PROMPTS</span>
+                  <strong id="segonweb-prompts-heading">Box keyframes</strong>
+                </div>
+                <button id="segonweb-set-box" class="command-button" type="button" title="Add or replace a Box Prompt on the current frame">
+                  <svg><use href="#i-box"></use></svg><span>Add Box Prompt Here</span>
+                </button>
+              </div>
+              <div class="segonweb-prompt-table-wrap">
+                <table class="segonweb-prompt-table">
+                  <thead><tr><th>Frame</th><th>Type</th><th>Box</th><th>Actions</th></tr></thead>
+                  <tbody id="segonweb-prompt-rows"></tbody>
+                </table>
+                <p id="segonweb-prompt-empty" class="segonweb-job-empty">No prompts. Navigate to a useful frame and add a box.</p>
+              </div>
+            </section>
           </div>
         </div>
 
         <footer class="segonweb-job-actions">
           <button id="segonweb-new-object" class="command-button" type="button" title="Create a new batch object">
             <svg><use href="#i-plus"></use></svg><span>New</span>
-          </button>
-          <button id="segonweb-set-box" class="command-button" type="button" title="Set Box Prompt on the current frame">
-            <svg><use href="#i-box"></use></svg><span>Set Box on Current Frame</span>
           </button>
           <button id="segonweb-save-object" class="command-button accent" type="button" title="Save this batch object">
             <svg><use href="#i-download"></use></svg><span>Save Object</span>
@@ -514,6 +597,9 @@
             <h2 id="tools-title">Image Tools</h2>
           </div>
           <div class="tools-dialog-header-actions">
+            <button id="check-project" class="command-button" type="button">
+              <svg><use href="#i-check"></use></svg><span>Check Project</span>
+            </button>
             <div class="tools-frame-navigation" aria-label="Image Tools frame navigation">
               <button id="tools-previous-frame" class="icon-button" type="button" title="Previous frame">
                 <svg><use href="#i-chevron-left"></use></svg>
@@ -533,6 +619,7 @@
           <button type="button" role="tab" data-tool-tab="display" aria-selected="true">Display</button>
           <button type="button" role="tab" data-tool-tab="extract" aria-selected="false">Extract</button>
           <button type="button" role="tab" data-tool-tab="calibration" aria-selected="false">Calibration</button>
+          <button type="button" role="tab" data-tool-tab="cleanup" aria-selected="false">Mask Cleanup</button>
           <button type="button" role="tab" data-tool-tab="volume" aria-selected="false">Volume &amp; 3D</button>
         </div>
 
@@ -661,7 +748,65 @@
           </div>
         </section>
 
+        <section class="tool-panel" data-tool-panel="cleanup" hidden>
+          <div class="cleanup-section">
+            <h3>Mask Cleanup</h3>
+            <div class="tool-grid cleanup-grid">
+              <label class="tool-select-field"><span>Object</span><select id="cleanup-object"></select></label>
+              <label class="tool-select-field">
+                <span>Operation</span>
+                <select id="cleanup-operation">
+                  <option value="fill-holes">Fill Holes</option>
+                  <option value="remove-islands">Remove Small Islands</option>
+                  <option value="largest">Keep Largest Component</option>
+                  <option value="smooth">Smooth Boundary</option>
+                  <option value="dilate">Dilate</option>
+                  <option value="erode">Erode</option>
+                </select>
+              </label>
+              <label class="tool-select-field">
+                <span>Frames</span>
+                <select id="cleanup-scope">
+                  <option value="current">Current Frame</option>
+                  <option value="range">Frame Range</option>
+                  <option value="all">All Frames</option>
+                </select>
+              </label>
+              <label class="number-field"><span>Start frame</span><input id="cleanup-start" type="number" min="1" step="1" value="1" /></label>
+              <label class="number-field"><span>End frame</span><input id="cleanup-end" type="number" min="1" step="1" value="1" /></label>
+              <label class="number-field"><span>Minimum island size</span><input id="cleanup-minimum" type="number" min="1" step="1" value="20" /></label>
+              <label class="number-field"><span>Radius</span><input id="cleanup-radius" type="number" min="1" max="20" step="1" value="1" /></label>
+              <label class="number-field"><span>Iterations / smoothing</span><input id="cleanup-iterations" type="number" min="1" max="20" step="1" value="1" /></label>
+            </div>
+            <button id="apply-cleanup" class="command-button accent" type="button">Apply Cleanup</button>
+          </div>
+          <div class="cleanup-section">
+            <h3>Interpolate Between Frames</h3>
+            <div class="tool-grid interpolation-grid">
+              <label class="tool-select-field"><span>Object</span><select id="interpolation-object"></select></label>
+              <label class="number-field"><span>Start frame</span><input id="interpolation-start" type="number" min="1" step="1" value="1" /></label>
+              <label class="number-field"><span>End frame</span><input id="interpolation-end" type="number" min="2" step="1" value="2" /></label>
+            </div>
+            <button id="apply-interpolation" class="command-button accent" type="button">Interpolate Masks</button>
+          </div>
+        </section>
+
         <section class="tool-panel" data-tool-panel="volume" hidden>
+          <div class="volume-export-group">
+            <div class="volume-statistics-heading">
+              <h3>Volume Statistics</h3>
+              <span id="volume-statistics-calibration">Volume calibration required</span>
+            </div>
+            <div class="table-scroll">
+              <table class="data-table">
+                <thead><tr><th>Object</th><th>Voxels</th><th>mm³</th><th>cm³</th><th>Frames</th><th>Slices</th></tr></thead>
+                <tbody id="volume-statistics-rows"></tbody>
+              </table>
+            </div>
+            <button id="export-volume-statistics" class="command-button" type="button">
+              <svg><use href="#i-download"></use></svg><span>Export CSV</span>
+            </button>
+          </div>
           <div class="volume-export-group">
             <h3>Label volume</h3>
             <div class="tool-actions">
@@ -692,11 +837,40 @@
                 </select>
               </label>
             </div>
-            <button id="export-stl" class="command-button accent" type="button">
-              <svg><use href="#i-box"></use></svg><span>Export STL</span>
-            </button>
+            <div class="tool-actions">
+              <button id="preview-stl" class="command-button" type="button">
+                <svg><use href="#i-image"></use></svg><span>Preview 3D</span>
+              </button>
+              <button id="export-stl" class="command-button accent" type="button">
+                <svg><use href="#i-box"></use></svg><span>Export STL</span>
+              </button>
+            </div>
           </div>
         </section>
+      </div>
+    </dialog>
+
+    <dialog id="stl-preview-dialog" class="stl-preview-dialog" aria-labelledby="stl-preview-title">
+      <div class="stl-preview-shell">
+        <header class="stl-preview-header">
+          <div>
+            <span class="dialog-kicker">VOLUME SURFACE</span>
+            <h2 id="stl-preview-title">STL Preview</h2>
+          </div>
+          <div class="stl-preview-header-actions">
+            <button id="stl-preview-reset" class="command-button" type="button">
+              <svg><use href="#i-fit"></use></svg><span>Reset Camera</span>
+            </button>
+            <button id="stl-preview-close" class="icon-button" type="button" title="Close STL preview">
+              <svg><use href="#i-close"></use></svg>
+            </button>
+          </div>
+        </header>
+        <div class="stl-preview-workspace">
+          <div id="stl-preview-canvas" class="stl-preview-canvas" aria-label="Interactive 3D surface preview"></div>
+          <aside id="stl-preview-objects" class="stl-preview-objects" aria-label="3D object visibility"></aside>
+          <div id="stl-preview-progress" class="stl-preview-progress" hidden>Preparing 3D preview…</div>
+        </div>
       </div>
     </dialog>
 
@@ -713,6 +887,6 @@
         if (status) status.textContent = `Application operation failed: ${message}`;
       });
     </script>
-    <script type="module" src="./app.mjs"></script>
+    <script type="module" src="./app.mjs?v=17"></script>
   </body>
 </html>

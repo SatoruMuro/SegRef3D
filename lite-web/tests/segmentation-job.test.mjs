@@ -37,6 +37,53 @@ test("rejects a prompt frame outside its tracking range", () => {
   assert.throws(() => validateSegmentationManifest(manifest), /inside its tracking range/);
 });
 
+test("normalizes multiple keyframe prompts and keeps legacy fields on the primary prompt", () => {
+  const manifest = createSegmentationJobManifest({
+    images: Array.from({ length: 10 }, (_, index) => ({
+      name: `source${index + 1}.png`,
+      width: 128,
+      height: 96,
+    })),
+    objects: [{
+      id: 1,
+      name: "Multi",
+      trackingStart: 0,
+      trackingEnd: 9,
+      prompts: [
+        { type: "box", frame: 8, box: [30, 32, 70, 75] },
+        { type: "box", frame: 2, box: [10, 12, 50, 60] },
+        { type: "box", frame: 5, box: [20, 22, 60, 68] },
+      ],
+    }],
+  });
+  assert.deepEqual(manifest.objects[0].prompts.map((prompt) => prompt.frame), [2, 5, 8]);
+  assert.equal(manifest.objects[0].prompt_frame, 2);
+  assert.deepEqual(manifest.objects[0].box, [10, 12, 50, 60]);
+});
+
+test("rejects invalid multiple keyframe prompt collections", () => {
+  const base = jobManifest();
+  const invalidCases = [
+    { prompts: [], message: /at least one box prompt/ },
+    { prompts: [{ type: "point", frame: 2, box: [10, 12, 50, 60] }], message: /type must be box/ },
+    { prompts: [{ type: "box", frame: 0, box: [10, 12, 50, 60] }], message: /inside its tracking range/ },
+    { prompts: [{ type: "box", frame: 5, box: [10, 12, 50, 60] }], message: /outside the image sequence/ },
+    { prompts: [{ type: "box", frame: 2, box: [50, 12, 10, 60] }], message: /coordinates are outside/ },
+    {
+      prompts: [
+        { type: "box", frame: 2, box: [10, 12, 50, 60] },
+        { type: "box", frame: 2, box: [12, 14, 52, 62] },
+      ],
+      message: /duplicate frame 2/,
+    },
+  ];
+  for (const { prompts, message } of invalidCases) {
+    const manifest = structuredClone(base);
+    manifest.objects[0].prompts = prompts;
+    assert.throws(() => validateSegmentationManifest(manifest), message);
+  }
+});
+
 test("rejects unsafe ZIP paths before reading declared files", () => {
   const manifest = jobManifest();
   const entries = [

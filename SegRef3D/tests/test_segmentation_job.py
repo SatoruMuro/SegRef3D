@@ -21,6 +21,7 @@ from segmentation_job import (  # noqa: E402
     create_job_zip,
     make_result_manifest,
     read_archive_manifest,
+    validate_manifest,
     validate_job_zip,
     validate_result_zip,
 )
@@ -68,6 +69,45 @@ class SegmentationJobTests(unittest.TestCase):
         objects = [dict(self.objects[0], prompt_frame=0, tracking_start=1)]
         with self.assertRaisesRegex(SegmentationJobError, "inside its tracking range"):
             create_job_zip(str(self.root / "bad.zip"), self.images, objects, app_version="test")
+
+    def test_multiple_prompts_are_normalized_and_legacy_fields_match_primary(self):
+        objects = [{
+            "id": 2,
+            "name": "Target",
+            "tracking_start": 0,
+            "tracking_end": 2,
+            "prompts": [
+                {"type": "box", "frame": 2, "box": [4, 5, 22, 20]},
+                {"type": "box", "frame": 0, "box": [1, 2, 12, 14]},
+                {"type": "box", "frame": 1, "box": [2, 3, 20, 18]},
+            ],
+        }]
+        path = self.root / "multiple.zip"
+        manifest = create_job_zip(str(path), self.images, objects, app_version="test")
+        obj = manifest["objects"][0]
+        self.assertEqual([prompt["frame"] for prompt in obj["prompts"]], [0, 1, 2])
+        self.assertEqual(obj["prompt_frame"], 0)
+        self.assertEqual(obj["box"], [1.0, 2.0, 12.0, 14.0])
+        self.assertEqual(validate_job_zip(str(path)), manifest)
+
+    def test_rejects_invalid_multiple_prompt_collections(self):
+        _, base = self._job_zip()
+        invalid_cases = [
+            ([], "at least one box prompt"),
+            ([{"type": "point", "frame": 1, "box": [2, 3, 20, 18]}], "type must be box"),
+            ([{"type": "box", "frame": 3, "box": [2, 3, 20, 18]}], "outside the image sequence"),
+            ([{"type": "box", "frame": 1, "box": [20, 3, 2, 18]}], "coordinates are outside"),
+            ([
+                {"type": "box", "frame": 1, "box": [2, 3, 20, 18]},
+                {"type": "box", "frame": 1, "box": [3, 4, 21, 19]},
+            ], "duplicate frame 1"),
+        ]
+        for prompts, message in invalid_cases:
+            with self.subTest(message=message):
+                manifest = json.loads(json.dumps(base))
+                manifest["objects"][0]["prompts"] = prompts
+                with self.assertRaisesRegex(SegmentationJobError, message):
+                    validate_manifest(manifest)
 
     def test_rejects_path_traversal(self):
         path, manifest = self._job_zip()

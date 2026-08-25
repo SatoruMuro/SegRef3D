@@ -26,16 +26,18 @@ import {
   decodeDicomSeries,
   groupDicomSeries,
   isNiftiFilename,
+  isTiffFilename,
   parseDicomInstance,
   parseNiftiVolume,
-} from "./medical-io.mjs";
+  parseTiffStack,
+} from "./medical-io.mjs?v=17";
 import { clearProjectMasks, loadMask, saveMask } from "./storage.mjs";
 import { createZip, parseZip } from "./zip.mjs";
 import {
   SEGMENTATION_RESULT_KIND,
   createSegmentationJobManifest,
   validateSegmentationArchive,
-} from "./segmentation-job.mjs";
+} from "./segmentation-job.mjs?v=17";
 import {
   adjustedRgba,
   hexToRgb,
@@ -54,6 +56,19 @@ import {
   marchingTetrahedra,
   parseVolInfoCsv,
 } from "./volume-tools.mjs?v=15";
+import {
+  applyMaskVolumeChanges,
+  buildMaskVolumeChanges,
+  checkProject,
+  cleanupLabelMask,
+  clearLabelVolume,
+  createVolumeStatisticsCsv,
+  frameIndicesForScope,
+  interpolateLabelMasks,
+  mergeLabelVolume,
+  relabelVolume,
+  volumeStatistics,
+} from "./mask-tools.mjs?v=17";
 
 const elements = {
   canvas: document.querySelector("#editor-canvas"),
@@ -89,6 +104,11 @@ const elements = {
   redoEdit: document.querySelector("#redo-edit"),
   clearMasks: document.querySelector("#clear-masks"),
   imageTools: document.querySelector("#image-tools"),
+  exportMenu: document.querySelector("#export-menu"),
+  exportMenuNifti: document.querySelector("#export-menu-nifti"),
+  exportMenuTiff: document.querySelector("#export-menu-tiff"),
+  exportMenuStatistics: document.querySelector("#export-menu-statistics"),
+  exportMenuStl: document.querySelector("#export-menu-stl"),
   exportLabels: document.querySelector("#export-labels"),
   exportOverlays: document.querySelector("#export-overlays"),
   exportProject: document.querySelector("#export-project"),
@@ -96,6 +116,10 @@ const elements = {
   exportSegonweb: document.querySelector("#export-segonweb"),
   importSegonweb: document.querySelector("#import-segonweb"),
   segonwebResultInput: document.querySelector("#segonweb-result-input"),
+  segonwebWorkflow: document.querySelector("#segonweb-workflow"),
+  segonwebWorkflowDialog: document.querySelector("#segonweb-workflow-dialog"),
+  segonwebWorkflowClose: document.querySelector("#segonweb-workflow-close"),
+  segonwebWorkflowSummary: document.querySelector("#segonweb-workflow-summary"),
   labelsPanel: document.querySelector("#labels-panel"),
   labelsToggle: document.querySelector("#labels-toggle"),
   labelsClose: document.querySelector("#labels-close"),
@@ -106,6 +130,9 @@ const elements = {
   statusText: document.querySelector("#status-text"),
   imageMeta: document.querySelector("#image-meta"),
   zoomReadout: document.querySelector("#zoom-readout"),
+  editingState: document.querySelector("#editing-state"),
+  editingObject: document.querySelector("#editing-object"),
+  editingMode: document.querySelector("#editing-mode"),
   loadingOverlay: document.querySelector("#loading-overlay"),
   loadingTitle: document.querySelector("#loading-title"),
   loadingDetail: document.querySelector("#loading-detail"),
@@ -125,13 +152,26 @@ const elements = {
   clearMasksCount: document.querySelector("#clear-masks-count"),
   clearMasksCancel: document.querySelector("#clear-masks-cancel"),
   clearMasksConfirm: document.querySelector("#clear-masks-confirm"),
+  labelManagerDialog: document.querySelector("#label-manager-dialog"),
+  labelManagerClose: document.querySelector("#label-manager-close"),
+  labelManagerSwatch: document.querySelector("#label-manager-swatch"),
+  labelManagerObject: document.querySelector("#label-manager-object"),
+  labelManagerName: document.querySelector("#label-manager-name"),
+  labelManagerTarget: document.querySelector("#label-manager-target"),
+  labelManagerRename: document.querySelector("#label-manager-rename"),
+  labelManagerRelabel: document.querySelector("#label-manager-relabel"),
+  labelManagerMerge: document.querySelector("#label-manager-merge"),
+  labelManagerClear: document.querySelector("#label-manager-clear"),
+  projectCheckDialog: document.querySelector("#project-check-dialog"),
+  projectCheckClose: document.querySelector("#project-check-close"),
+  projectCheckSummary: document.querySelector("#project-check-summary"),
+  projectCheckResults: document.querySelector("#project-check-results"),
   segonwebJobsDialog: document.querySelector("#segonweb-jobs-dialog"),
   segonwebJobsClose: document.querySelector("#segonweb-jobs-close"),
   segonwebJobRows: document.querySelector("#segonweb-job-rows"),
   segonwebJobEmpty: document.querySelector("#segonweb-job-empty"),
   segonwebObjectId: document.querySelector("#segonweb-object-id"),
   segonwebObjectName: document.querySelector("#segonweb-object-name"),
-  segonwebPromptFrame: document.querySelector("#segonweb-prompt-frame"),
   segonwebTrackingStart: document.querySelector("#segonweb-tracking-start"),
   segonwebTrackingEnd: document.querySelector("#segonweb-tracking-end"),
   segonwebSetStart: document.querySelector("#segonweb-set-start"),
@@ -139,10 +179,8 @@ const elements = {
   segonwebPreviousFrame: document.querySelector("#segonweb-previous-frame"),
   segonwebNextFrame: document.querySelector("#segonweb-next-frame"),
   segonwebCurrentFrame: document.querySelector("#segonweb-current-frame"),
-  segonwebBoxX1: document.querySelector("#segonweb-box-x1"),
-  segonwebBoxY1: document.querySelector("#segonweb-box-y1"),
-  segonwebBoxX2: document.querySelector("#segonweb-box-x2"),
-  segonwebBoxY2: document.querySelector("#segonweb-box-y2"),
+  segonwebPromptRows: document.querySelector("#segonweb-prompt-rows"),
+  segonwebPromptEmpty: document.querySelector("#segonweb-prompt-empty"),
   segonwebNewObject: document.querySelector("#segonweb-new-object"),
   segonwebSetBox: document.querySelector("#segonweb-set-box"),
   segonwebSaveObject: document.querySelector("#segonweb-save-object"),
@@ -151,6 +189,7 @@ const elements = {
   toolsPreviousFrame: document.querySelector("#tools-previous-frame"),
   toolsNextFrame: document.querySelector("#tools-next-frame"),
   toolsCurrentFrame: document.querySelector("#tools-current-frame"),
+  checkProject: document.querySelector("#check-project"),
   toolTabs: [...document.querySelectorAll("[data-tool-tab]")],
   toolPanels: [...document.querySelectorAll("[data-tool-panel]")],
   windowCenter: document.querySelector("#window-center"),
@@ -189,7 +228,30 @@ const elements = {
   exportTiff: document.querySelector("#export-tiff"),
   stlFactor: document.querySelector("#stl-factor"),
   stlScope: document.querySelector("#stl-scope"),
+  previewStl: document.querySelector("#preview-stl"),
   exportStl: document.querySelector("#export-stl"),
+  stlPreviewDialog: document.querySelector("#stl-preview-dialog"),
+  stlPreviewClose: document.querySelector("#stl-preview-close"),
+  stlPreviewReset: document.querySelector("#stl-preview-reset"),
+  stlPreviewCanvas: document.querySelector("#stl-preview-canvas"),
+  stlPreviewObjects: document.querySelector("#stl-preview-objects"),
+  stlPreviewProgress: document.querySelector("#stl-preview-progress"),
+  cleanupObject: document.querySelector("#cleanup-object"),
+  cleanupOperation: document.querySelector("#cleanup-operation"),
+  cleanupScope: document.querySelector("#cleanup-scope"),
+  cleanupStart: document.querySelector("#cleanup-start"),
+  cleanupEnd: document.querySelector("#cleanup-end"),
+  cleanupMinimum: document.querySelector("#cleanup-minimum"),
+  cleanupRadius: document.querySelector("#cleanup-radius"),
+  cleanupIterations: document.querySelector("#cleanup-iterations"),
+  applyCleanup: document.querySelector("#apply-cleanup"),
+  interpolationObject: document.querySelector("#interpolation-object"),
+  interpolationStart: document.querySelector("#interpolation-start"),
+  interpolationEnd: document.querySelector("#interpolation-end"),
+  applyInterpolation: document.querySelector("#apply-interpolation"),
+  volumeStatisticsRows: document.querySelector("#volume-statistics-rows"),
+  volumeStatisticsCalibration: document.querySelector("#volume-statistics-calibration"),
+  exportVolumeStatistics: document.querySelector("#export-volume-statistics"),
   toast: document.querySelector("#toast"),
 };
 
@@ -204,6 +266,7 @@ const state = {
   transferLabel: 2,
   penColor: "#808080",
   visibleLabels: Array.from({ length: 21 }, (_, index) => index === 1),
+  objectNames: Array.from({ length: 21 }, (_, label) => label === 0 ? "" : `Object ${label}`),
   drawMode: "free",
   autoApplyMode: "off",
   viewport: { zoom: 1, panX: 0, panY: 0 },
@@ -232,6 +295,12 @@ const state = {
   segmentationJobs: [],
   segmentationDraft: null,
   segmentationBoxMode: null,
+  currentOperation: "add",
+  stlPreview: null,
+  labelManagerLabel: 1,
+  bulkUndo: [],
+  bulkRedo: [],
+  editSequence: 0,
 };
 
 const context = elements.canvas.getContext("2d", { alpha: false });
@@ -266,14 +335,48 @@ function setSaveState(text, className = "") {
   elements.autosaveIndicator.className = `save-state ${className}`.trim();
 }
 
+function objectDisplayName(label) {
+  const name = state.objectNames[label];
+  return name && name !== `Object ${label}` ? `Obj ${label} · ${name}` : `Obj ${label}`;
+}
+
+function updateEditingState() {
+  const enabled = Boolean(currentImage());
+  elements.editingState.hidden = !enabled;
+  if (!enabled) return;
+  elements.editingObject.textContent = objectDisplayName(state.targetLabel);
+  const operation = state.autoApplyMode === "off"
+    ? state.currentOperation.toUpperCase()
+    : `AUTO ${state.autoApplyMode.toUpperCase()}`;
+  elements.editingMode.textContent = `${state.drawMode.toUpperCase()} · ${operation}`;
+  elements.editingState.classList.toggle("automatic", state.autoApplyMode !== "off");
+}
+
+function updateSegonwebWorkflowSummary() {
+  const objectCount = state.segmentationJobs.length;
+  const promptCount = state.segmentationJobs.reduce(
+    (sum, job) => sum + Math.max(1, job.prompts?.length || (job.box ? 1 : 0)),
+    0,
+  );
+  elements.segonwebWorkflowSummary.textContent = objectCount
+    ? `${objectCount} object${objectCount === 1 ? "" : "s"} · ${promptCount} prompt${promptCount === 1 ? "" : "s"} configured`
+    : "No AI tracking setup yet.";
+}
+
 function initializeLabels() {
   for (let label = 1; label <= 20; label += 1) {
     const targetOption = new Option(`Obj ${label}`, String(label));
     const transferOption = new Option(`Obj ${label}`, String(label));
     const jobOption = new Option(`Obj ${label}`, String(label));
+    const cleanupOption = new Option(`Obj ${label}`, String(label));
+    const interpolationOption = new Option(`Obj ${label}`, String(label));
+    const managerOption = new Option(`Obj ${label}`, String(label));
     elements.targetLabel.add(targetOption);
     elements.transferLabel.add(transferOption);
     elements.segonwebObjectId.add(jobOption);
+    elements.cleanupObject.add(cleanupOption);
+    elements.interpolationObject.add(interpolationOption);
+    elements.labelManagerTarget.add(managerOption);
 
     const item = document.createElement("div");
     item.className = `label-item${label === 1 ? " target" : ""}`;
@@ -282,6 +385,9 @@ function initializeLabels() {
       <input type="checkbox" aria-label="Show object ${label}" ${label === 1 ? "checked" : ""} />
       <span class="label-swatch" style="background:${LABEL_COLORS[label]}"></span>
       <span class="label-copy"><strong>Obj ${label}</strong><span>0 px</span></span>
+      <button class="label-menu-button" type="button" title="Manage object ${label}" aria-label="Manage object ${label}">
+        <svg><use href="#i-more"></use></svg>
+      </button>
     `;
     const checkbox = item.querySelector("input");
     checkbox.addEventListener("click", (event) => event.stopPropagation());
@@ -290,12 +396,19 @@ function initializeLabels() {
       for (const image of state.images) image.overlayDirty = true;
       render();
     });
+    item.querySelector(".label-menu-button").addEventListener("click", (event) => {
+      event.stopPropagation();
+      openLabelManager(label);
+    });
     item.addEventListener("click", () => selectTargetLabel(label));
     elements.labelList.append(item);
   }
   elements.targetLabel.value = "1";
   elements.transferLabel.value = "2";
   elements.segonwebObjectId.value = "1";
+  elements.cleanupObject.value = "1";
+  elements.interpolationObject.value = "1";
+  elements.labelManagerTarget.value = "2";
 }
 
 function selectTargetLabel(label) {
@@ -306,6 +419,7 @@ function selectTargetLabel(label) {
   if (item) item.querySelector("input").checked = true;
   for (const image of state.images) image.overlayDirty = true;
   updateLabelTargets();
+  updateEditingState();
   render();
 }
 
@@ -345,11 +459,19 @@ function setControlsEnabled(enabled) {
     elements.exportLabels,
     elements.exportOverlays,
     elements.exportProject,
+    elements.exportMenuNifti,
+    elements.exportMenuTiff,
+    elements.exportMenuStatistics,
+    elements.exportMenuStl,
+    elements.previewStl,
     elements.segonwebJobs,
     elements.exportSegonweb,
     ...elements.modeButtons,
   ];
   for (const control of controls) control.disabled = !enabled;
+  for (const control of elements.labelList.querySelectorAll(".label-menu-button")) {
+    control.disabled = !enabled;
+  }
   updateHistoryButtons();
 }
 
@@ -359,8 +481,8 @@ function updateHistoryButtons() {
   elements.undoLine.disabled = !enabled || (image.paths.length === 0 && image.activePath.length === 0);
   elements.redoLine.disabled = !enabled || image.pathRedo.length === 0;
   elements.clearLines.disabled = !enabled || (image.paths.length === 0 && image.activePath.length === 0);
-  elements.undoEdit.disabled = !enabled || image.undo.length === 0;
-  elements.redoEdit.disabled = !enabled || image.redo.length === 0;
+  elements.undoEdit.disabled = !enabled || (image.undo.length === 0 && state.bulkUndo.length === 0);
+  elements.redoEdit.disabled = !enabled || (image.redo.length === 0 && state.bulkRedo.length === 0);
   elements.previousImage.disabled = !enabled || state.index <= 0;
   elements.nextImage.disabled = !enabled || state.index >= state.images.length - 1;
 }
@@ -373,7 +495,7 @@ function updateImageUi() {
   elements.projectName.textContent = state.projectName;
   elements.imageMeta.textContent = image
     ? `${image.name} · ${image.width} × ${image.height}px${
-        image.sourceFormat === "dicom" ? " · DICOM" : image.sourceFormat === "nifti" ? " · NIfTI" : ""
+        image.sourceFormat === "dicom" ? " · DICOM" : image.sourceFormat === "nifti" ? " · NIfTI" : image.sourceFormat === "tiff" ? " · TIFF" : ""
       }`
     : "Local processing · no uploads";
   if (image) {
@@ -383,6 +505,8 @@ function updateImageUi() {
   updateHistoryButtons();
   syncSegmentationCurrentFrame();
   syncToolsCurrentFrame();
+  updateEditingState();
+  updateSegonwebWorkflowSummary();
 }
 
 function resizeCanvas({ refit = false } = {}) {
@@ -553,26 +677,27 @@ function render() {
       (start.y + hover.y) / 2 - 7 / state.viewport.zoom,
     );
   }
-  const promptBoxes = state.segmentationJobs
-    .filter((job) => job.promptFrame === state.index)
-    .map((job) => ({ ...job, draft: false }));
-  if (
-    state.segmentationDraft?.box &&
-    state.segmentationDraft.promptFrame === state.index &&
-    !promptBoxes.some((job) => job.id === state.segmentationDraft.id)
-  ) {
-    promptBoxes.push({ ...state.segmentationDraft, draft: true });
+  const promptJobs = state.segmentationJobs.map((job) =>
+    state.segmentationDraft?.id === job.id ? state.segmentationDraft : job,
+  );
+  if (state.segmentationDraft && !promptJobs.some((job) => job.id === state.segmentationDraft.id)) {
+    promptJobs.push(state.segmentationDraft);
   }
-  for (const job of promptBoxes) {
-    const [x1, y1, x2, y2] = job.box;
-    context.strokeStyle = job.draft ? "#d9544b" : LABEL_COLORS[job.id] || "#d9544b";
+  const promptBoxes = promptJobs.flatMap((job) =>
+    normalizedJobPrompts(job)
+      .filter((prompt) => prompt.frame === state.index)
+      .map((prompt) => ({ id: job.id, box: prompt.box, draft: job === state.segmentationDraft })),
+  );
+  for (const prompt of promptBoxes) {
+    const [x1, y1, x2, y2] = prompt.box;
+    context.strokeStyle = prompt.draft ? "#d9544b" : LABEL_COLORS[prompt.id] || "#d9544b";
     context.lineWidth = 2 / state.viewport.zoom;
-    context.setLineDash(job.draft ? [7 / state.viewport.zoom, 5 / state.viewport.zoom] : []);
+    context.setLineDash(prompt.draft ? [7 / state.viewport.zoom, 5 / state.viewport.zoom] : []);
     context.strokeRect(x1, y1, x2 - x1, y2 - y1);
     context.setLineDash([]);
     context.fillStyle = context.strokeStyle;
     context.font = `${Math.max(10 / state.viewport.zoom, 12 / state.viewport.zoom)}px sans-serif`;
-    context.fillText(`Obj ${job.id}`, x1 + 3 / state.viewport.zoom, Math.max(12 / state.viewport.zoom, y1 - 4 / state.viewport.zoom));
+    context.fillText(`Obj ${prompt.id}`, x1 + 3 / state.viewport.zoom, Math.max(12 / state.viewport.zoom, y1 - 4 / state.viewport.zoom));
   }
   if (state.segmentationBoxMode?.hoverPoint) {
     const hover = state.segmentationBoxMode.hoverPoint;
@@ -743,10 +868,35 @@ function clearImagePaths(image) {
 }
 
 function recordMaskChange(image, before) {
-  image.undo.push(before);
+  image.undo.push({ mask: before, sequence: ++state.editSequence });
   if (image.undo.length > 20) image.undo.shift();
   image.redo.length = 0;
+  state.bulkRedo.length = 0;
   image.overlayDirty = true;
+}
+
+async function applyMaskVolumeTransaction(nextMasks, message) {
+  const changes = buildMaskVolumeChanges(state.images.map((image) => image.mask), nextMasks);
+  for (const change of changes) {
+    const image = state.images[change.index];
+    image.mask = change.after.slice();
+    image.overlayDirty = true;
+    clearImagePaths(image);
+    image.redo.length = 0;
+  }
+  if (changes.length === 0) {
+    setStatus(`${message}: no mask pixels changed.`);
+    return 0;
+  }
+  state.bulkUndo.push({ sequence: ++state.editSequence, changes, message });
+  if (state.bulkUndo.length > 20) state.bulkUndo.shift();
+  state.bulkRedo.length = 0;
+  for (const change of changes) await autosave(state.images[change.index], `${message} autosaved`);
+  updateLabelCounts();
+  updateHistoryButtons();
+  render();
+  setStatus(`${message}: ${changes.length} frame(s) changed.`);
+  return changes.length;
 }
 
 function ensureLabelVisible(label) {
@@ -886,30 +1036,68 @@ function transferCurrentLabel() {
   );
 }
 
-function undoEdit() {
+async function undoEdit() {
   const image = currentImage();
-  if (!image || image.undo.length === 0) return;
-  image.redo.push(image.mask.slice());
-  image.mask = image.undo.pop();
-  image.overlayDirty = true;
+  if (!image) return;
+  const local = image.undo.at(-1);
+  const bulk = state.bulkUndo.at(-1);
+  const localSequence = local?.sequence ?? -1;
+  const bulkSequence = bulk?.sequence ?? -1;
+  if (bulkSequence > localSequence) {
+    const transaction = state.bulkUndo.pop();
+    const restored = applyMaskVolumeChanges(state.images.map((item) => item.mask), transaction.changes, "before");
+    for (const change of transaction.changes) {
+      const target = state.images[change.index];
+      target.mask = restored[change.index];
+      target.overlayDirty = true;
+      await autosave(target);
+    }
+    state.bulkRedo.push(transaction);
+    setStatus(`Undid: ${transaction.message}.`);
+  } else if (local) {
+    image.redo.push({ mask: image.mask.slice(), sequence: local.sequence });
+    image.mask = image.undo.pop().mask;
+    image.overlayDirty = true;
+    await autosave(image);
+    setStatus("Undid the last mask edit.");
+  } else {
+    return;
+  }
   updateLabelCounts();
   updateHistoryButtons();
   render();
-  setStatus("Undid the last mask edit.");
-  autosave(image);
 }
 
-function redoEdit() {
+async function redoEdit() {
   const image = currentImage();
-  if (!image || image.redo.length === 0) return;
-  image.undo.push(image.mask.slice());
-  image.mask = image.redo.pop();
-  image.overlayDirty = true;
+  if (!image) return;
+  const local = image.redo.at(-1);
+  const bulk = state.bulkRedo.at(-1);
+  const localSequence = local?.sequence ?? -1;
+  const bulkSequence = bulk?.sequence ?? -1;
+  if (bulkSequence > localSequence) {
+    const transaction = state.bulkRedo.pop();
+    const restored = applyMaskVolumeChanges(state.images.map((item) => item.mask), transaction.changes, "after");
+    for (const change of transaction.changes) {
+      const target = state.images[change.index];
+      target.mask = restored[change.index];
+      target.overlayDirty = true;
+      await autosave(target);
+    }
+    state.bulkUndo.push(transaction);
+    setStatus(`Redid: ${transaction.message}.`);
+  } else if (local) {
+    image.undo.push({ mask: image.mask.slice(), sequence: local.sequence });
+    image.mask = image.redo.pop().mask;
+    image.overlayDirty = true;
+    await autosave(image);
+    setStatus("Redid the last mask edit.");
+  } else {
+    return;
+  }
   updateLabelCounts();
   updateHistoryButtons();
   render();
-  setStatus("Redid the last mask edit.");
-  autosave(image);
 }
 
 function switchImage(delta) {
@@ -926,7 +1114,6 @@ function switchImage(delta) {
   state.index = nextIndex;
   if (state.segmentationBoxMode) {
     state.segmentationBoxMode = { frame: nextIndex, firstPoint: null, hoverPoint: null };
-    state.segmentationDraft.promptFrame = nextIndex;
   }
   updateImageUi();
   render();
@@ -938,12 +1125,14 @@ function setDrawMode(mode) {
   for (const button of elements.modeButtons) {
     button.classList.toggle("selected", button.dataset.mode === mode);
   }
+  updateEditingState();
   setStatus(`${mode[0].toUpperCase()}${mode.slice(1)} drawing mode.`);
 }
 
 function setAutoApplyMode(mode, { announce = true } = {}) {
   state.autoApplyMode = ["add", "erase", "transfer"].includes(mode) ? mode : "off";
   elements.autoApplyMode.value = state.autoApplyMode;
+  updateEditingState();
   if (!announce) return;
   const label =
     state.autoApplyMode === "off"
@@ -1224,6 +1413,8 @@ function selectToolTab(name) {
     tab.setAttribute("aria-selected", String(selected));
   }
   for (const panel of elements.toolPanels) panel.hidden = panel.dataset.toolPanel !== name;
+  if (name === "volume") renderVolumeStatistics();
+  if (name === "cleanup") syncCleanupControls();
 }
 
 function openImageTools(name = "display") {
@@ -1242,6 +1433,252 @@ function syncToolsCurrentFrame() {
   elements.toolsCurrentFrame.textContent = `${current} / ${state.images.length}`;
   elements.toolsPreviousFrame.disabled = state.images.length === 0 || state.index === 0;
   elements.toolsNextFrame.disabled = state.images.length === 0 || state.index === state.images.length - 1;
+}
+
+function statisticsForCurrentVolume() {
+  if (state.images.length === 0) throw new Error("No images are loaded.");
+  const width = state.images[0].width;
+  const height = state.images[0].height;
+  if (state.images.some((image) => image.width !== width || image.height !== height)) {
+    throw new Error("Volume statistics require equal frame dimensions.");
+  }
+  const spacing = state.volumeInfoSource === "Default spacing"
+    ? null
+    : [state.calibration.xSpacing, state.calibration.ySpacing, state.calibration.zSpacing];
+  return volumeStatistics(state.images.map((image) => image.mask), width, height, spacing, state.objectNames);
+}
+
+function renderVolumeStatistics() {
+  elements.volumeStatisticsRows.replaceChildren();
+  if (state.images.length === 0) return;
+  try {
+    const statistics = statisticsForCurrentVolume();
+    elements.volumeStatisticsCalibration.textContent = statistics.calibrated
+      ? `Spacing ${statistics.spacing.map((value) => Number(value).toPrecision(4)).join(" × ")} mm`
+      : "Volume calibration required";
+    for (const row of statistics.rows) {
+      const tableRow = document.createElement("tr");
+      const values = [
+        `Obj ${row.objectId}: ${row.objectName}`,
+        row.voxelCount.toLocaleString(),
+        row.volumeMm3 === null ? "—" : row.volumeMm3.toLocaleString(undefined, { maximumFractionDigits: 4 }),
+        row.volumeCm3 === null ? "—" : row.volumeCm3.toLocaleString(undefined, { maximumFractionDigits: 6 }),
+        `${row.firstFrame}-${row.lastFrame}`,
+        row.occupiedSlices,
+      ];
+      for (const value of values) {
+        const cell = document.createElement("td");
+        cell.textContent = String(value);
+        tableRow.append(cell);
+      }
+      elements.volumeStatisticsRows.append(tableRow);
+    }
+    if (statistics.rows.length === 0) {
+      const row = document.createElement("tr");
+      const cell = document.createElement("td");
+      cell.colSpan = 6;
+      cell.textContent = "No labeled voxels.";
+      row.append(cell);
+      elements.volumeStatisticsRows.append(row);
+    }
+  } catch (error) {
+    elements.volumeStatisticsCalibration.textContent = error.message;
+  }
+}
+
+function exportVolumeStatisticsCsv() {
+  try {
+    const statistics = statisticsForCurrentVolume();
+    const filename = `${sanitizeFilename(state.projectName)}_Volume_Statistics_${timestamp()}.csv`;
+    downloadBlob(new Blob([createVolumeStatisticsCsv(statistics)], { type: "text/csv;charset=utf-8" }), filename);
+    setStatus(`Exported volume statistics for ${statistics.rows.length} object(s).`);
+    showToast(`Downloaded ${filename}`);
+  } catch (error) {
+    setStatus(`Volume statistics export failed: ${error.message}`);
+    window.alert(`Volume statistics export failed.\n\n${error.message}`);
+  }
+}
+
+function openLabelManager(label) {
+  state.labelManagerLabel = Number(label);
+  elements.labelManagerObject.textContent = objectDisplayName(label);
+  elements.labelManagerSwatch.style.background = LABEL_COLORS[label];
+  elements.labelManagerName.value = state.objectNames[label] || `Object ${label}`;
+  const fallback = label === 20 ? 19 : label + 1;
+  if (Number(elements.labelManagerTarget.value) === label) elements.labelManagerTarget.value = String(fallback);
+  if (!elements.labelManagerDialog.open) elements.labelManagerDialog.showModal();
+}
+
+function renameManagedObject() {
+  const label = state.labelManagerLabel;
+  const name = elements.labelManagerName.value.trim();
+  if (!name) {
+    setStatus("Object name cannot be empty.");
+    return;
+  }
+  state.objectNames[label] = name.slice(0, 80);
+  const job = segmentationJobById(label);
+  if (job) job.name = state.objectNames[label];
+  if (state.segmentationDraft?.id === label) state.segmentationDraft.name = state.objectNames[label];
+  setSegmentationObjectNames();
+  elements.labelManagerObject.textContent = objectDisplayName(label);
+  setStatus(`Renamed Obj ${label} to ${state.objectNames[label]}.`);
+}
+
+async function relabelOrMergeManagedObject(mode) {
+  const source = state.labelManagerLabel;
+  const target = Number(elements.labelManagerTarget.value);
+  if (source === target) {
+    setStatus("Choose a different destination object.");
+    return;
+  }
+  if (mode === "merge" && !window.confirm(`Merge Obj ${source} into Obj ${target} on all frames?`)) return;
+  try {
+    const masks = state.images.map((image) => image.mask);
+    const next = mode === "merge"
+      ? mergeLabelVolume(masks, source, target)
+      : relabelVolume(masks, source, target);
+    await applyMaskVolumeTransaction(next, `${mode === "merge" ? "Merged" : "Relabeled"} Obj ${source} to Obj ${target}`);
+    const sourceName = state.objectNames[source];
+    if (mode === "relabel" || state.objectNames[target] === `Object ${target}`) state.objectNames[target] = sourceName;
+    state.objectNames[source] = `Object ${source}`;
+    const sourceJob = segmentationJobById(source);
+    const targetJob = segmentationJobById(target);
+    if (sourceJob && !targetJob) {
+      sourceJob.id = target;
+      sourceJob.name = state.objectNames[target];
+    } else if (sourceJob) {
+      state.segmentationJobs = state.segmentationJobs.filter((job) => job !== sourceJob);
+    }
+    state.segmentationJobs.sort((left, right) => left.id - right.id);
+    selectTargetLabel(target);
+    setSegmentationObjectNames();
+    elements.labelManagerDialog.close();
+  } catch (error) {
+    setStatus(`${mode === "merge" ? "Merge" : "Relabel"} failed: ${error.message}`);
+    window.alert(error.message);
+  }
+}
+
+async function clearManagedObject() {
+  const label = state.labelManagerLabel;
+  if (!window.confirm(`Clear Obj ${label} from all frames?\n\nOther objects will not be changed.`)) return;
+  await applyMaskVolumeTransaction(
+    clearLabelVolume(state.images.map((image) => image.mask), label),
+    `Cleared Obj ${label}`,
+  );
+  elements.labelManagerDialog.close();
+}
+
+function runProjectCheck() {
+  const spacing = state.volumeInfoSource === "Default spacing"
+    ? null
+    : [state.calibration.xSpacing, state.calibration.ySpacing, state.calibration.zSpacing];
+  const findings = checkProject({
+    images: state.images,
+    spacing,
+    objectNames: state.objectNames,
+    segmentationJobs: state.segmentationJobs,
+  });
+  elements.projectCheckResults.replaceChildren();
+  const errors = findings.filter((finding) => finding.severity === "error").length;
+  const warnings = findings.filter((finding) => finding.severity === "warning").length;
+  elements.projectCheckSummary.textContent = errors
+    ? `${errors} error(s) · ${warnings} warning(s)`
+    : warnings
+      ? `No errors · ${warnings} warning(s)`
+      : "Project check passed.";
+  elements.projectCheckSummary.className = `workflow-summary ${errors ? "error" : warnings ? "warning" : "success"}`;
+  for (const finding of findings) {
+    const item = document.createElement("div");
+    item.className = `project-check-item ${finding.severity}`;
+    const marker = finding.severity === "ok" ? "✓" : finding.severity === "error" ? "×" : finding.severity === "warning" ? "!" : "i";
+    item.innerHTML = `<span>${marker}</span><p></p>`;
+    item.querySelector("p").textContent = finding.message;
+    elements.projectCheckResults.append(item);
+  }
+  elements.toolsDialog.close();
+  if (!elements.projectCheckDialog.open) elements.projectCheckDialog.showModal();
+}
+
+function syncCleanupControls() {
+  const frameCount = Math.max(1, state.images.length);
+  for (const input of [elements.cleanupStart, elements.cleanupEnd, elements.interpolationStart, elements.interpolationEnd]) {
+    input.max = String(frameCount);
+  }
+  elements.cleanupStart.value = String(Math.min(Number(elements.cleanupStart.value) || 1, frameCount));
+  elements.cleanupEnd.value = String(Math.min(Number(elements.cleanupEnd.value) || frameCount, frameCount));
+  elements.interpolationStart.value = String(Math.min(Number(elements.interpolationStart.value) || 1, frameCount));
+  elements.interpolationEnd.value = String(Math.min(Math.max(2, Number(elements.interpolationEnd.value) || frameCount), frameCount));
+}
+
+function cleanupFrameIndices() {
+  const scope = elements.cleanupScope.value;
+  const start = Number(elements.cleanupStart.value) - 1;
+  const end = Number(elements.cleanupEnd.value) - 1;
+  return frameIndicesForScope(scope, state.index, start, end, state.images.length);
+}
+
+async function applyMaskCleanup() {
+  if (state.loading) return;
+  try {
+    const label = Number(elements.cleanupObject.value);
+    const indices = cleanupFrameIndices();
+    const next = state.images.map((image) => image.mask.slice());
+    elements.toolsDialog.close();
+    setLoading(true, "Applying mask cleanup", `0 / ${indices.length}`);
+    for (let position = 0; position < indices.length; position += 1) {
+      const index = indices[position];
+      const image = state.images[index];
+      elements.loadingDetail.textContent = `${position + 1} / ${indices.length}`;
+      next[index] = cleanupLabelMask(image.mask, image.width, image.height, label, elements.cleanupOperation.value, {
+        minimumSize: elements.cleanupMinimum.value,
+        radius: elements.cleanupRadius.value,
+        iterations: elements.cleanupIterations.value,
+        amount: elements.cleanupIterations.value,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    await applyMaskVolumeTransaction(next, `${elements.cleanupOperation.selectedOptions[0].text} · Obj ${label}`);
+  } catch (error) {
+    setStatus(`Mask cleanup failed: ${error.message}`);
+    window.alert(`Mask cleanup failed.\n\n${error.message}`);
+  } finally {
+    setLoading(false);
+  }
+}
+
+async function applySliceInterpolation() {
+  if (state.loading) return;
+  try {
+    const label = Number(elements.interpolationObject.value);
+    const start = Number(elements.interpolationStart.value) - 1;
+    const end = Number(elements.interpolationEnd.value) - 1;
+    if (!(Number.isInteger(start) && Number.isInteger(end) && 0 <= start && start + 1 < end && end < state.images.length)) {
+      throw new Error("Start and End must leave at least one intermediate frame.");
+    }
+    const first = state.images[start];
+    const last = state.images[end];
+    if (first.width !== last.width || first.height !== last.height) throw new Error("Start and End frame dimensions do not match.");
+    elements.toolsDialog.close();
+    setLoading(true, "Interpolating masks", `Frames ${start + 1}-${end + 1}`);
+    const generated = interpolateLabelMasks(first.mask, last.mask, first.width, first.height, label, end - start - 1);
+    const next = state.images.map((image) => image.mask.slice());
+    for (let offset = 0; offset < generated.length; offset += 1) {
+      const target = next[start + offset + 1];
+      for (let index = 0; index < target.length; index += 1) {
+        if (target[index] === label) target[index] = 0;
+        if (generated[offset][index] && target[index] === 0) target[index] = label;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    await applyMaskVolumeTransaction(next, `Interpolated Obj ${label} between frames ${start + 1}-${end + 1}`);
+  } catch (error) {
+    setStatus(`Mask interpolation failed: ${error.message}`);
+    window.alert(`Mask interpolation failed.\n\n${error.message}`);
+  } finally {
+    setLoading(false);
+  }
 }
 
 function canvasToBlob(canvas, type = "image/png", quality) {
@@ -1378,71 +1815,154 @@ function labelIsUsed(label, masks) {
   return masks.some((mask) => mask.includes(label));
 }
 
+function selectedStlLabels(masks) {
+  return elements.stlScope.value === "visible"
+    ? Array.from({ length: 20 }, (_, index) => index + 1).filter(
+        (label) => state.visibleLabels[label] && labelIsUsed(label, masks),
+      )
+    : [state.targetLabel].filter((label) => labelIsUsed(label, masks));
+}
+
+async function buildStlMeshData(progress = () => {}) {
+  const factor = Number(elements.stlFactor.value);
+  const { masks, width, height, spacing } = labelVolumeGeometry();
+  const labels = selectedStlLabels(masks);
+  if (labels.length === 0) throw new Error("The selected object set has no label pixels.");
+  const meshes = [];
+  for (const label of labels) {
+    progress(`Obj ${label}: optimizing volume`);
+    const cropped = cropLabelVolume(masks, width, height, label);
+    if (!cropped) continue;
+    const interpolatedDepth = (masks.length - 1) * factor + 1;
+    const voxelCount = cropped.width * cropped.height * interpolatedDepth;
+    if (voxelCount > 200_000_000) {
+      throw new Error(
+        `Obj ${label} is still too large after mask-area optimization (${Math.round(voxelCount / 1_000_000)} million voxels).`,
+      );
+    }
+    if (
+      voxelCount > 50_000_000 &&
+      !window.confirm(
+        `Obj ${label}: the optimized ${factor}x volume contains about ${Math.round(voxelCount / 1_000_000)} million voxels.\n\nContinue 3D generation?`,
+      )
+    ) {
+      throw new Error("3D generation was canceled.");
+    }
+    progress(`Obj ${label}: interpolation`);
+    const interpolated = interpolateLabelVolume(
+      cropped.masks,
+      cropped.width,
+      cropped.height,
+      label,
+      factor,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    progress(`Obj ${label}: meshing`);
+    const triangles = marchingTetrahedra(
+      interpolated.data,
+      cropped.width,
+      cropped.height,
+      interpolated.depth,
+      [spacing[0], spacing[1], spacing[2] / factor],
+      [cropped.offsetX * spacing[0], cropped.offsetY * spacing[1], 0],
+    );
+    if (triangles.length > 0) {
+      meshes.push({
+        label,
+        factor,
+        name: `obj${String(label).padStart(2, "0")}_${factor}x.stl`,
+        triangles,
+      });
+    }
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  if (meshes.length === 0) throw new Error("No STL surface could be generated.");
+  return meshes;
+}
+
+function closeStlPreview() {
+  state.stlPreview?.dispose();
+  state.stlPreview = null;
+  elements.stlPreviewObjects.replaceChildren();
+  if (elements.stlPreviewDialog.open) elements.stlPreviewDialog.close();
+}
+
+function renderStlPreviewControls(meshes) {
+  elements.stlPreviewObjects.replaceChildren();
+  const heading = document.createElement("strong");
+  heading.textContent = "Objects";
+  elements.stlPreviewObjects.append(heading);
+  for (const mesh of meshes) {
+    const row = document.createElement("div");
+    row.className = "stl-preview-object-row";
+    const visibility = document.createElement("input");
+    visibility.type = "checkbox";
+    visibility.checked = true;
+    visibility.setAttribute("aria-label", `Show Obj ${mesh.label} in 3D preview`);
+    const swatch = document.createElement("span");
+    swatch.className = "label-swatch";
+    swatch.style.background = LABEL_COLORS[mesh.label];
+    const name = document.createElement("span");
+    name.textContent = objectDisplayName(mesh.label);
+    const opacity = document.createElement("input");
+    opacity.type = "range";
+    opacity.min = "0.05";
+    opacity.max = "1";
+    opacity.step = "0.05";
+    opacity.value = "0.86";
+    opacity.title = `Obj ${mesh.label} opacity`;
+    visibility.addEventListener("change", () => state.stlPreview?.setObjectVisible(mesh.label, visibility.checked));
+    opacity.addEventListener("input", () => state.stlPreview?.setObjectOpacity(mesh.label, opacity.value));
+    row.append(visibility, swatch, name, opacity);
+    elements.stlPreviewObjects.append(row);
+  }
+}
+
+async function openStlPreview() {
+  if (state.loading) return;
+  elements.toolsDialog.close();
+  closeStlPreview();
+  elements.stlPreviewProgress.hidden = false;
+  elements.stlPreviewProgress.textContent = "Preparing 3D preview…";
+  elements.stlPreviewDialog.showModal();
+  try {
+    const meshes = await buildStlMeshData((message) => {
+      elements.stlPreviewProgress.textContent = message;
+      setStatus(message);
+    });
+    elements.stlPreviewProgress.textContent = "Starting Three.js viewer";
+    const { createStlPreview } = await import("./three-viewer.mjs?v=17");
+    state.stlPreview = createStlPreview({
+      container: elements.stlPreviewCanvas,
+      meshes,
+      colors: LABEL_COLORS,
+    });
+    renderStlPreviewControls(meshes);
+    elements.stlPreviewProgress.hidden = true;
+    setStatus(`Previewing ${meshes.length} object surface(s) with ${meshes[0].factor}x interpolation.`);
+  } catch (error) {
+    console.error(error);
+    elements.stlPreviewProgress.hidden = false;
+    elements.stlPreviewProgress.textContent = `3D preview failed: ${error.message}`;
+    setStatus(`3D preview failed: ${error.message}`);
+  }
+}
+
 async function exportStlMeshes() {
   if (state.loading) return;
   const factor = Number(elements.stlFactor.value);
   elements.toolsDialog.close();
   setLoading(true, "Exporting STL", "Preparing label volume");
   try {
-    const { masks, width, height, spacing } = labelVolumeGeometry();
-    const labels =
-      elements.stlScope.value === "visible"
-        ? Array.from({ length: 20 }, (_, index) => index + 1).filter(
-            (label) => state.visibleLabels[label] && labelIsUsed(label, masks),
-          )
-        : [state.targetLabel].filter((label) => labelIsUsed(label, masks));
-    if (labels.length === 0) throw new Error("The selected object set has no label pixels.");
-    const entries = [];
-    for (let index = 0; index < labels.length; index += 1) {
-      const label = labels[index];
-      elements.loadingDetail.textContent = `Obj ${label}: optimizing volume`;
-      const cropped = cropLabelVolume(masks, width, height, label);
-      if (!cropped) continue;
-      const interpolatedDepth = (masks.length - 1) * factor + 1;
-      const voxelCount = cropped.width * cropped.height * interpolatedDepth;
-      if (voxelCount > 200_000_000) {
-        throw new Error(
-          `Obj ${label} is still too large after mask-area optimization (${Math.round(voxelCount / 1_000_000)} million voxels).`,
-        );
-      }
-      if (
-        voxelCount > 50_000_000 &&
-        !window.confirm(
-          `Obj ${label}: the optimized ${factor}x volume contains about ${Math.round(voxelCount / 1_000_000)} million voxels.\n\nContinue STL generation?`,
-        )
-      ) {
-        setStatus("STL export canceled.");
-        return;
-      }
-      elements.loadingDetail.textContent = `Obj ${label}: interpolation`;
-      const interpolated = interpolateLabelVolume(
-        cropped.masks,
-        cropped.width,
-        cropped.height,
-        label,
-        factor,
-      );
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      elements.loadingDetail.textContent = `Obj ${label}: meshing`;
-      const triangles = marchingTetrahedra(
-        interpolated.data,
-        cropped.width,
-        cropped.height,
-        interpolated.depth,
-        [spacing[0], spacing[1], spacing[2] / factor],
-        [cropped.offsetX * spacing[0], cropped.offsetY * spacing[1], 0],
-      );
-      if (triangles.length === 0) continue;
-      const name = `obj${String(label).padStart(2, "0")}_${factor}x.stl`;
-      entries.push({
-        name,
-        blob: new Blob([createBinaryStl(triangles, `SegRef3D Obj ${label}`)], {
-          type: "model/stl",
-        }),
-      });
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    }
-    if (entries.length === 0) throw new Error("No STL surface could be generated.");
+    const meshes = await buildStlMeshData((message) => {
+      elements.loadingDetail.textContent = message;
+    });
+    const entries = meshes.map((mesh) => ({
+      name: mesh.name,
+      blob: new Blob([createBinaryStl(mesh.triangles, `SegRef3D Obj ${mesh.label}`)], {
+        type: "model/stl",
+      }),
+    }));
     if (entries.length === 1) {
       downloadBlob(entries[0].blob, entries[0].name);
       showToast(`Downloaded ${entries[0].name}`);
@@ -1701,6 +2221,7 @@ function applyProjectSettings(settings = {}) {
   const savedCalibration = settings.calibration || {};
   const savedVolumeOrigin = Array.isArray(settings.volumeOrigin) ? settings.volumeOrigin : null;
   const savedVisibility = Array.isArray(settings.visibleLabels) ? settings.visibleLabels : null;
+  const savedObjectNames = Array.isArray(settings.objectNames) ? settings.objectNames : null;
 
   if (targetLabel >= 1 && targetLabel <= 20) state.targetLabel = targetLabel;
   if (transferLabelValue >= 1 && transferLabelValue <= 20) state.transferLabel = transferLabelValue;
@@ -1759,20 +2280,33 @@ function applyProjectSettings(settings = {}) {
       if (checkbox) checkbox.checked = state.visibleLabels[label];
     }
   }
+  if (savedObjectNames && (savedObjectNames.length === 20 || savedObjectNames.length === 21)) {
+    for (let label = 1; label <= 20; label += 1) {
+      const value = savedObjectNames.length === 21 ? savedObjectNames[label] : savedObjectNames[label - 1];
+      state.objectNames[label] = String(value || `Object ${label}`).slice(0, 80);
+    }
+  }
   if (Array.isArray(settings.segmentationJobs)) {
-    state.segmentationJobs = settings.segmentationJobs.map((job) => ({
+    state.segmentationJobs = settings.segmentationJobs.map((job) => cloneSegmentationJob({
       id: Number(job.id),
       name: String(job.name || `Object ${job.id}`),
       promptFrame: Number(job.promptFrame),
       box: Array.isArray(job.box) ? job.box.map(Number) : null,
+      prompts: Array.isArray(job.prompts)
+        ? job.prompts.map((prompt) => ({
+            type: prompt.type,
+            frame: Number(prompt.frame),
+            box: Array.isArray(prompt.box) ? prompt.box.map(Number) : prompt.box,
+          }))
+        : undefined,
       trackingStart: Number(job.trackingStart),
       trackingEnd: Number(job.trackingEnd),
     }));
     state.segmentationDraft = state.segmentationJobs.length
       ? cloneSegmentationJob(state.segmentationJobs[0])
       : null;
-    setSegmentationObjectNames();
   }
+  setSegmentationObjectNames();
   updateLabelTargets();
   for (const image of state.images) image.overlayDirty = true;
 }
@@ -1940,6 +2474,7 @@ async function exportProjectZip() {
         calibration: { ...state.calibration },
         volumeOrigin: state.volumeOrigin.slice(),
         volumeInfoSource: state.volumeInfoSource,
+        objectNames: state.objectNames.slice(1),
         segmentationJobs: state.segmentationJobs.map(cloneSegmentationJob),
       },
     };
@@ -1975,7 +2510,8 @@ async function exportProjectZip() {
 function blankSegmentationDraft(objectId = state.targetLabel) {
   return {
     id: Number(objectId),
-    name: `Object ${Number(objectId)}`,
+    name: state.objectNames[Number(objectId)] || `Object ${Number(objectId)}`,
+    prompts: [],
     promptFrame: Math.max(0, state.index),
     box: null,
     trackingStart: 0,
@@ -1983,8 +2519,32 @@ function blankSegmentationDraft(objectId = state.targetLabel) {
   };
 }
 
+function normalizedJobPrompts(job) {
+  const source = Array.isArray(job?.prompts) && job.prompts.length > 0
+    ? job.prompts
+    : job?.box
+      ? [{ type: "box", frame: Number(job.promptFrame), box: job.box }]
+      : [];
+  return source.map((prompt) => ({
+    type: "box",
+    frame: Number(prompt.frame),
+    box: prompt.box.slice(),
+  })).sort((left, right) => left.frame - right.frame);
+}
+
+function syncLegacyPromptFields(job) {
+  const prompts = normalizedJobPrompts(job);
+  const primary = prompts[0] || null;
+  return {
+    ...job,
+    prompts,
+    promptFrame: primary?.frame ?? Math.max(0, state.index),
+    box: primary?.box.slice() ?? null,
+  };
+}
+
 function cloneSegmentationJob(job) {
-  return { ...job, box: job.box ? job.box.slice() : null };
+  return syncLegacyPromptFields(job);
 }
 
 function segmentationJobById(objectId) {
@@ -1992,17 +2552,27 @@ function segmentationJobById(objectId) {
 }
 
 function setSegmentationObjectNames() {
-  const names = new Map(state.segmentationJobs.map((job) => [job.id, job.name]));
+  for (const job of state.segmentationJobs) {
+    if (job.name?.trim()) state.objectNames[job.id] = job.name.trim();
+  }
   for (let label = 1; label <= 20; label += 1) {
-    const name = names.get(label);
+    const name = state.objectNames[label];
     const display = name && name !== `Object ${label}` ? `Obj ${label}: ${name}` : `Obj ${label}`;
     const copy = elements.labelList.querySelector(`[data-label="${label}"] .label-copy strong`);
     if (copy) copy.textContent = display;
     const targetOption = elements.targetLabel.querySelector(`option[value="${label}"]`);
     const transferOption = elements.transferLabel.querySelector(`option[value="${label}"]`);
+    const cleanupOption = elements.cleanupObject.querySelector(`option[value="${label}"]`);
+    const interpolationOption = elements.interpolationObject.querySelector(`option[value="${label}"]`);
+    const managerOption = elements.labelManagerTarget.querySelector(`option[value="${label}"]`);
     if (targetOption) targetOption.textContent = display;
     if (transferOption) transferOption.textContent = display;
+    if (cleanupOption) cleanupOption.textContent = display;
+    if (interpolationOption) interpolationOption.textContent = display;
+    if (managerOption) managerOption.textContent = display;
   }
+  updateEditingState();
+  updateSegonwebWorkflowSummary();
 }
 
 function renderSegmentationJobRows() {
@@ -2015,7 +2585,8 @@ function renderSegmentationJobRows() {
     const objectCell = document.createElement("td");
     objectCell.textContent = `Obj ${job.id}: ${job.name}`;
     const promptCell = document.createElement("td");
-    promptCell.textContent = String(job.promptFrame + 1);
+    const promptCount = normalizedJobPrompts(job).length;
+    promptCell.textContent = `${promptCount} keyframe${promptCount === 1 ? "" : "s"}`;
     const rangeCell = document.createElement("td");
     rangeCell.textContent = `${job.trackingStart + 1}-${job.trackingEnd + 1}`;
     const actionCell = document.createElement("td");
@@ -2049,31 +2620,65 @@ function renderSegmentationJobRows() {
   elements.segonwebJobEmpty.hidden = state.segmentationJobs.length > 0;
 }
 
+function renderSegmentationPromptRows() {
+  elements.segonwebPromptRows.replaceChildren();
+  const draft = state.segmentationDraft;
+  const prompts = normalizedJobPrompts(draft);
+  for (const prompt of prompts) {
+    const row = document.createElement("tr");
+    const frameCell = document.createElement("td");
+    frameCell.textContent = String(prompt.frame + 1);
+    const typeCell = document.createElement("td");
+    typeCell.textContent = "Box";
+    const boxCell = document.createElement("td");
+    boxCell.textContent = prompt.box.map((value) => Number(value).toFixed(1).replace(/\.0$/, "")).join(", ");
+    const actionCell = document.createElement("td");
+    const edit = document.createElement("button");
+    edit.type = "button";
+    edit.className = "text-action-button";
+    edit.textContent = "Edit";
+    edit.title = `Redraw the box on frame ${prompt.frame + 1}`;
+    edit.addEventListener("click", () => beginSegmentationBox(prompt.frame));
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "text-action-button danger-text";
+    remove.textContent = "Delete";
+    remove.title = `Delete the prompt on frame ${prompt.frame + 1}`;
+    remove.addEventListener("click", () => {
+      state.segmentationDraft = syncLegacyPromptFields({
+        ...draft,
+        prompts: prompts.filter((item) => item.frame !== prompt.frame),
+        box: null,
+      });
+      syncSegmentationJobDialog();
+      setStatus(`Deleted Obj ${draft.id} prompt on frame ${prompt.frame + 1}. Save the object to keep this change.`);
+      render();
+    });
+    actionCell.append(edit, remove);
+    row.append(frameCell, typeCell, boxCell, actionCell);
+    elements.segonwebPromptRows.append(row);
+  }
+  elements.segonwebPromptEmpty.hidden = prompts.length > 0;
+  elements.segonwebSetBox.querySelector("span").textContent = prompts.some((prompt) => prompt.frame === state.index)
+    ? "Replace Box on This Frame"
+    : "Add Box Prompt Here";
+}
+
 function syncSegmentationJobDialog() {
   if (!state.segmentationDraft) state.segmentationDraft = blankSegmentationDraft();
+  state.segmentationDraft = syncLegacyPromptFields(state.segmentationDraft);
   const draft = state.segmentationDraft;
   const frameCount = Math.max(1, state.images.length);
   elements.segonwebObjectId.value = String(draft.id);
   elements.segonwebObjectName.value = draft.name;
-  for (const input of [
-    elements.segonwebPromptFrame,
-    elements.segonwebTrackingStart,
-    elements.segonwebTrackingEnd,
-  ]) input.max = String(frameCount);
-  elements.segonwebPromptFrame.value = String(draft.promptFrame + 1);
+  for (const input of [elements.segonwebTrackingStart, elements.segonwebTrackingEnd]) {
+    input.max = String(frameCount);
+  }
   elements.segonwebTrackingStart.value = String(draft.trackingStart + 1);
   elements.segonwebTrackingEnd.value = String(draft.trackingEnd + 1);
-  const boxValues = draft.box || ["", "", "", ""];
-  [
-    elements.segonwebBoxX1,
-    elements.segonwebBoxY1,
-    elements.segonwebBoxX2,
-    elements.segonwebBoxY2,
-  ].forEach((input, index) => {
-    input.value = boxValues[index];
-  });
   syncSegmentationCurrentFrame();
   renderSegmentationJobRows();
+  renderSegmentationPromptRows();
 }
 
 function syncSegmentationCurrentFrame() {
@@ -2082,28 +2687,13 @@ function syncSegmentationCurrentFrame() {
   elements.segonwebCurrentFrame.textContent = `${current} / ${state.images.length}`;
   elements.segonwebPreviousFrame.disabled = state.images.length === 0 || state.index === 0;
   elements.segonwebNextFrame.disabled = state.images.length === 0 || state.index === state.images.length - 1;
+  if (state.segmentationDraft) renderSegmentationPromptRows();
 }
 
 function captureSegmentationRangeBoundary(boundary) {
   if (!state.segmentationDraft || state.images.length === 0) return;
   try {
     const currentFrame = state.index;
-    const hasBox = [
-      elements.segonwebBoxX1,
-      elements.segonwebBoxY1,
-      elements.segonwebBoxX2,
-      elements.segonwebBoxY2,
-    ].every((input) => input.value.trim() !== "");
-    const promptFrame = readRequiredNumber(elements.segonwebPromptFrame, "Prompt Frame") - 1;
-    if (hasBox && boundary === "start" && currentFrame > promptFrame) {
-      setStatus("Tracking Start must be on or before the Box Prompt frame.");
-      return;
-    }
-    if (hasBox && boundary === "end" && currentFrame < promptFrame) {
-      setStatus("Tracking End must be on or after the Box Prompt frame.");
-      return;
-    }
-
     let start = readRequiredNumber(elements.segonwebTrackingStart, "Tracking Start") - 1;
     let end = readRequiredNumber(elements.segonwebTrackingEnd, "Tracking End") - 1;
     if (boundary === "start") {
@@ -2113,12 +2703,17 @@ function captureSegmentationRangeBoundary(boundary) {
       end = currentFrame;
       if (start > end) start = end;
     }
-    const normalizedPrompt = hasBox ? promptFrame : clamp(promptFrame, start, end);
+    const outside = normalizedJobPrompts(state.segmentationDraft).find(
+      (prompt) => prompt.frame < start || prompt.frame > end,
+    );
+    if (outside) {
+      setStatus(`Tracking range would exclude the prompt on frame ${outside.frame + 1}. Delete or move that prompt first.`);
+      return;
+    }
     state.segmentationDraft = {
       ...state.segmentationDraft,
       id: Number(elements.segonwebObjectId.value),
       name: elements.segonwebObjectName.value.trim() || `Object ${elements.segonwebObjectId.value}`,
-      promptFrame: normalizedPrompt,
       trackingStart: start,
       trackingEnd: end,
     };
@@ -2141,34 +2736,33 @@ function readSegmentationDraft({ requireBox = true } = {}) {
   if (state.images.length === 0) throw new Error("Load images before creating a batch job.");
   const id = Number(elements.segonwebObjectId.value);
   const name = elements.segonwebObjectName.value.trim() || `Object ${id}`;
-  const promptFrame = readRequiredNumber(elements.segonwebPromptFrame, "Prompt Frame") - 1;
   const trackingStart = readRequiredNumber(elements.segonwebTrackingStart, "Tracking Start") - 1;
   const trackingEnd = readRequiredNumber(elements.segonwebTrackingEnd, "Tracking End") - 1;
-  if (![promptFrame, trackingStart, trackingEnd].every(Number.isInteger)) {
-    throw new Error("Prompt Frame and Tracking Range must be whole numbers.");
+  if (![trackingStart, trackingEnd].every(Number.isInteger)) {
+    throw new Error("Tracking Start and End must be whole numbers.");
   }
-  if (!(0 <= trackingStart && trackingStart <= promptFrame && promptFrame <= trackingEnd && trackingEnd < state.images.length)) {
-    throw new Error("Prompt Frame must be inside the Tracking Start/End range.");
+  if (!(0 <= trackingStart && trackingStart <= trackingEnd && trackingEnd < state.images.length)) {
+    throw new Error("Tracking Start/End range is invalid.");
   }
-  const boxInputs = [
-    elements.segonwebBoxX1,
-    elements.segonwebBoxY1,
-    elements.segonwebBoxX2,
-    elements.segonwebBoxY2,
-  ];
-  const hasBox = boxInputs.every((input) => input.value.trim() !== "");
-  if (requireBox && !hasBox) throw new Error("Set a Box Prompt on the desired Prompt Frame first.");
-  const box = hasBox ? boxInputs.map((input, index) => readRequiredNumber(input, ["X1", "Y1", "X2", "Y2"][index])) : null;
-  if (box) {
-    const image = state.images[promptFrame];
+  const prompts = normalizedJobPrompts(state.segmentationDraft);
+  if (requireBox && prompts.length === 0) throw new Error("Add at least one Box Prompt before saving this object.");
+  const seenFrames = new Set();
+  for (const prompt of prompts) {
+    if (!Number.isInteger(prompt.frame) || prompt.frame < trackingStart || prompt.frame > trackingEnd) {
+      throw new Error(`Prompt frame ${prompt.frame + 1} is outside the Tracking Start/End range.`);
+    }
+    if (seenFrames.has(prompt.frame)) throw new Error(`Duplicate Box Prompts on frame ${prompt.frame + 1}.`);
+    seenFrames.add(prompt.frame);
+    const image = state.images[prompt.frame];
+    const box = prompt.box;
     if (!(0 <= box[0] && box[0] < box[2] && box[2] <= image.width)) {
-      throw new Error("Box X coordinates are outside the prompt image.");
+      throw new Error(`Box X coordinates are outside frame ${prompt.frame + 1}.`);
     }
     if (!(0 <= box[1] && box[1] < box[3] && box[3] <= image.height)) {
-      throw new Error("Box Y coordinates are outside the prompt image.");
+      throw new Error(`Box Y coordinates are outside frame ${prompt.frame + 1}.`);
     }
   }
-  return { id, name, promptFrame, box, trackingStart, trackingEnd };
+  return syncLegacyPromptFields({ id, name, prompts, trackingStart, trackingEnd });
 }
 
 function openSegmentationJobs(objectId = null) {
@@ -2197,17 +2791,21 @@ function newSegmentationObject() {
   render();
 }
 
-function beginSegmentationBox() {
+function beginSegmentationBox(frame = state.index) {
   try {
     const draft = readSegmentationDraft({ requireBox: false });
-    draft.promptFrame = state.index;
-    draft.trackingStart = Math.min(draft.trackingStart, state.index);
-    draft.trackingEnd = Math.max(draft.trackingEnd, state.index);
-    draft.box = null;
+    const promptFrame = Number(frame);
+    if (!Number.isInteger(promptFrame) || promptFrame < 0 || promptFrame >= state.images.length) {
+      throw new Error("The prompt frame is outside the image sequence.");
+    }
+    draft.trackingStart = Math.min(draft.trackingStart, promptFrame);
+    draft.trackingEnd = Math.max(draft.trackingEnd, promptFrame);
     state.segmentationDraft = draft;
-    state.segmentationBoxMode = { frame: state.index, firstPoint: null, hoverPoint: null };
+    state.index = promptFrame;
+    state.segmentationBoxMode = { frame: promptFrame, firstPoint: null, hoverPoint: null };
     elements.segonwebJobsDialog.close();
-    setStatus(`Obj ${draft.id}: click the top-left and bottom-right corners on frame ${state.index + 1}.`);
+    updateImageUi();
+    setStatus(`Obj ${draft.id}: click two opposite corners on frame ${promptFrame + 1}. Existing prompt on this frame will be replaced.`);
     elements.canvas.focus();
     render();
   } catch (error) {
@@ -2226,7 +2824,7 @@ function saveSegmentationObject() {
     setSegmentationObjectNames();
     syncSegmentationJobDialog();
     setStatus(
-      `Saved Obj ${draft.id}: prompt frame ${draft.promptFrame + 1}, tracking ${draft.trackingStart + 1}-${draft.trackingEnd + 1}.`,
+      `Saved Obj ${draft.id}: ${draft.prompts.length} prompt(s), tracking ${draft.trackingStart + 1}-${draft.trackingEnd + 1}.`,
     );
     render();
   } catch (error) {
@@ -2393,11 +2991,16 @@ async function importSegmentationResult(file) {
     }
     const imported = decodedMasks.map((mask, index) => ({ image: state.images[index], mask }));
     await applyImportedMasks(imported, { mode: "replace" });
-    state.segmentationJobs = manifest.objects.map((object) => ({
+    state.segmentationJobs = manifest.objects.map((object) => cloneSegmentationJob({
       id: object.id,
       name: object.name,
       promptFrame: object.prompt_frame,
       box: object.box.slice(),
+      prompts: object.prompts.map((prompt) => ({
+        type: prompt.type,
+        frame: prompt.frame,
+        box: prompt.box.slice(),
+      })),
       trackingStart: object.tracking_start,
       trackingEnd: object.tracking_end,
     }));
@@ -2597,7 +3200,10 @@ async function prepareImageSequence(
   }
 
   state.images = prepared;
+  state.bulkUndo = [];
+  state.bulkRedo = [];
   state.segmentationJobs = [];
+  state.objectNames = Array.from({ length: 21 }, (_, label) => label === 0 ? "" : `Object ${label}`);
   state.segmentationDraft = null;
   state.segmentationBoxMode = null;
   setSegmentationObjectNames();
@@ -2756,10 +3362,86 @@ async function prepareNiftiFile(file) {
   }
 }
 
+async function decodeTiffSources(files) {
+  const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
+  if (
+    totalBytes > 512 * 1024 * 1024 &&
+    !window.confirm(
+      `The selected TIFF data is ${Math.round(totalBytes / 1024 / 1024)} MB.\n\n` +
+        "Decoding may use several times this amount of memory. Continue?",
+    )
+  ) {
+    return null;
+  }
+  const sources = [];
+  let expectedSize = null;
+  for (let fileIndex = 0; fileIndex < files.length; fileIndex += 1) {
+    const file = files[fileIndex];
+    elements.loadingDetail.textContent = `Reading TIFF ${fileIndex + 1} / ${files.length}`;
+    const volume = parseTiffStack(await file.arrayBuffer(), file.name);
+    if (!expectedSize) expectedSize = [volume.width, volume.height];
+    if (volume.width !== expectedSize[0] || volume.height !== expectedSize[1]) {
+      throw new Error(`${file.name} dimensions do not match the first TIFF image.`);
+    }
+    for (let frameIndex = 0; frameIndex < volume.frames.length; frameIndex += 1) {
+      const frame = volume.frames[frameIndex];
+      sources.push({
+        name: files.length === 1
+          ? frame.name
+          : `${file.name.replace(/\.tiff?$/i, "")}_${String(frameIndex + 1).padStart(4, "0")}.png`,
+        width: frame.width,
+        height: frame.height,
+        sourceCanvas: await medicalFrameToCanvas(frame),
+        sourceFormat: "tiff",
+        pixelSpacing: [1, 1],
+        sliceSpacing: 1,
+        volumeOrigin: [0, 0, 0],
+      });
+      if (sources.length % 10 === 0) await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+  }
+  return sources;
+}
+
+async function prepareTiffFiles(files) {
+  if (!files.length || state.loading) return;
+  setLoading(true, "Loading TIFF stack", "Reading TIFF data");
+  try {
+    const ordered = [...files].sort((left, right) => naturalCompare(left.name, right.name));
+    const sources = await decodeTiffSources(ordered);
+    if (!sources) {
+      setStatus("TIFF loading canceled.");
+      return;
+    }
+    await prepareImageSequence(
+      sources,
+      ordered,
+      ordered.length === 1 ? ordered[0].name.replace(/\.tiff?$/i, "") : "TIFF stack",
+      "TIFF slice(s)",
+    );
+  } catch (error) {
+    console.error(error);
+    setStatus(`TIFF loading failed: ${error.message}`);
+    window.alert(`TIFF loading failed.\n\n${error.message}`);
+  } finally {
+    setLoading(false);
+    elements.volumeInput.value = "";
+  }
+}
+
+async function prepareVolumeFile(file) {
+  if (!file) return;
+  if (isTiffFilename(file.name)) await prepareTiffFiles([file]);
+  else await prepareNiftiFile(file);
+}
+
 async function prepareFiles(files) {
   if (state.loading) return;
   const visibleFiles = files.filter((file) => !file.name.startsWith("."));
   const niftiFiles = visibleFiles.filter((file) => isNiftiFilename(file.name));
+  const tiffFiles = visibleFiles
+    .filter((file) => isTiffFilename(file.name))
+    .sort((left, right) => naturalCompare(left.name, right.name));
   const rasterFiles = visibleFiles
     .filter((file) => /\.(jpe?g|png)$/i.test(file.name))
     .sort((left, right) => naturalCompare(left.name, right.name));
@@ -2769,11 +3451,24 @@ async function prepareFiles(files) {
   setLoading(true, "Loading images", `Reading 0 / ${visibleFiles.length}`);
   try {
     if (niftiFiles.length > 0) {
-      if (niftiFiles.length !== 1 || rasterFiles.length > 0 || dicomFiles.length > 0) {
+      if (niftiFiles.length !== 1 || tiffFiles.length > 0 || rasterFiles.length > 0 || dicomFiles.length > 0) {
         throw new Error("Select one NIfTI file by itself, without other image formats.");
       }
       setLoading(false);
       await prepareNiftiFile(niftiFiles[0]);
+      return;
+    }
+    if (tiffFiles.length > 0) {
+      if (rasterFiles.length > 0 || dicomFiles.length > 0) {
+        throw new Error("The selected folder mixes TIFF and other image formats. Use separate folders.");
+      }
+      const sources = await decodeTiffSources(tiffFiles);
+      if (!sources) {
+        setStatus("TIFF loading canceled.");
+        return;
+      }
+      const projectFolder = visibleFiles[0]?.webkitRelativePath?.split("/")[0] || "TIFF stack";
+      await prepareImageSequence(sources, tiffFiles, projectFolder, "TIFF slice(s)");
       return;
     }
     const explicitDicom = dicomFiles.some((file) => /\.dcm$/i.test(file.name));
@@ -2802,7 +3497,7 @@ async function prepareFiles(files) {
       );
       return;
     }
-    throw new Error("No JPG, PNG, DICOM, or NIfTI images were found.");
+    throw new Error("No JPG, PNG, TIFF, DICOM, or NIfTI images were found.");
   } catch (error) {
     console.error(error);
     setStatus(`Image loading failed: ${error.message}`);
@@ -2891,7 +3586,10 @@ async function loadDemo() {
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
   state.images = images;
+  state.bulkUndo = [];
+  state.bulkRedo = [];
   state.segmentationJobs = [];
+  state.objectNames = Array.from({ length: 21 }, (_, label) => label === 0 ? "" : `Object ${label}`);
   state.segmentationDraft = null;
   state.segmentationBoxMode = null;
   setSegmentationObjectNames();
@@ -2931,7 +3629,6 @@ function handlePointerDown(event) {
   if (state.segmentationBoxMode) {
     if (state.segmentationBoxMode.frame !== state.index) {
       state.segmentationBoxMode = { frame: state.index, firstPoint: null, hoverPoint: null };
-      state.segmentationDraft.promptFrame = state.index;
     }
     const point = imagePointerPosition(event, false);
     state.segmentationBoxMode.hoverPoint = point;
@@ -2952,8 +3649,16 @@ function handlePointerDown(event) {
         render();
         return;
       }
-      state.segmentationDraft.box = box;
-      state.segmentationDraft.promptFrame = state.index;
+      const prompts = normalizedJobPrompts(state.segmentationDraft)
+        .filter((prompt) => prompt.frame !== state.index);
+      prompts.push({ type: "box", frame: state.index, box });
+      state.segmentationDraft = syncLegacyPromptFields({
+        ...state.segmentationDraft,
+        prompts,
+        box: null,
+        trackingStart: Math.min(state.segmentationDraft.trackingStart, state.index),
+        trackingEnd: Math.max(state.segmentationDraft.trackingEnd, state.index),
+      });
       state.segmentationBoxMode = null;
       setStatus(`Box Prompt set for Obj ${state.segmentationDraft.id} on frame ${state.index + 1}.`);
       render();
@@ -3247,9 +3952,9 @@ function requestLocalPicker(kind) {
   elements.localFileDontShow.checked = false;
   const isVolume = kind === "volume";
   elements.localFileTitle.textContent = isVolume
-    ? "Open a local NIfTI volume"
+    ? "Open a local NIfTI or TIFF volume"
     : "Open a local image folder";
-  elements.localFileContinueText.textContent = isVolume ? "Open NIfTI" : "Open Folder";
+  elements.localFileContinueText.textContent = isVolume ? "Open Volume" : "Open Folder";
   elements.localFileDialog.showModal();
 }
 
@@ -3338,11 +4043,17 @@ function bindEvents() {
     pendingLocalInput().click();
   });
   elements.folderInput.addEventListener("change", () => prepareFiles([...elements.folderInput.files]));
-  elements.volumeInput.addEventListener("change", () => prepareNiftiFile(elements.volumeInput.files[0]));
+  elements.volumeInput.addEventListener("change", () => prepareVolumeFile(elements.volumeInput.files[0]));
   elements.loadMasks.addEventListener("click", requestMaskImport);
   elements.maskImportCancel.addEventListener("click", () => elements.maskImportDialog.close());
   elements.clearMasksCancel.addEventListener("click", () => elements.clearMasksDialog.close());
   elements.clearMasksConfirm.addEventListener("click", clearAllMasks);
+  elements.labelManagerClose.addEventListener("click", () => elements.labelManagerDialog.close());
+  elements.labelManagerRename.addEventListener("click", renameManagedObject);
+  elements.labelManagerRelabel.addEventListener("click", () => relabelOrMergeManagedObject("relabel"));
+  elements.labelManagerMerge.addEventListener("click", () => relabelOrMergeManagedObject("merge"));
+  elements.labelManagerClear.addEventListener("click", clearManagedObject);
+  elements.projectCheckClose.addEventListener("click", () => elements.projectCheckDialog.close());
   for (const input of elements.maskImportModes) {
     input.addEventListener("change", () => setMaskImportMode(input.value));
   }
@@ -3377,9 +4088,21 @@ function bindEvents() {
   for (const button of elements.modeButtons) {
     button.addEventListener("click", () => setDrawMode(button.dataset.mode));
   }
-  elements.addMask.addEventListener("click", () => commitPaths("add"));
-  elements.eraseMask.addEventListener("click", () => commitPaths("erase"));
-  elements.transferMask.addEventListener("click", transferCurrentLabel);
+  elements.addMask.addEventListener("click", () => {
+    state.currentOperation = "add";
+    updateEditingState();
+    commitPaths("add");
+  });
+  elements.eraseMask.addEventListener("click", () => {
+    state.currentOperation = "erase";
+    updateEditingState();
+    commitPaths("erase");
+  });
+  elements.transferMask.addEventListener("click", () => {
+    state.currentOperation = "transfer";
+    updateEditingState();
+    transferCurrentLabel();
+  });
   elements.undoLine.addEventListener("click", undoLine);
   elements.redoLine.addEventListener("click", redoLine);
   elements.clearLines.addEventListener("click", clearLines);
@@ -3390,6 +4113,7 @@ function bindEvents() {
   elements.toolsClose.addEventListener("click", () => elements.toolsDialog.close());
   elements.toolsPreviousFrame.addEventListener("click", () => switchImage(-1));
   elements.toolsNextFrame.addEventListener("click", () => switchImage(1));
+  elements.checkProject.addEventListener("click", runProjectCheck);
   for (const tab of elements.toolTabs) {
     tab.addEventListener("click", () => selectToolTab(tab.dataset.toolTab));
   }
@@ -3431,14 +4155,43 @@ function bindEvents() {
   );
   elements.exportNifti.addEventListener("click", () => exportLabelVolume("nifti"));
   elements.exportTiff.addEventListener("click", () => exportLabelVolume("tiff"));
+  elements.previewStl.addEventListener("click", openStlPreview);
   elements.exportStl.addEventListener("click", exportStlMeshes);
+  elements.stlPreviewClose.addEventListener("click", closeStlPreview);
+  elements.stlPreviewReset.addEventListener("click", () => state.stlPreview?.resetCamera());
+  elements.stlPreviewDialog.addEventListener("close", () => {
+    if (state.stlPreview) {
+      state.stlPreview.dispose();
+      state.stlPreview = null;
+    }
+  });
+  elements.applyCleanup.addEventListener("click", applyMaskCleanup);
+  elements.applyInterpolation.addEventListener("click", applySliceInterpolation);
+  elements.exportVolumeStatistics.addEventListener("click", exportVolumeStatisticsCsv);
+  elements.exportMenuNifti.addEventListener("click", () => exportLabelVolume("nifti"));
+  elements.exportMenuTiff.addEventListener("click", () => exportLabelVolume("tiff"));
+  elements.exportMenuStatistics.addEventListener("click", exportVolumeStatisticsCsv);
+  elements.exportMenuStl.addEventListener("click", exportStlMeshes);
   elements.exportLabels.addEventListener("click", () => exportSequence("labels"));
   elements.exportOverlays.addEventListener("click", () => exportSequence("overlays"));
   elements.exportProject.addEventListener("click", exportProjectZip);
-  elements.segonwebJobs.addEventListener("click", () => openSegmentationJobs());
+  for (const button of elements.exportMenu.querySelectorAll("button")) {
+    button.addEventListener("click", () => {
+      elements.exportMenu.open = false;
+    });
+  }
+  elements.segonwebWorkflow.addEventListener("click", () => {
+    updateSegonwebWorkflowSummary();
+    if (!elements.segonwebWorkflowDialog.open) elements.segonwebWorkflowDialog.showModal();
+  });
+  elements.segonwebWorkflowClose.addEventListener("click", () => elements.segonwebWorkflowDialog.close());
+  elements.segonwebJobs.addEventListener("click", () => {
+    elements.segonwebWorkflowDialog.close();
+    openSegmentationJobs();
+  });
   elements.segonwebJobsClose.addEventListener("click", () => elements.segonwebJobsDialog.close());
   elements.segonwebNewObject.addEventListener("click", newSegmentationObject);
-  elements.segonwebSetBox.addEventListener("click", beginSegmentationBox);
+  elements.segonwebSetBox.addEventListener("click", () => beginSegmentationBox());
   elements.segonwebPreviousFrame.addEventListener("click", () => switchImage(-1));
   elements.segonwebNextFrame.addEventListener("click", () => switchImage(1));
   elements.segonwebSetStart.addEventListener("click", () => captureSegmentationRangeBoundary("start"));
@@ -3451,8 +4204,14 @@ function bindEvents() {
     syncSegmentationJobDialog();
     render();
   });
-  elements.exportSegonweb.addEventListener("click", exportSegmentationJob);
-  elements.importSegonweb.addEventListener("click", () => elements.segonwebResultInput.click());
+  elements.exportSegonweb.addEventListener("click", () => {
+    elements.segonwebWorkflowDialog.close();
+    exportSegmentationJob();
+  });
+  elements.importSegonweb.addEventListener("click", () => {
+    elements.segonwebWorkflowDialog.close();
+    elements.segonwebResultInput.click();
+  });
   elements.segonwebResultInput.addEventListener("change", () =>
     importSegmentationResult(elements.segonwebResultInput.files[0]),
   );

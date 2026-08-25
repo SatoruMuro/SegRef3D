@@ -36,30 +36,91 @@ class FakeLogit:
 
 
 class FakePredictor:
+    def __init__(self):
+        self.prompt_calls = []
+
     def init_state(self, video_path):
         paths = sorted(Path(video_path).glob("*.jpg"), key=lambda path: int(path.stem))
-        return {"count": len(paths), "prompt_frame": None, "obj_id": None, "box": None}
+        return {"count": len(paths), "video_path": str(video_path), "prompts": [], "obj_id": None}
 
     def reset_state(self, state):
         return None
 
     def add_new_points_or_box(self, *, inference_state, frame_idx, obj_id, box):
-        inference_state.update(prompt_frame=int(frame_idx), obj_id=int(obj_id), box=np.asarray(box, dtype=int))
-        return frame_idx, [obj_id], [self._mask(inference_state)]
+        prompt = {"frame": int(frame_idx), "box": np.asarray(box, dtype=int)}
+        inference_state["prompts"].append(prompt)
+        inference_state["obj_id"] = int(obj_id)
+        self.prompt_calls.append({
+            "video_path": inference_state["video_path"],
+            "frame": prompt["frame"],
+            "obj_id": int(obj_id),
+            "box": prompt["box"].tolist(),
+        })
+        return frame_idx, [obj_id], [self._mask(prompt["box"])]
 
     def propagate_in_video(self, state):
-        for frame_idx in range(state["prompt_frame"], state["count"]):
-            yield frame_idx, [state["obj_id"]], [self._mask(state)]
+        prompts = sorted(state["prompts"], key=lambda prompt: prompt["frame"])
+        for frame_idx in range(prompts[0]["frame"], state["count"]):
+            nearest = min(prompts, key=lambda prompt: abs(prompt["frame"] - frame_idx))
+            yield frame_idx, [state["obj_id"]], [self._mask(nearest["box"])]
 
     @staticmethod
-    def _mask(state):
-        x1, y1, x2, y2 = state["box"]
+    def _mask(box):
+        x1, y1, x2, y2 = box
         mask = np.full((1, 24, 32), -1.0, dtype=np.float32)
         mask[:, y1:y2, x1:x2] = 1.0
         return FakeLogit(mask)
 
 
+class EmptyPropagationPredictor(FakePredictor):
+    def propagate_in_video(self, state):
+        empty = FakeLogit(np.full((1, 24, 32), -1.0, dtype=np.float32))
+        for frame_idx in range(state["count"]):
+            yield frame_idx, [state["obj_id"]], [empty]
+
+
 class SegOnWebBackendTests(unittest.TestCase):
+    def test_prompt_frame_uses_direct_box_mask_even_if_propagation_differs(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            images = []
+            for index in range(3):
+                path = root / f"source{index + 1}.jpg"
+                Image.new("RGB", (32, 24), "black").save(path, "JPEG")
+                images.append({"key": f"{index + 1:04d}", "path": str(path)})
+            input_zip = root / "segonweb_input.zip"
+            result_zip = root / "segref3d_result.zip"
+            create_job_zip(
+                str(input_zip),
+                images,
+                [{
+                    "id": 1,
+                    "name": "Prompt mask",
+                    "prompt_frame": 1,
+                    "box": [4, 5, 12, 14],
+                    "tracking_start": 0,
+                    "tracking_end": 2,
+                }],
+                app_version="test",
+            )
+            process_segmentation_job(
+                str(input_zip),
+                EmptyPropagationPredictor(),
+                work_dir=str(root / "work"),
+                output_zip=str(result_zip),
+                device_name="fake",
+            )
+            manifest = validate_result_zip(str(result_zip))
+            import zipfile
+
+            prompt_record = manifest["result"]["masks"][1]
+            with zipfile.ZipFile(result_zip) as archive:
+                with archive.open(prompt_record["archive_path"]) as mask_file:
+                    with Image.open(mask_file) as image:
+                        prompt_mask = np.array(image)
+            self.assertEqual(prompt_mask[6, 5], 1)
+            self.assertEqual(prompt_mask[4, 5], 0)
+
     def test_multiple_objects_and_partial_ranges(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -112,6 +173,55 @@ class SegOnWebBackendTests(unittest.TestCase):
             self.assertEqual(masks[2][10, 10], 3)
             self.assertEqual(masks[3][4, 4], 1)
             self.assertEqual(masks[4][10, 10], 3)
+
+    def test_multiple_keyframes_are_submitted_in_forward_and_backward_states(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            images = []
+            for index in range(10):
+                path = root / f"source{index + 1}.jpg"
+                Image.new("RGB", (32, 24), (10 + index, 20, 30)).save(path, "JPEG")
+                images.append({"key": f"{index + 1:04d}", "path": str(path)})
+            prompts = [
+                {"type": "box", "frame": 2, "box": [2, 3, 10, 12]},
+                {"type": "box", "frame": 5, "box": [8, 5, 18, 16]},
+                {"type": "box", "frame": 8, "box": [14, 8, 26, 21]},
+            ]
+            objects = [{
+                "id": 1,
+                "name": "Multi",
+                "tracking_start": 0,
+                "tracking_end": 9,
+                "prompts": prompts,
+            }]
+            input_zip = root / "segonweb_input.zip"
+            result_zip = root / "segref3d_result.zip"
+            manifest = create_job_zip(str(input_zip), images, objects, app_version="test")
+            self.assertEqual([prompt["frame"] for prompt in manifest["objects"][0]["prompts"]], [2, 5, 8])
+
+            predictor = FakePredictor()
+            progress = []
+            process_segmentation_job(
+                str(input_zip),
+                predictor,
+                work_dir=str(root / "work"),
+                output_zip=str(result_zip),
+                device_name="fake",
+                progress_callback=progress.append,
+            )
+
+            forward = [call for call in predictor.prompt_calls if "forward" in call["video_path"]]
+            backward = [call for call in predictor.prompt_calls if "reversed" in call["video_path"]]
+            self.assertEqual([call["frame"] for call in forward], [2, 5, 8])
+            self.assertEqual([call["frame"] for call in backward], [1, 4, 7])
+            self.assertTrue(all(call["obj_id"] == 1 for call in predictor.prompt_calls))
+            self.assertEqual([call["box"] for call in forward], [prompt["box"] for prompt in prompts])
+            self.assertEqual([call["box"] for call in backward], [prompt["box"] for prompt in reversed(prompts)])
+            self.assertEqual([item["frame"] for item in progress if item["event"] == "prompt"], [2, 5, 8, 8, 5, 2])
+
+            result_manifest = validate_result_zip(str(result_zip))
+            self.assertEqual(len(result_manifest["objects"][0]["prompts"]), 3)
+            self.assertEqual(result_manifest["images"]["count"], 10)
 
 
 if __name__ == "__main__":

@@ -54,7 +54,8 @@ only for this archive. Every image must have the same dimensions.
       "tracking_start": 40,
       "tracking_end": 140,
       "prompts": [
-        {"type": "box", "frame": 84, "box": [120.0, 180.0, 430.0, 620.0]}
+        {"type": "box", "frame": 84, "box": [120.0, 180.0, 430.0, 620.0]},
+        {"type": "box", "frame": 112, "box": [126.0, 184.0, 438.0, 628.0]}
       ]
     }
   ]
@@ -66,9 +67,10 @@ numbers as one-based values in the GUI. `prompt_frame` must be inside the inclus
 `tracking_start` to `tracking_end` range. Box coordinates use pixel-space
 `[x1, y1, x2, y2]` with an exclusive lower-right edge.
 
-The direct `prompt_frame` and `box` fields define the Phase 1 box workflow. The
-parallel `prompts` list allows future point, multiple-box, and additional-frame
-prompts without changing the archive format.
+The direct `prompt_frame` and `box` fields are legacy compatibility fields and must match
+the first frame-sorted item in `prompts`. Every prompt is validated and submitted to SAM2 as a
+conditioning keyframe for the same object ID. Legacy one-prompt manifests remain valid, so this
+is a backward-compatible extension of `segref3d-segjob-1.0` rather than a new format version.
 
 ## Result ZIP
 

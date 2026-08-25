@@ -280,6 +280,12 @@ https://github.com/SatoruMuro/SegRef3DViewer
 ---
 
 # Update  
+**2026.8.25**
+
+Lite Webの研究workflowを再構成し、**Volume Statistics、Mask Cleanup、Label Manager、slice mask interpolation、TIFF stack import、Three.js 3D preview、Project Check**を追加。Objects panelをtarget選択の中心にし、Seg on Web操作を`Setup → ZIP → Colab → Result`の1つのpanel、各種出力をExport menuへ統合。
+
+Seg on Web jobを、1 objectあたり1 tracking range＋複数box Keyframeへ後方互換拡張。`segref3d-segjob-1.0`を維持しつつ全promptをLite Web／Python validator／Colab backendで検証し、forward/reversed-backwardの両SAM2 stateへ投入。CUDA 12.8上の実SAM2でsingle prompt、2 Keyframe、複数objectのresult ZIP生成まで確認。
+
 **2026.8.24**
 
 SegRef3D source versionを**1.2.4**へ更新。

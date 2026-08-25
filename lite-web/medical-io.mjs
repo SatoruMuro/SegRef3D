@@ -1,4 +1,5 @@
 import * as nifti from "./vendor/nifti-reader.js";
+import UTIF from "./vendor/utif.module.js";
 
 const DICOM_UID = Object.freeze({
   implicitLittle: "1.2.840.10008.1.2",
@@ -240,6 +241,80 @@ function sharedDicomWindow(instances) {
 
 export function isNiftiFilename(name) {
   return /\.nii(?:\.gz)?$/i.test(name);
+}
+
+export function isTiffFilename(name) {
+  return /\.tiff?$/i.test(name);
+}
+
+export function parseTiffStack(input, fileName = "stack.tiff") {
+  const data = ensureArrayBuffer(input);
+  let ifds;
+  try {
+    ifds = UTIF.decode(data);
+  } catch (error) {
+    throw new Error(`${fileName} is not a valid TIFF file: ${error.message}`);
+  }
+  if (!Array.isArray(ifds) || ifds.length === 0) {
+    throw new Error(`${fileName} contains no TIFF image pages.`);
+  }
+  const width = Number(ifds[0].width || ifds[0].t256?.[0]);
+  const height = Number(ifds[0].height || ifds[0].t257?.[0]);
+  if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1) {
+    throw new Error(`${fileName} has invalid TIFF dimensions.`);
+  }
+  const totalPixels = width * height * ifds.length;
+  if (!Number.isSafeInteger(totalPixels) || totalPixels > 300_000_000) {
+    throw new Error(`${fileName} is too large to process safely in this browser.`);
+  }
+  const base = filenameBase(fileName);
+  const frames = ifds.map((ifd, index) => {
+    const pageWidth = Number(ifd.width || ifd.t256?.[0]);
+    const pageHeight = Number(ifd.height || ifd.t257?.[0]);
+    if (pageWidth !== width || pageHeight !== height) {
+      throw new Error(`${fileName} page ${index + 1} dimensions do not match the first page.`);
+    }
+    try {
+      UTIF.decodeImage(data, ifd, ifds);
+    } catch (error) {
+      throw new Error(`${fileName} page ${index + 1} could not be decoded: ${error.message}`);
+    }
+    const rgba = UTIF.toRGBA8(ifd);
+    if (!(rgba instanceof Uint8Array) || rgba.length !== width * height * 4) {
+      throw new Error(`${fileName} page ${index + 1} returned invalid pixel data.`);
+    }
+    const samples = Number(ifd.t277?.[0] || 1);
+    const photometric = Number(ifd.t262?.[0] ?? 1);
+    const color = samples >= 3 || photometric === 2 || photometric === 3 || photometric === 5 || photometric === 6;
+    if (color) {
+      return {
+        name: `${base}_slice${String(index + 1).padStart(4, "0")}.png`,
+        width,
+        height,
+        kind: "rgba",
+        pixels: new Uint8ClampedArray(rgba),
+      };
+    }
+    const pixels = new Uint8ClampedArray(width * height);
+    for (let pixel = 0; pixel < pixels.length; pixel += 1) pixels[pixel] = rgba[pixel * 4];
+    return {
+      name: `${base}_slice${String(index + 1).padStart(4, "0")}.png`,
+      width,
+      height,
+      kind: "gray",
+      pixels,
+    };
+  });
+  return {
+    format: "tiff",
+    name: fileName,
+    width,
+    height,
+    depth: frames.length,
+    spacing: [1, 1, 1],
+    origin: [0, 0, 0],
+    frames,
+  };
 }
 
 export function parseNiftiVolume(input, fileName = "volume.nii") {

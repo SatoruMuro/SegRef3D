@@ -146,21 +146,37 @@ def validate_manifest(manifest: object, expected_kind: str | None = None) -> dic
         _require(object_id not in seen_ids, f"Duplicate object id: {object_id}.")
         seen_ids.add(object_id)
         _require(isinstance(obj.get("name"), str) and obj["name"].strip(), f"{field}.name is missing.")
-        prompt_frame = _integer(obj.get("prompt_frame"), f"{field}.prompt_frame", 0)
         tracking_start = _integer(obj.get("tracking_start"), f"{field}.tracking_start", 0)
         tracking_end = _integer(obj.get("tracking_end"), f"{field}.tracking_end", 0)
         _require(tracking_end < count, f"{field}.tracking_end is outside the image sequence.")
-        _require(tracking_start <= prompt_frame <= tracking_end, f"{field}.prompt_frame must be inside its tracking range.")
-        obj["box"] = _normalize_box(obj.get("box"), f"{field}.box", width, height)
+        _require(tracking_start <= tracking_end, f"{field}.tracking_start must not exceed tracking_end.")
 
         prompts = obj.get("prompts")
-        _require(isinstance(prompts, list) and prompts, f"{field}.prompts must contain the box prompt.")
-        box_prompts = [item for item in prompts if isinstance(item, dict) and item.get("type") == "box"]
-        _require(box_prompts, f"{field}.prompts does not contain a box prompt.")
-        primary = box_prompts[0]
-        _require(primary.get("frame") == prompt_frame, f"{field}.prompts box frame does not match prompt_frame.")
-        primary["box"] = _normalize_box(primary.get("box"), f"{field}.prompts box", width, height)
-        _require(primary["box"] == obj["box"], f"{field}.prompts box does not match box.")
+        _require(isinstance(prompts, list) and prompts, f"{field}.prompts must contain at least one box prompt.")
+        prompt_frames: set[int] = set()
+        normalized_prompts: list[dict] = []
+        for prompt_position, prompt in enumerate(prompts):
+            prompt_field = f"{field}.prompts[{prompt_position}]"
+            _require(isinstance(prompt, dict), f"{prompt_field} must be an object.")
+            _require(prompt.get("type") == "box", f"{prompt_field}.type must be box.")
+            frame = _integer(prompt.get("frame"), f"{prompt_field}.frame", 0)
+            _require(frame < count, f"{prompt_field}.frame is outside the image sequence.")
+            _require(tracking_start <= frame <= tracking_end, f"{prompt_field}.frame must be inside its tracking range.")
+            _require(frame not in prompt_frames, f"{field}.prompts contains duplicate frame {frame}.")
+            prompt_frames.add(frame)
+            normalized_prompt = copy.deepcopy(prompt)
+            normalized_prompt["type"] = "box"
+            normalized_prompt["frame"] = frame
+            normalized_prompt["box"] = _normalize_box(prompt.get("box"), f"{prompt_field}.box", width, height)
+            normalized_prompts.append(normalized_prompt)
+        normalized_prompts.sort(key=lambda prompt: prompt["frame"])
+
+        primary = normalized_prompts[0]
+        prompt_frame = _integer(obj.get("prompt_frame"), f"{field}.prompt_frame", 0)
+        obj["box"] = _normalize_box(obj.get("box"), f"{field}.box", width, height)
+        _require(primary["frame"] == prompt_frame, f"{field}.prompt_frame must match prompts[0].frame.")
+        _require(primary["box"] == obj["box"], f"{field}.box must match prompts[0].box.")
+        obj["prompts"] = normalized_prompts
 
     if kind == RESULT_KIND:
         result = normalized.get("result")
@@ -203,16 +219,32 @@ def make_manifest(
 
     normalized_objects = []
     for obj in objects:
-        box = [float(value) for value in obj["box"]]
-        prompt_frame = int(obj["prompt_frame"])
+        if "prompts" in obj:
+            source_prompts = obj["prompts"]
+        else:
+            source_prompts = [{
+                "type": "box",
+                "frame": int(obj["prompt_frame"]),
+                "box": [float(value) for value in obj["box"]],
+            }]
+        prompts = [
+            {
+                "type": str(prompt.get("type") or "box"),
+                "frame": int(prompt["frame"]),
+                "box": [float(value) for value in prompt["box"]],
+            }
+            for prompt in source_prompts
+        ]
+        prompts.sort(key=lambda prompt: prompt["frame"])
+        primary = prompts[0] if prompts else {}
         normalized_objects.append({
             "id": int(obj["id"]),
             "name": str(obj.get("name") or f"Object {obj['id']}").strip(),
-            "prompt_frame": prompt_frame,
-            "box": box,
+            "prompt_frame": primary.get("frame"),
+            "box": copy.deepcopy(primary.get("box")),
             "tracking_start": int(obj["tracking_start"]),
             "tracking_end": int(obj["tracking_end"]),
-            "prompts": [{"type": "box", "frame": prompt_frame, "box": box.copy()}],
+            "prompts": prompts,
         })
 
     manifest = {

@@ -4,7 +4,7 @@ Browser-based, local-first image mask editor derived from the non-SAM2 workflow 
 
 Public beta: <https://satorumuro.github.io/SegRef3D/lite-web/>
 
-## Current MVP
+## Current features
 
 - Load naturally sorted JPG/PNG image folders
 - Load DICOM folders with `.dcm` or extensionless files
@@ -23,14 +23,25 @@ Public beta: <https://satorumuro.github.io/SegRef3D/lite-web/>
 - Browser autosave with IndexedDB
 - Load grayscale label PNG sequences with Replace/Merge modes and clear all project masks
 - Export and restore Project ZIP files containing label masks and editor settings
-- Configure multiple SegOnWeb jobs with an object name, Box Prompt, Prompt Frame, and Tracking Range
+- Use the Objects panel as the current-target selector, with visibility, rename, relabel, merge,
+  and object-only clear actions
+- Configure one tracking range and multiple box-prompt keyframes per Seg on Web object
 - Export `segonweb_input.zip` and import the complete `segref3d_result.zip` returned by Colab
 - Plain wheel image navigation, Ctrl/Command+wheel zoom, Shift+wheel horizontal pan
 - Middle-button drag and WASD/arrow-key canvas pan
 - Label visibility controls
 - Label PNG and visible-overlay PNG sequence export as ZIP
 - NIfTI label-volume and multi-page TIFF stack export
+- Multi-page TIFF and naturally sorted TIFF-folder import for 8-bit grayscale, 16-bit grayscale,
+  and RGB data
 - 1x/5x/10x signed-distance slice interpolation and binary STL export
+- Editable signed-distance interpolation between two labeled key slices
+- Mask Cleanup for the current frame, a frame range, or all frames: Fill Holes, Remove Small
+  Islands, Keep Largest Component, Smooth Boundary, Dilate, and Erode
+- Per-object Volume Statistics with voxel count, calibrated mm³/cm³, occupied range, and CSV export
+- Shared-mesh Three.js STL preview with rotate, pan, zoom, camera reset, visibility, and opacity
+- Project Check for dimensions, spacing, labels, isolated components, numbered-frame gaps, and
+  Seg on Web prompt/range validity
 - Responsive desktop/mobile layout and offline cache
 
 All Lite Web image processing happens locally in the browser. Seg on Web is a separate Google
@@ -64,14 +75,25 @@ currently rejected with a clear error instead of being rendered incorrectly.
 
 ### Seg on Web workflow
 
-1. Load the image sequence and open **Batch Jobs**.
-2. Keep **Batch Jobs** open, move through the sequence with the mouse wheel or F/R, and use
-   **Use current** to capture the Tracking Start/End frames.
-3. Choose **Set Box on Canvas** and use the crosshair guides to set each object's Box Prompt.
-4. Download `segonweb_input.zip` with **Export SegOnWeb**.
-5. Open **Seg on Web**, run all cells, and upload that one ZIP at the first upload cell.
-6. Leave the notebook running, then download `segref3d_result.zip` and open it with **Import Result**.
-7. Refine the returned masks and continue to volume or STL export.
+1. Load an image sequence in SegRef3D Lite Web.
+2. Open **Seg on Web > AI Tracking Setup**.
+3. Define the tracking range for each object.
+4. Move to useful keyframes and add one or more box prompts with **Add Box Prompt Here**.
+5. Return to **Seg on Web** and choose **Create Input ZIP**.
+6. Choose **Open Seg on Web**, run all Colab cells, and upload the ZIP in the first upload cell.
+7. Download the generated `segref3d_result.zip`.
+8. Choose **Seg on Web > Import AI Result** in Lite Web.
+9. Refine the returned masks, run **Tools > Check Project**, and export measurements or 3D data.
+
+Each object keeps one inclusive tracking range and a frame-sorted list of box prompts. The
+`segref3d-segjob-1.0` manifest version is retained: `prompt_frame` and `box` mirror the first
+prompt for legacy readers, while `prompts` contains every keyframe. Existing single-prompt jobs
+remain valid.
+
+The Colab backend uses Strategy A. It registers every keyframe for an object into the same SAM2
+inference state before propagation. A second state uses a correctly remapped reversed frame
+sequence for backward propagation. Forward results win where the two directions overlap; later
+objects overwrite earlier objects in the final single-label mask, preserving the existing policy.
 
 The result ZIP can restore its working JPG sequence when no images are loaded. When the source
 sequence is already open, Lite Web verifies frame count, order, dimensions, and filenames before
@@ -91,8 +113,9 @@ Run tests with Node.js 22 or newer:
 node --test "lite-web/tests/*.test.mjs"
 ```
 
-## Planned expansion
+## Browser limits
 
-- TIFF volume import
-- Three.js STL preview
-- Volume statistics per object as CSV
+All processing is local except the explicitly uploaded Seg on Web ZIP. Very large TIFF stacks,
+all-frame cleanup, interpolation, and mesh generation can require substantial browser memory.
+Lite Web warns before unusually large TIFF imports and uses progress states and yielded processing
+for long operations. Use the Windows build for datasets that exceed the browser's available memory.
