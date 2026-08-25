@@ -1126,7 +1126,12 @@ function setDrawMode(mode) {
     button.classList.toggle("selected", button.dataset.mode === mode);
   }
   updateEditingState();
-  setStatus(`${mode[0].toUpperCase()}${mode.slice(1)} drawing mode.`);
+  const label = `${mode[0].toUpperCase()}${mode.slice(1)}`;
+  setStatus(
+    mode === "free"
+      ? `${label} drawing mode.`
+      : `${label} drawing mode. Left-click points, then right-click the final point to close.`,
+  );
 }
 
 function setAutoApplyMode(mode, { announce = true } = {}) {
@@ -3621,6 +3626,29 @@ function handlePointerDown(event) {
     elements.canvas.setPointerCapture(event.pointerId);
     return;
   }
+  if (event.button === 2) {
+    event.preventDefault();
+    if (
+      state.drawMode === "free" ||
+      state.segmentationBoxMode ||
+      state.rgbPickMode ||
+      state.calibrationMode ||
+      image.activePath.length === 0
+    ) {
+      return;
+    }
+    const rawPoint = screenToImage(local.x, local.y, state.viewport);
+    if (!pointInsideImage(rawPoint, image.width, image.height)) return;
+    elements.canvas.focus();
+    const point = imagePointerPosition(event, state.drawMode === "snap");
+    const previous = image.activePath.at(-1);
+    if (!previous || previous.x !== point.x || previous.y !== point.y) {
+      image.activePath.push(point);
+      image.pathRedo.length = 0;
+    }
+    finalizeActivePath();
+    return;
+  }
   if (event.button !== 0) return;
   const rawPoint = screenToImage(local.x, local.y, state.viewport);
   if (!pointInsideImage(rawPoint, image.width, image.height)) return;
@@ -4222,12 +4250,6 @@ function bindEvents() {
   elements.canvas.addEventListener("pointerleave", handlePointerLeave);
   elements.canvas.addEventListener("pointerup", handlePointerUp);
   elements.canvas.addEventListener("pointercancel", handlePointerUp);
-  elements.canvas.addEventListener("dblclick", (event) => {
-    if (state.drawMode !== "free") {
-      event.preventDefault();
-      finalizeActivePath();
-    }
-  });
   elements.canvas.addEventListener("wheel", handleWheel, { passive: false });
   elements.canvas.addEventListener("contextmenu", (event) => event.preventDefault());
   document.addEventListener("keydown", handleKeyDown, { capture: true });
