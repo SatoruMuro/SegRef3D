@@ -44,8 +44,21 @@ Public beta: <https://satorumuro.github.io/SegRef3D/lite-web/>
   Seg on Web prompt/range validity
 - Responsive desktop/mobile layout and offline cache
 
-All Lite Web image processing happens locally in the browser. Seg on Web is a separate Google
-Colab workflow where users explicitly upload images for SAM2 segmentation.
+### Local processing and data flow
+
+- Source images loaded into Lite Web are processed locally in the browser and are not uploaded
+  to SegRef3D servers.
+- Mask autosave uses browser-local IndexedDB storage.
+- Label PNG, overlay, Project ZIP, NIfTI, TIFF, CSV, and STL exports are generated locally and
+  downloaded directly to the user's device.
+- Lite Web does not operate an image-upload API, analytics pipeline, or telemetry service.
+
+Seg on Web is the explicit exception to this browser-local workflow. It is a separate Google
+Colab workflow for SAM2 segmentation. The generated `segonweb_input.zip` includes the working
+image sequence and Seg on Web job settings. The user explicitly uploads that ZIP to their own
+Google Colab runtime; SegRef3D does not operate an intermediate image-upload server. Institutional
+research-data or privacy rules may restrict uploading research or medical data to Google Colab,
+so users should confirm that this use is permitted before continuing.
 
 Project ZIP files do not contain the source images. Load the original image folder first, then
 open the Project ZIP from **Load Masks** to restore its masks and editor settings.
@@ -85,6 +98,10 @@ currently rejected with a clear error instead of being rendered incorrectly.
 8. Choose **Seg on Web > Import AI Result** in Lite Web.
 9. Refine the returned masks, run **Tools > Check Project**, and export measurements or 3D data.
 
+Opening Seg on Web displays a confirmation before leaving the browser-local workflow. Creating
+the input ZIP does not upload it: the upload occurs only when the user selects the ZIP in Google
+Colab. The ZIP contains the working image sequence, not only prompt coordinates or job metadata.
+
 Each object keeps one inclusive tracking range and a frame-sorted list of box prompts. The
 `segref3d-segjob-1.0` manifest version is retained: `prompt_frame` and `box` mirror the first
 prompt for legacy readers, while `prompts` contains every keyframe. Existing single-prompt jobs
@@ -115,7 +132,8 @@ node --test "lite-web/tests/*.test.mjs"
 
 ## Browser limits
 
-All processing is local except the explicitly uploaded Seg on Web ZIP. Very large TIFF stacks,
-all-frame cleanup, interpolation, and mesh generation can require substantial browser memory.
-Lite Web warns before unusually large TIFF imports and uses progress states and yielded processing
-for long operations. Use the Windows build for datasets that exceed the browser's available memory.
+Lite Web processing and export are browser-local. Seg on Web is separate and requires the user to
+explicitly upload its image-containing input ZIP to Google Colab. Very large TIFF stacks, all-frame
+cleanup, interpolation, and mesh generation can require substantial browser memory. Lite Web warns
+before unusually large TIFF imports and uses progress states and yielded processing for long
+operations. Use the Windows build for datasets that exceed the browser's available memory.

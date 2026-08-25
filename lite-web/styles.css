@@ -104,6 +104,12 @@ svg {
   box-shadow: 0 20px 60px rgb(28 36 40 / 28%);
 }
 
+.information-dialog {
+  width: min(660px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+}
+
 .local-file-dialog::backdrop {
   background: rgb(32 36 39 / 48%);
 }
@@ -143,6 +149,16 @@ svg {
 
 .destructive-kicker {
   color: #92372f;
+}
+
+.cloud-dialog-icon {
+  border-color: #d8bd72;
+  background: #fff5d8;
+  color: #76520b;
+}
+
+.cloud-dialog-kicker {
+  color: #76520b;
 }
 
 .dialog-kicker {
@@ -193,6 +209,43 @@ svg {
 .destructive-assurance {
   border-left-color: var(--coral);
   background: #fff5f4;
+}
+
+.dialog-exception {
+  border-left-color: #6d7b82;
+}
+
+.cloud-assurance {
+  border-left-color: #c4992e;
+  background: #fffaf0;
+}
+
+.dialog-language-block {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  color: #3c4449;
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.dialog-language-block h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+.dialog-language-block p {
+  margin: 0;
+}
+
+.dialog-language-block p + p {
+  margin-top: 8px;
+}
+
+.information-dialog code,
+.workflow-steps code {
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 0.94em;
 }
 
 .dialog-checkbox {
@@ -2003,6 +2056,7 @@ svg {
 
 .status-message {
   display: flex;
+  flex: 1 1 auto;
   align-items: center;
   gap: 7px;
   min-width: 0;
@@ -2019,6 +2073,58 @@ svg {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.local-processing-status {
+  display: inline-flex;
+  height: 30px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 7px;
+  padding: 2px 9px 2px 5px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--teal-dark);
+  cursor: pointer;
+}
+
+.local-processing-status:hover {
+  background: var(--teal-soft);
+}
+
+.local-processing-icon {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  border-radius: 50%;
+  background: #dff1e6;
+  color: #206640;
+}
+
+.local-processing-icon svg {
+  width: 13px;
+  height: 13px;
+  stroke-width: 2.2;
+}
+
+.local-processing-copy {
+  display: grid;
+  gap: 0;
+  text-align: left;
+  line-height: 1.05;
+}
+
+.local-processing-copy strong {
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.local-processing-copy > span {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 9px;
 }
 
 .image-meta {
@@ -2190,8 +2296,13 @@ svg {
     display: none;
   }
 
+  .local-processing-copy > span {
+    display: none;
+  }
+
   .status-bar {
     justify-content: flex-start;
+    gap: 8px;
   }
 
   .tools-dialog {
@@ -2244,8 +2355,17 @@ svg {
 }
 
 @media (max-width: 470px) {
+  .information-dialog {
+    width: calc(100vw - 20px);
+    max-height: calc(100dvh - 20px);
+  }
+
   .local-file-dialog-content {
     padding: 20px;
+  }
+
+  .local-processing-status {
+    padding-right: 5px;
   }
 
   .local-file-dialog-actions .command-button {

@@ -120,6 +120,10 @@ const elements = {
   segonwebWorkflowDialog: document.querySelector("#segonweb-workflow-dialog"),
   segonwebWorkflowClose: document.querySelector("#segonweb-workflow-close"),
   segonwebWorkflowSummary: document.querySelector("#segonweb-workflow-summary"),
+  segOnWeb: document.querySelector("#seg-on-web"),
+  segonwebWarningDialog: document.querySelector("#segonweb-warning-dialog"),
+  segonwebWarningCancel: document.querySelector("#segonweb-warning-cancel"),
+  segonwebWarningContinue: document.querySelector("#segonweb-warning-continue"),
   labelsPanel: document.querySelector("#labels-panel"),
   labelsToggle: document.querySelector("#labels-toggle"),
   labelsClose: document.querySelector("#labels-close"),
@@ -129,6 +133,9 @@ const elements = {
   autosaveIndicator: document.querySelector("#autosave-indicator"),
   statusText: document.querySelector("#status-text"),
   imageMeta: document.querySelector("#image-meta"),
+  localProcessingStatus: document.querySelector("#local-processing-status"),
+  localProcessingDialog: document.querySelector("#local-processing-dialog"),
+  localProcessingClose: document.querySelector("#local-processing-close"),
   zoomReadout: document.querySelector("#zoom-readout"),
   editingState: document.querySelector("#editing-state"),
   editingObject: document.querySelector("#editing-object"),
@@ -497,7 +504,7 @@ function updateImageUi() {
     ? `${image.name} · ${image.width} × ${image.height}px${
         image.sourceFormat === "dicom" ? " · DICOM" : image.sourceFormat === "nifti" ? " · NIfTI" : image.sourceFormat === "tiff" ? " · TIFF" : ""
       }`
-    : "Local processing · no uploads";
+    : "No image loaded";
   if (image) {
     setStatus(`Editing ${image.name}. Wheel: images · Ctrl+wheel: zoom · middle drag: pan.`);
   }
@@ -3876,6 +3883,8 @@ function handleKeyDown(event) {
     elements.localFileDialog.open ||
     elements.maskImportDialog.open ||
     elements.clearMasksDialog.open ||
+    elements.localProcessingDialog.open ||
+    elements.segonwebWarningDialog.open ||
     editingJobField ||
     editingToolsField
   ) {
@@ -4060,6 +4069,12 @@ async function clearAllMasks() {
 }
 
 function bindEvents() {
+  const returnToSegonwebWorkflow = () => {
+    elements.segonwebWarningDialog.close();
+    updateSegonwebWorkflowSummary();
+    if (!elements.segonwebWorkflowDialog.open) elements.segonwebWorkflowDialog.showModal();
+  };
+
   elements.loadFolder.addEventListener("click", requestLocalFolder);
   elements.emptyLoad.addEventListener("click", requestLocalFolder);
   elements.loadVolume.addEventListener("click", requestLocalVolume);
@@ -4070,6 +4085,10 @@ function bindEvents() {
     elements.localFileDialog.close();
     pendingLocalInput().click();
   });
+  elements.localProcessingStatus.addEventListener("click", () => {
+    if (!elements.localProcessingDialog.open) elements.localProcessingDialog.showModal();
+  });
+  elements.localProcessingClose.addEventListener("click", () => elements.localProcessingDialog.close());
   elements.folderInput.addEventListener("change", () => prepareFiles([...elements.folderInput.files]));
   elements.volumeInput.addEventListener("change", () => prepareVolumeFile(elements.volumeInput.files[0]));
   elements.loadMasks.addEventListener("click", requestMaskImport);
@@ -4213,6 +4232,23 @@ function bindEvents() {
     if (!elements.segonwebWorkflowDialog.open) elements.segonwebWorkflowDialog.showModal();
   });
   elements.segonwebWorkflowClose.addEventListener("click", () => elements.segonwebWorkflowDialog.close());
+  elements.segOnWeb.addEventListener("click", (event) => {
+    event.preventDefault();
+    elements.segonwebWorkflowDialog.close();
+    elements.segonwebWarningContinue.href = elements.segOnWeb.href;
+    if (!elements.segonwebWarningDialog.open) elements.segonwebWarningDialog.showModal();
+  });
+  elements.segonwebWarningCancel.addEventListener("click", returnToSegonwebWorkflow);
+  elements.segonwebWarningDialog.addEventListener("cancel", (event) => {
+    event.preventDefault();
+    returnToSegonwebWorkflow();
+  });
+  elements.segonwebWarningContinue.addEventListener("click", () => {
+    setTimeout(() => {
+      if (elements.segonwebWarningDialog.open) elements.segonwebWarningDialog.close();
+      setStatus("Opening Seg on Web in Google Colab. Upload occurs only when you choose the input ZIP in Colab.");
+    }, 0);
+  });
   elements.segonwebJobs.addEventListener("click", () => {
     elements.segonwebWorkflowDialog.close();
     openSegmentationJobs();

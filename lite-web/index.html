@@ -11,7 +11,7 @@
     <title>SegRef3D Lite Web</title>
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
     <link rel="manifest" href="./manifest.webmanifest" />
-    <link rel="stylesheet" href="./styles.css?v=17" />
+    <link rel="stylesheet" href="./styles.css?v=18" />
   </head>
   <body>
     <svg class="svg-defs" aria-hidden="true">
@@ -302,9 +302,59 @@
           <svg><use href="#i-info"></use></svg>
           <span id="status-text">Load a JPG, PNG, TIFF, DICOM folder, or NIfTI volume to begin.</span>
         </div>
-        <div id="image-meta" class="image-meta">Local processing · no uploads</div>
+        <button
+          id="local-processing-status"
+          class="local-processing-status"
+          type="button"
+          aria-haspopup="dialog"
+          aria-controls="local-processing-dialog"
+          title="How Lite Web handles your images"
+        >
+          <span class="local-processing-icon" aria-hidden="true"><svg><use href="#i-check"></use></svg></span>
+          <span class="local-processing-copy">
+            <strong>Local Processing</strong>
+            <span>Images stay in your browser.</span>
+          </span>
+        </button>
+        <div id="image-meta" class="image-meta">No image loaded</div>
       </footer>
     </div>
+
+    <dialog
+      id="local-processing-dialog"
+      class="local-file-dialog information-dialog"
+      aria-labelledby="local-processing-title"
+    >
+      <div class="local-file-dialog-content">
+        <div class="local-file-dialog-heading">
+          <span class="local-file-dialog-icon" aria-hidden="true">
+            <svg><use href="#i-check"></use></svg>
+          </span>
+          <div>
+            <span class="dialog-kicker">BROWSER-LOCAL WORKFLOW</span>
+            <h2 id="local-processing-title">Local Processing</h2>
+          </div>
+        </div>
+        <div class="local-file-dialog-copy">
+          <p>Images loaded into SegRef3D Lite Web are processed locally in your browser.</p>
+          <p>SegRef3D Lite Web does not upload your source images to SegRef3D servers.</p>
+          <p>Masks and autosave data are stored locally in your browser. Exported files are downloaded directly to your device.</p>
+        </div>
+        <div class="local-file-assurance dialog-exception">
+          <strong>Exception: Seg on Web</strong>
+          <span>Seg on Web uses Google Colab for SAM2 segmentation. You must explicitly upload the generated input ZIP, including the working images, to your own Google Colab runtime.</span>
+        </div>
+        <section class="dialog-language-block" lang="ja" aria-labelledby="local-processing-ja-title">
+          <h3 id="local-processing-ja-title">ローカル処理について</h3>
+          <p>SegRef3D Lite Web に読み込んだ画像は、通常ブラウザ内で処理され、元画像が SegRef3D のサーバーへ自動的にアップロードされることはありません。</p>
+          <p>マスクや自動保存データもブラウザ内に保存され、Exportしたファイルは端末へ直接保存されます。</p>
+          <p><strong>例外：Seg on Web</strong><br />Seg on Web は SAM2 の実行に Google Colab を使用します。作成された入力ZIP（作業用画像を含む）は、ユーザー自身が Google Colab ランタイムへ明示的にアップロードします。</p>
+        </section>
+        <div class="local-file-dialog-actions compact-dialog-actions">
+          <button id="local-processing-close" class="command-button accent" type="button">Close</button>
+        </div>
+      </div>
+    </dialog>
 
     <dialog id="local-file-dialog" class="local-file-dialog" aria-labelledby="local-file-title">
       <div class="local-file-dialog-content">
@@ -480,13 +530,13 @@
           </li>
           <li>
             <span class="workflow-step-number">2</span>
-            <div><strong>Create Input ZIP</strong><span>Images and setup stay local until you upload the ZIP in Colab.</span></div>
+            <div><strong>Create Input ZIP</strong><span><code>segonweb_input.zip</code> includes the working image sequence and Seg on Web job settings. It stays local until you upload it in Colab.</span></div>
             <button id="export-segonweb" class="command-button" type="button" disabled>Create Input ZIP</button>
           </li>
           <li>
             <span class="workflow-step-number">3</span>
             <div><strong>Run SAM2</strong><span>Open the Colab backend and upload the input ZIP.</span></div>
-            <a id="seg-on-web" class="command-button" href="https://satorumuro.github.io/SegRef3D/ColabNotebooks/segonweb.html" target="_blank" rel="noopener noreferrer">
+            <a id="seg-on-web" class="command-button" href="https://satorumuro.github.io/SegRef3D/ColabNotebooks/segonweb.html" target="_blank" rel="noopener noreferrer" aria-label="Open Seg on Web">
               <svg><use href="#i-external"></use></svg><span>Open Seg on Web</span>
             </a>
           </li>
@@ -497,6 +547,48 @@
           </li>
         </ol>
         <input id="segonweb-result-input" class="visually-hidden" type="file" accept="application/zip,.zip" />
+      </div>
+    </dialog>
+
+    <dialog
+      id="segonweb-warning-dialog"
+      class="local-file-dialog information-dialog segonweb-warning-dialog"
+      aria-labelledby="segonweb-warning-title"
+    >
+      <div class="local-file-dialog-content">
+        <div class="local-file-dialog-heading">
+          <span class="local-file-dialog-icon cloud-dialog-icon" aria-hidden="true">
+            <svg><use href="#i-external"></use></svg>
+          </span>
+          <div>
+            <span class="dialog-kicker cloud-dialog-kicker">PROCESSING LOCATION CHANGES</span>
+            <h2 id="segonweb-warning-title">Seg on Web uses Google Colab</h2>
+          </div>
+        </div>
+        <div class="local-file-dialog-copy">
+          <p>SegRef3D Lite Web normally processes images locally in your browser.</p>
+          <p>Seg on Web is different: <code>segonweb_input.zip</code> contains the working image sequence and must be uploaded to your Google Colab runtime for SAM2 processing.</p>
+          <p>Your images are not uploaded to a SegRef3D-operated server.</p>
+        </div>
+        <div class="local-file-assurance cloud-assurance">
+          <strong>Check your institution's policy</strong>
+          <span>Make sure uploading research or medical data to Google Colab is permitted under your institution's research data and privacy policies.</span>
+        </div>
+        <section class="dialog-language-block" lang="ja" aria-labelledby="segonweb-warning-ja-title">
+          <h3 id="segonweb-warning-ja-title">Seg on Web は Google Colab を使用します</h3>
+          <p>SegRef3D Lite Webでは通常、画像はブラウザ内で処理されます。ただし Seg on Web では、作業画像を含む入力ZIPをユーザー自身の Google Colab ランタイムへアップロードする必要があります。</p>
+          <p>画像が SegRef3D の運営するサーバーへアップロードされることはありません。研究データ・医用画像を使用する場合は、所属機関の規定上、Google Colabへのアップロードが許可されていることを確認してください。</p>
+        </section>
+        <div class="local-file-dialog-actions">
+          <button id="segonweb-warning-cancel" class="command-button" type="button">Cancel</button>
+          <a
+            id="segonweb-warning-continue"
+            class="command-button accent"
+            href="#"
+            target="_blank"
+            rel="noopener noreferrer"
+          >Continue to Seg on Web</a>
+        </div>
       </div>
     </dialog>
 
@@ -887,6 +979,6 @@
         if (status) status.textContent = `Application operation failed: ${message}`;
       });
     </script>
-    <script type="module" src="./app.mjs?v=17"></script>
+    <script type="module" src="./app.mjs?v=18"></script>
   </body>
 </html>
