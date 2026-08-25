@@ -15,8 +15,10 @@ Public beta: <https://satorumuro.github.io/SegRef3D/lite-web/>
 - Add, Erase, and Transfer label operations, with optional Auto Add/Erase/Transfer on path completion
 - Separate Undo/Redo histories for drawn lines and committed mask edits
 - Post-load window/level, brightness, and contrast controls
+- Non-modal Image Tools with in-panel frame navigation so the source image remains visible
 - Threshold and clicked-color RGB extraction for the current image or full sequence
 - Pixel and slice-spacing calibration, including two-point reference-line calibration
+- Live crosshair, line, endpoint, and pixel-distance guides while placing a calibration line
 - Desktop-compatible VolInfo CSV import/export with automatic export for DICOM/NIfTI and reference-line calibration
 - Browser autosave with IndexedDB
 - Load grayscale label PNG sequences with Replace/Merge modes and clear all project masks

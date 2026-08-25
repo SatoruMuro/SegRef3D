@@ -147,6 +147,9 @@ const elements = {
   segonwebSaveObject: document.querySelector("#segonweb-save-object"),
   toolsDialog: document.querySelector("#tools-dialog"),
   toolsClose: document.querySelector("#tools-close"),
+  toolsPreviousFrame: document.querySelector("#tools-previous-frame"),
+  toolsNextFrame: document.querySelector("#tools-next-frame"),
+  toolsCurrentFrame: document.querySelector("#tools-current-frame"),
   toolTabs: [...document.querySelectorAll("[data-tool-tab]")],
   toolPanels: [...document.querySelectorAll("[data-tool-panel]")],
   windowCenter: document.querySelector("#window-center"),
@@ -223,6 +226,7 @@ const state = {
   volumeInfoSource: "Default spacing",
   calibrationMode: false,
   calibrationPoints: [],
+  calibrationHoverPoint: null,
   rgbPickMode: false,
   segmentationJobs: [],
   segmentationDraft: null,
@@ -377,6 +381,7 @@ function updateImageUi() {
   updateLabelCounts();
   updateHistoryButtons();
   syncSegmentationCurrentFrame();
+  syncToolsCurrentFrame();
 }
 
 function resizeCanvas({ refit = false } = {}) {
@@ -507,6 +512,45 @@ function render() {
     context.setLineDash([7 / state.viewport.zoom, 5 / state.viewport.zoom]);
     context.stroke();
     context.setLineDash([]);
+  }
+  if (state.calibrationMode && state.calibrationPoints.length === 1) {
+    const start = state.calibrationPoints[0];
+    const hover = state.calibrationHoverPoint || start;
+    const pixelLength = Math.hypot(hover.x - start.x, hover.y - start.y);
+    context.strokeStyle = "rgb(13 98 105 / 62%)";
+    context.lineWidth = 1 / state.viewport.zoom;
+    context.setLineDash([6 / state.viewport.zoom, 5 / state.viewport.zoom]);
+    context.beginPath();
+    context.moveTo(0, hover.y);
+    context.lineTo(image.width, hover.y);
+    context.moveTo(hover.x, 0);
+    context.lineTo(hover.x, image.height);
+    context.stroke();
+    context.setLineDash([]);
+
+    context.strokeStyle = "#0d6269";
+    context.lineWidth = 2 / state.viewport.zoom;
+    context.beginPath();
+    context.moveTo(start.x, start.y);
+    context.lineTo(hover.x, hover.y);
+    context.stroke();
+
+    const radius = 6 / state.viewport.zoom;
+    for (const point of [start, hover]) {
+      context.beginPath();
+      context.moveTo(point.x - radius, point.y);
+      context.lineTo(point.x + radius, point.y);
+      context.moveTo(point.x, point.y - radius);
+      context.lineTo(point.x, point.y + radius);
+      context.stroke();
+    }
+    context.fillStyle = "#0d6269";
+    context.font = `${12 / state.viewport.zoom}px sans-serif`;
+    context.fillText(
+      `${pixelLength.toFixed(1)} px`,
+      (start.x + hover.x) / 2 + 7 / state.viewport.zoom,
+      (start.y + hover.y) / 2 - 7 / state.viewport.zoom,
+    );
   }
   const promptBoxes = state.segmentationJobs
     .filter((job) => job.promptFrame === state.index)
@@ -872,6 +916,12 @@ function switchImage(delta) {
   const nextIndex = clamp(state.index + delta, 0, state.images.length - 1);
   if (nextIndex === state.index) return;
   finalizeActivePath();
+  if (state.calibrationMode) {
+    state.calibrationMode = false;
+    state.calibrationPoints = [];
+    state.calibrationHoverPoint = null;
+    setStatus("Unfinished calibration line canceled before switching images.");
+  }
   state.index = nextIndex;
   if (state.segmentationBoxMode) {
     state.segmentationBoxMode = { frame: nextIndex, firstPoint: null, hoverPoint: null };
@@ -958,6 +1008,7 @@ function beginRgbPicker() {
   state.rgbPickMode = true;
   state.calibrationMode = false;
   state.calibrationPoints = [];
+  state.calibrationHoverPoint = null;
   elements.toolsDialog.close();
   elements.canvas.focus();
   setStatus("Click the image to pick the RGB extraction color.");
@@ -968,6 +1019,7 @@ function beginCalibration() {
   updateCalibrationFromControls();
   state.calibrationMode = true;
   state.calibrationPoints = [];
+  state.calibrationHoverPoint = null;
   state.rgbPickMode = false;
   currentImage().calibrationLine = null;
   elements.toolsDialog.close();
@@ -1179,7 +1231,16 @@ function openImageTools(name = "display") {
   syncDisplayControls();
   syncCalibrationControls();
   syncVolInfoSummary();
-  elements.toolsDialog.showModal();
+  syncToolsCurrentFrame();
+  if (!elements.toolsDialog.open) elements.toolsDialog.show();
+}
+
+function syncToolsCurrentFrame() {
+  if (!elements.toolsCurrentFrame) return;
+  const current = state.images.length > 0 ? state.index + 1 : 0;
+  elements.toolsCurrentFrame.textContent = `${current} / ${state.images.length}`;
+  elements.toolsPreviousFrame.disabled = state.images.length === 0 || state.index === 0;
+  elements.toolsNextFrame.disabled = state.images.length === 0 || state.index === state.images.length - 1;
 }
 
 function canvasToBlob(canvas, type = "image/png", quality) {
@@ -2899,6 +2960,7 @@ function handlePointerDown(event) {
   if (state.calibrationMode) {
     const point = imagePointerPosition(event, false);
     state.calibrationPoints.push(point);
+    state.calibrationHoverPoint = point;
     if (state.calibrationPoints.length === 2) {
       const [start, end] = state.calibrationPoints;
       const pixelLength = Math.hypot(end.x - start.x, end.y - start.y);
@@ -2920,6 +2982,7 @@ function handlePointerDown(event) {
       }
       state.calibrationMode = false;
       state.calibrationPoints = [];
+      state.calibrationHoverPoint = null;
     } else {
       setStatus("Click the second calibration point.");
     }
@@ -2968,6 +3031,14 @@ function handlePointerMove(event) {
     render();
     return;
   }
+  if (state.calibrationMode && state.calibrationPoints.length === 1) {
+    const rawPoint = screenToImage(local.x, local.y, state.viewport);
+    state.calibrationHoverPoint = pointInsideImage(rawPoint, image.width, image.height)
+      ? imagePointerPosition(event, false)
+      : null;
+    render();
+    return;
+  }
   if (!state.pointer.drawing || state.pointer.id !== event.pointerId) return;
   const point = imagePointerPosition(event, false);
   const previous = image.activePath.at(-1);
@@ -2978,9 +3049,17 @@ function handlePointerMove(event) {
 }
 
 function handlePointerLeave() {
-  if (!state.segmentationBoxMode?.hoverPoint || state.pointer.drawing || state.pointer.panning) return;
-  state.segmentationBoxMode.hoverPoint = null;
-  render();
+  if (state.pointer.drawing || state.pointer.panning) return;
+  let changed = false;
+  if (state.segmentationBoxMode?.hoverPoint) {
+    state.segmentationBoxMode.hoverPoint = null;
+    changed = true;
+  }
+  if (state.calibrationHoverPoint) {
+    state.calibrationHoverPoint = null;
+    changed = true;
+  }
+  if (changed) render();
 }
 
 function handlePointerUp(event) {
@@ -3042,12 +3121,16 @@ function handleKeyDown(event) {
     elements.segonwebJobsDialog.open &&
     elements.segonwebJobsDialog.contains(event.target) &&
     event.target.closest?.("input, select, button");
+  const editingToolsField =
+    elements.toolsDialog.open &&
+    elements.toolsDialog.contains(event.target) &&
+    event.target.closest?.("input, select, button");
   if (
     elements.localFileDialog.open ||
     elements.maskImportDialog.open ||
     elements.clearMasksDialog.open ||
-    elements.toolsDialog.open ||
-    editingJobField
+    editingJobField ||
+    editingToolsField
   ) {
     return;
   }
@@ -3059,6 +3142,15 @@ function handleKeyDown(event) {
   if (key === "Escape" && state.segmentationBoxMode) {
     state.segmentationBoxMode = null;
     setStatus("Box Prompt canceled.");
+    render();
+    event.preventDefault();
+    return;
+  }
+  if (key === "Escape" && state.calibrationMode) {
+    state.calibrationMode = false;
+    state.calibrationPoints = [];
+    state.calibrationHoverPoint = null;
+    setStatus("Calibration line canceled.");
     render();
     event.preventDefault();
     return;
@@ -3282,6 +3374,8 @@ function bindEvents() {
   elements.clearMasks.addEventListener("click", requestClearAllMasks);
   elements.imageTools.addEventListener("click", () => openImageTools("display"));
   elements.toolsClose.addEventListener("click", () => elements.toolsDialog.close());
+  elements.toolsPreviousFrame.addEventListener("click", () => switchImage(-1));
+  elements.toolsNextFrame.addEventListener("click", () => switchImage(1));
   for (const tab of elements.toolTabs) {
     tab.addEventListener("click", () => selectToolTab(tab.dataset.toolTab));
   }

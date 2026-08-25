@@ -1,4 +1,4 @@
-const CACHE_NAME = "segref3d-lite-web-v13";
+const CACHE_NAME = "segref3d-lite-web-v14";
 const APP_FILES = [
   "./",
   "./index.html",

@@ -337,6 +337,18 @@ svg {
   max-height: min(760px, calc(100dvh - 34px));
 }
 
+#tools-dialog[open] {
+  position: fixed;
+  z-index: 1000;
+  inset: 158px 16px auto auto;
+  max-height: min(760px, calc(100dvh - 174px));
+  margin: 0;
+}
+
+#tools-dialog[open] .tools-dialog-shell {
+  max-height: min(760px, calc(100dvh - 176px));
+}
+
 .segonweb-jobs-dialog {
   width: min(860px, calc(100vw - 32px));
 }
@@ -583,6 +595,37 @@ svg {
 .tools-dialog-header h2 {
   margin: 0;
   font-size: 19px;
+}
+
+.tools-dialog-header-actions,
+.tools-frame-navigation {
+  display: flex;
+  align-items: center;
+}
+
+.tools-dialog-header-actions {
+  gap: 12px;
+}
+
+.tools-frame-navigation {
+  gap: 7px;
+}
+
+.tools-frame-navigation span {
+  min-width: 86px;
+  color: var(--muted);
+  font-size: 11px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.tools-frame-navigation strong {
+  color: var(--ink);
+}
+
+.tools-frame-navigation .icon-button {
+  width: 30px;
+  height: 30px;
 }
 
 .tools-tabs {
@@ -1583,12 +1626,25 @@ svg {
     max-height: calc(100dvh - 20px);
   }
 
+  #tools-dialog[open] {
+    inset: 10px;
+    width: auto;
+    max-height: calc(100dvh - 20px);
+  }
+
   .tools-dialog-shell {
     max-height: calc(100dvh - 22px);
   }
 
   .tools-dialog-header {
+    flex-wrap: wrap;
+    gap: 12px;
     padding: 16px;
+  }
+
+  .tools-dialog-header-actions {
+    width: 100%;
+    justify-content: space-between;
   }
 
   .tools-tabs {

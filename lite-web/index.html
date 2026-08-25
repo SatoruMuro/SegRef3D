@@ -513,9 +513,20 @@
             <span class="dialog-kicker">IMAGE AND VOLUME TOOLS</span>
             <h2 id="tools-title">Image Tools</h2>
           </div>
-          <button id="tools-close" class="icon-button" type="button" title="Close image tools">
-            <svg><use href="#i-close"></use></svg>
-          </button>
+          <div class="tools-dialog-header-actions">
+            <div class="tools-frame-navigation" aria-label="Image Tools frame navigation">
+              <button id="tools-previous-frame" class="icon-button" type="button" title="Previous frame">
+                <svg><use href="#i-chevron-left"></use></svg>
+              </button>
+              <span>Frame <strong id="tools-current-frame">0 / 0</strong></span>
+              <button id="tools-next-frame" class="icon-button" type="button" title="Next frame">
+                <svg><use href="#i-chevron-right"></use></svg>
+              </button>
+            </div>
+            <button id="tools-close" class="icon-button" type="button" title="Close image tools">
+              <svg><use href="#i-close"></use></svg>
+            </button>
+          </div>
         </header>
 
         <div class="tools-tabs" role="tablist" aria-label="Image tool views">
