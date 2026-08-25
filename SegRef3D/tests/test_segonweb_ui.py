@@ -94,8 +94,6 @@ class SegOnWebUiTests(unittest.TestCase):
 
     def test_export_uses_batch_metadata(self):
         images = self._images()
-        self.window.sam2_enabled = True
-        self.window.sam2_interface = object()
         self.window.image_paths = {record["key"]: record["path"] for record in images}
         self.window.image_sizes = {record["key"]: (32, 24) for record in images}
         self.window.original_image_filenames = {
@@ -120,6 +118,21 @@ class SegOnWebUiTests(unittest.TestCase):
         self.assertEqual(manifest["objects"][0]["prompt_frame"], 1)
         self.assertEqual(manifest["objects"][0]["tracking_start"], 0)
         self.assertEqual(manifest["images"]["files"][0]["original_filename"], "original-0001.png")
+
+    def test_lite_mode_keeps_segonweb_job_tools_enabled(self):
+        for button in self.window.local_sam2_execution_buttons():
+            self.assertFalse(button.isEnabled(), button.text())
+        for button in self.window.segonweb_job_buttons():
+            self.assertTrue(button.isEnabled(), button.text())
+
+        images = self._images()
+        self.window.image_paths = {record["key"]: record["path"] for record in images}
+        self.window.image_sizes = {record["key"]: (32, 24) for record in images}
+        self.window.current_index = 1
+        self.window.set_tracking_start()
+        self.window.set_tracking_end()
+        self.assertEqual(self.window.tracking_start_index, 1)
+        self.assertEqual(self.window.tracking_end_index, 1)
 
     def test_import_restores_images_masks_and_objects(self):
         result_zip = self._result_zip()

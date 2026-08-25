@@ -235,10 +235,25 @@
           <button id="export-project" class="command-button" type="button" disabled>
             <svg><use href="#i-download"></use></svg><span>Project ZIP</span>
           </button>
+          <button id="segonweb-jobs" class="command-button" type="button" title="Edit SegOnWeb batch jobs" disabled>
+            <svg><use href="#i-box"></use></svg><span>Batch Jobs</span>
+          </button>
+          <button id="export-segonweb" class="command-button" type="button" title="Export SegOnWeb input ZIP" disabled>
+            <svg><use href="#i-download"></use></svg><span>Export SegOnWeb</span>
+          </button>
+          <button id="import-segonweb" class="command-button" type="button" title="Import SegOnWeb result ZIP">
+            <svg><use href="#i-layers"></use></svg><span>Import Result</span>
+          </button>
+          <input
+            id="segonweb-result-input"
+            class="visually-hidden"
+            type="file"
+            accept="application/zip,.zip"
+          />
           <a
             id="seg-on-web"
             class="command-button"
-            href="https://satorumuro.github.io/SAM2GUIfor3Drecon/ColabNotebooks/segonweb.html"
+            href="https://satorumuro.github.io/SegRef3D/ColabNotebooks/segonweb.html"
             target="_blank"
             rel="noopener noreferrer"
             title="Open Seg on Web for SAM2 segmentation"
@@ -403,6 +418,76 @@
             <svg><use href="#i-trash"></use></svg><span>Clear Masks</span>
           </button>
         </div>
+      </div>
+    </dialog>
+
+    <dialog id="segonweb-jobs-dialog" class="tools-dialog segonweb-jobs-dialog" aria-labelledby="segonweb-jobs-title">
+      <div class="segonweb-jobs-shell">
+        <header class="tools-dialog-header">
+          <div>
+            <span class="dialog-kicker">SEGONWEB JOB</span>
+            <h2 id="segonweb-jobs-title">Batch Tracking Jobs</h2>
+          </div>
+          <button id="segonweb-jobs-close" class="icon-button" type="button" title="Close batch jobs">
+            <svg><use href="#i-close"></use></svg>
+          </button>
+        </header>
+
+        <div class="segonweb-jobs-body">
+          <div class="segonweb-job-table-wrap">
+            <table class="segonweb-job-table">
+              <thead>
+                <tr><th>Object</th><th>Prompt Frame</th><th>Tracking Range</th><th></th></tr>
+              </thead>
+              <tbody id="segonweb-job-rows"></tbody>
+            </table>
+            <p id="segonweb-job-empty" class="segonweb-job-empty">No batch objects.</p>
+          </div>
+
+          <div class="segonweb-job-editor">
+            <div class="segonweb-field-grid">
+              <label class="compact-field">
+                <span>Object ID</span>
+                <select id="segonweb-object-id"></select>
+              </label>
+              <label class="compact-field segonweb-name-field">
+                <span>Object name</span>
+                <input id="segonweb-object-name" type="text" maxlength="80" />
+              </label>
+              <label class="compact-field">
+                <span>Prompt frame</span>
+                <input id="segonweb-prompt-frame" type="number" min="1" step="1" />
+              </label>
+              <label class="compact-field">
+                <span>Tracking start</span>
+                <input id="segonweb-tracking-start" type="number" min="1" step="1" />
+              </label>
+              <label class="compact-field">
+                <span>Tracking end</span>
+                <input id="segonweb-tracking-end" type="number" min="1" step="1" />
+              </label>
+            </div>
+            <fieldset class="segonweb-box-fields">
+              <legend>Box prompt (pixels)</legend>
+              <label><span>X1</span><input id="segonweb-box-x1" type="number" min="0" step="0.1" /></label>
+              <label><span>Y1</span><input id="segonweb-box-y1" type="number" min="0" step="0.1" /></label>
+              <label><span>X2</span><input id="segonweb-box-x2" type="number" min="0" step="0.1" /></label>
+              <label><span>Y2</span><input id="segonweb-box-y2" type="number" min="0" step="0.1" /></label>
+            </fieldset>
+          </div>
+        </div>
+
+        <footer class="segonweb-job-actions">
+          <button id="segonweb-new-object" class="command-button" type="button" title="Create a new batch object">
+            <svg><use href="#i-plus"></use></svg><span>New</span>
+          </button>
+          <button id="segonweb-set-box" class="command-button" type="button" title="Set Box Prompt on the current frame">
+            <svg><use href="#i-box"></use></svg><span>Set Box on Current Frame</span>
+          </button>
+          <button id="segonweb-save-object" class="command-button accent" type="button" title="Save this batch object">
+            <svg><use href="#i-download"></use></svg><span>Save Object</span>
+          </button>
+        </footer>
       </div>
     </dialog>
 
@@ -591,6 +676,17 @@
 
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
     <script src="./vendor/dicom-parser.min.js"></script>
+    <script>
+      window.addEventListener("error", (event) => {
+        const status = document.querySelector("#status-text");
+        if (status) status.textContent = `Application startup failed: ${event.message}`;
+      });
+      window.addEventListener("unhandledrejection", (event) => {
+        const status = document.querySelector("#status-text");
+        const message = event.reason?.message || String(event.reason || "Unknown error");
+        if (status) status.textContent = `Application operation failed: ${message}`;
+      });
+    </script>
     <script type="module" src="./app.mjs"></script>
   </body>
 </html>

@@ -21,7 +21,8 @@ Public beta: <https://satorumuro.github.io/SegRef3D/lite-web/>
 - Browser autosave with IndexedDB
 - Load grayscale label PNG sequences with Replace/Merge modes and clear all project masks
 - Export and restore Project ZIP files containing label masks and editor settings
-- Open Seg on Web in Colab and import its returned label masks for manual refinement
+- Configure multiple SegOnWeb jobs with an object name, Box Prompt, Prompt Frame, and Tracking Range
+- Export `segonweb_input.zip` and import the complete `segref3d_result.zip` returned by Colab
 - Plain wheel image navigation, Ctrl/Command+wheel zoom, Shift+wheel horizontal pan
 - Middle-button drag and WASD/arrow-key canvas pan
 - Label visibility controls
@@ -61,9 +62,16 @@ currently rejected with a clear error instead of being rendered incorrectly.
 
 ### Seg on Web workflow
 
-Open **Seg on Web** first, upload the image sequence to Google Colab, and run SAM2 to create rough
-label masks. Download the Label mask PNG ZIP, then load it together with the same source images in
-Lite Web and use **Load Masks** to refine the segmentation.
+1. Load the image sequence and open **Batch Jobs**.
+2. Set each object's Box Prompt on its Prompt Frame and choose its Tracking Start/End frames.
+3. Download `segonweb_input.zip` with **Export SegOnWeb**.
+4. Open **Seg on Web**, run all cells, and upload that one ZIP.
+5. Download `segref3d_result.zip` and open it with **Import Result**.
+6. Refine the returned masks and continue to volume or STL export.
+
+The result ZIP can restore its working JPG sequence when no images are loaded. When the source
+sequence is already open, Lite Web verifies frame count, order, dimensions, and filenames before
+replacing masks.
 
 ## Local development
 

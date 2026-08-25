@@ -63,13 +63,14 @@ masks stay on the device and are not uploaded to a server.
 - Window/level, brightness/contrast, reference-line calibration, threshold extraction, and RGB extraction
 - Windows-compatible VolInfo CSV import/export, including automatic export after medical-volume loading and calibration
 - NIfTI/TIFF label-volume export and 1x/5x/10x signed-distance interpolation with STL export
-- Seg on Web link for Colab SAM2, followed by returned label-mask import
+- Multi-object SegOnWeb job setup, job ZIP export, and complete result ZIP restoration
 - Mouse-wheel image switching, zoom, pan, and a responsive touch-friendly layout
 
-The Web Beta does not run SAM2 inside the browser. Use the Seg on Web link to create
-rough label masks in Colab first, then load the returned label PNGs into Lite Web for
-manual refinement. Display, extraction, calibration, label-volume export, and STL generation
-run locally in the browser without uploading the working images.
+The Web Beta does not run SAM2 inside the browser. Configure Box Prompts, Prompt Frames,
+and Tracking Ranges in Lite Web, export `segonweb_input.zip`, process it in the SegOnWeb
+Colab backend, and restore `segref3d_result.zip` with **Import Result**. Display, extraction,
+calibration, label-volume export, and STL generation run locally in the browser. Images are
+uploaded only when the user explicitly sends the job ZIP to Google Colab.
 
 ---
 
@@ -213,8 +214,8 @@ If you do not have a CUDA-compatible GPU, you can still use SegRef3D through a h
 
 ### SegOnWeb Job Workflow
 
-The Phase 1 GPU desktop workflow moves every prompt operation into SegRef3D and uses
-Google Colab only as a SAM2 computation backend:
+The GPU desktop, Lite desktop, and Lite Web workflows move every prompt operation into
+SegRef3D and use Google Colab only as a SAM2 computation backend:
 
 1. Configure each object's Box Prompt, Prompt Frame, and Tracking Range in SegRef3D.
 2. Choose **Extensions > Batch Tracking > Export for SegOnWeb**.
@@ -234,8 +235,8 @@ progress, and returns standard single-label PNG masks with the working JPG seque
 ### 📷 Notes for Web-based Workflow
 
 * Lite Web accepts JPG, PNG, DICOM, and NIfTI input.
-* Open **Seg on Web** first and upload the image sequence to Google Colab for SAM2 segmentation.
-* Download the generated label PNG masks, then load them into Lite Web for manual refinement.
+* Configure object jobs in **Batch Jobs**, then export one `segonweb_input.zip` file.
+* Run SegOnWeb on a Colab GPU and restore the returned `segref3d_result.zip` with **Import Result**.
 * The web version outputs **standard PNG label masks** with the same image size as the original input images.
 
 ### 🔁 Final Integration
@@ -287,6 +288,8 @@ SegRef3D GPU版のBatch Trackingにobject名、Prompt Frame、object別Tracking 
 
 SegOnWebにGradioを使用しないjob backend notebookを追加。既存`SAM2GUIforImgSeqv4_8.ipynb`のSAM2.1 commit、checkpoint、config、box prompt、forward/reversed backward propagation、label PNG処理を維持し、複数object自動処理、進捗表示、result ZIP生成へ入出力部分を置換。
 
+同じBatch Jobs / job ZIP / result ZIPワークフローをSAM2非搭載のWindows Lite版とLite Webにも追加。Lite環境でもpromptを準備してColabへ送り、画像系列・label mask・object情報を一括復元して、そのまま修正・NIfTI/TIFF/STL出力へ進めるよう更新。
+
 **2026.8.21**
 
 Lite Webに**Auto Add / Auto Erase / Auto Transfer**、読み込み後のwindow/level・明るさ・コントラスト調整、基準線キャリブレーション、Threshold/RGB抽出を追加。抽出は現在画像または全画像へAdd/Eraseでき、マスク編集履歴とブラウザ自動保存へ反映。
@@ -295,7 +298,7 @@ Lite WebにラベルマスクのNIfTI／マルチページTIFF書き出しと、
 
 Lite WebにWindows版互換の**VolInfo CSV Import / Export**を追加。DICOM／NIfTI読込時と基準線キャリブレーション完了時に`*_volinf.csv`を自動出力し、SpacingをNIfTI／STL、OriginをNIfTIのsformへ反映。
 
-Lite Webに**Seg on Web**リンクを追加。Google Colabで画像系列をSAM2セグメンテーションし、出力されたラベルPNGをLite Webの`Load Masks`で読み込んで手動修正する一方向ワークフローに対応。
+Lite Webに**Seg on Web**リンクを追加。当初はColab出力のラベルPNGを`Load Masks`で戻す一方向ワークフローとして実装し、1.2.4でjob ZIP/result ZIP方式へ更新。
 
 Lite Webの`Load Masks`に**Replace / Merge**を追加。Mergeでは読み込んだ非ゼロラベルを既存マスクへ重ね、重複部分は読み込んだラベルを優先。全画像のマスク・編集履歴・ブラウザ自動保存を確認付きで削除する`Clear Masks`も追加。
 

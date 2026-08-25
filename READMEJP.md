@@ -43,12 +43,14 @@ SegRef3Dの基本的な操作手順をご覧いただける動画を掲載して
 
 Lite版のマスク編集の主要ワークフローを、Windows、macOS、Linux、iPadOS などのモダンブラウザで利用できます。画像とマスクはサーバーへ送信されず、デバイス内で処理されます。
 
-- JPG/PNG 画像フォルダの読み込みと20オブジェクトのラベル編集
-- Free / Click / Snap 描画、Add / Erase / Transfer、Undo / Redo
-- ブラウザ自動保存とラベルPNG・オーバーレイPNGのZIP出力
-- マウスホイールの画像切り替え、拡大縮小、パン操作、モバイル対応UI
+- JPG/PNG、DICOM、NIfTIの読み込みと20オブジェクトのラベル編集
+- Free / Click / Snap描画、Auto Add / Erase / Transfer、Threshold / RGB抽出、Undo / Redo
+- Window/Level、明るさ・コントラスト、基準線キャリブレーション、VolInfo CSV
+- ラベルPNG、overlay PNG、NIfTI、TIFF、1x/5x/10x補間STLの出力
+- 複数objectのSegOnWeb job設定、`segonweb_input.zip`出力、`segref3d_result.zip`復元
+- ブラウザ自動保存、Project ZIP、マウス/キーボード操作、モバイル対応UI
 
-SAM2、閾値/RGB抽出、NIfTI/TIFF/STL出力、5x/10xスライス補間は現在のWeb Betaには含まれません。これらはWindowsのGPU版/Lite版を利用してください。
+SAM2本体はブラウザ内では動作しません。Lite WebでBox Prompt、Prompt Frame、Tracking Rangeを設定し、明示的にGoogle Colabへjob ZIPをuploadした場合だけ画像が外部へ送信されます。その他の編集・抽出・出力処理はブラウザ内で完結します。
 
 ---
 
@@ -202,13 +204,7 @@ SegRef3D を動かすのに必要なものはすべてアプリケーション�
 
 ## 🖥️ GPU非搭載環境での活用法
 
-CUDA非対応環境でも、以下のように段階的に処理することで SegRef3D を使用可能です：
-
-* Google Colab 上で自動セグメンテーション（SAM2）を実行
-* 生成された正本 PNG マスクをローカル PC の SegRef3D に読み込み
-* ローカル環境でマスクを確認・修正し、STL / NIfTI / 計測用 CSV などを出力
-
-Phase 1のGPU版では、SegRef3D内でobjectごとのBox Prompt、Prompt Frame、Tracking Rangeを設定し、**Export for SegOnWeb**で`segonweb_input.zip`を作成できます。Colabで全セルを実行してZIPを1つuploadすると、複数objectを自動処理した`segref3d_result.zip`が生成されます。SegRef3Dの**Import SegOnWeb Result**で戻すと、そのままmask修正と3D構築へ進めます。Colab側でGradio操作は行いません。
+CUDA非対応環境でも、Windows Lite版またはLite WebでobjectごとのBox Prompt、Prompt Frame、Tracking Rangeを設定し、**Export for SegOnWeb**で`segonweb_input.zip`を作成できます。Colabで全セルを実行してZIPを1つuploadすると、複数objectを自動処理した`segref3d_result.zip`が生成されます。**Import SegOnWeb Result**または**Import Result**で戻すと、そのままmask修正と3D構築へ進めます。Colab側でGradio操作は行いません。
 
 ### 🔗 Webベースのセグメンテーション手順
 
@@ -217,19 +213,19 @@ Phase 1のGPU版では、SegRef3D内でobjectごとのBox Prompt、Prompt Frame�
 
 ### 📷 Web処理用画像の注意点
 
-* Web版は `.jpg` のみ対応
-* SegRef3D で DICOM 画像を読み込むと、自動的に `.jpg` 変換画像も保存されます
-* Web版で出力される正本 PNG マスクは、元画像と同じ画像サイズで保存してください
+* Desktop版とLite Webは作業画像をJPG化し、元の順序・ファイル名・寸法を`manifest.json`へ記録します
+* Colabへuploadするのは、SegRef3Dが生成した`segonweb_input.zip`です
+* Result ZIP読込時に画像枚数・順序・寸法・mask形式を検証し、不一致なら現在のmaskを変更しません
 
 ### 🔁 統合ワークフロー
 
-* Web版で作成した **正本 PNG マスク** を SegRef3D の **Load Masks** から読み込み
-* 正本 PNG は single-channel label image です  
+* `segref3d_result.zip`をDesktop版またはLite Webへ一括で読み込み
+* Result内の正本 PNG は single-channel label image です
   * `0` = background
   * `1–20` = object labels
 * 読み込み後、SegRef3D 上でインタラクティブに修正・3D STL / NIfTI / CSV 出力を実施
 * 旧バージョンで作成した `.svg` マスクも読み込み可能ですが、現在の推奨形式は正本 PNG マスクです
-* GPU が無い場合、SegRef3D 上の自動セグメンテーション機能は無効になります
+* GPU が無い場合、ローカルSAM2実行は無効ですが、SegOnWeb jobの準備・入出力は利用できます
 
 ---
 

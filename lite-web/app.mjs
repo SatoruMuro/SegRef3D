@@ -32,6 +32,11 @@ import {
 import { clearProjectMasks, loadMask, saveMask } from "./storage.mjs";
 import { createZip, parseZip } from "./zip.mjs";
 import {
+  SEGMENTATION_RESULT_KIND,
+  createSegmentationJobManifest,
+  validateSegmentationArchive,
+} from "./segmentation-job.mjs";
+import {
   adjustedRgba,
   hexToRgb,
   rgbAt,
@@ -86,6 +91,10 @@ const elements = {
   exportLabels: document.querySelector("#export-labels"),
   exportOverlays: document.querySelector("#export-overlays"),
   exportProject: document.querySelector("#export-project"),
+  segonwebJobs: document.querySelector("#segonweb-jobs"),
+  exportSegonweb: document.querySelector("#export-segonweb"),
+  importSegonweb: document.querySelector("#import-segonweb"),
+  segonwebResultInput: document.querySelector("#segonweb-result-input"),
   labelsPanel: document.querySelector("#labels-panel"),
   labelsToggle: document.querySelector("#labels-toggle"),
   labelsClose: document.querySelector("#labels-close"),
@@ -115,6 +124,22 @@ const elements = {
   clearMasksCount: document.querySelector("#clear-masks-count"),
   clearMasksCancel: document.querySelector("#clear-masks-cancel"),
   clearMasksConfirm: document.querySelector("#clear-masks-confirm"),
+  segonwebJobsDialog: document.querySelector("#segonweb-jobs-dialog"),
+  segonwebJobsClose: document.querySelector("#segonweb-jobs-close"),
+  segonwebJobRows: document.querySelector("#segonweb-job-rows"),
+  segonwebJobEmpty: document.querySelector("#segonweb-job-empty"),
+  segonwebObjectId: document.querySelector("#segonweb-object-id"),
+  segonwebObjectName: document.querySelector("#segonweb-object-name"),
+  segonwebPromptFrame: document.querySelector("#segonweb-prompt-frame"),
+  segonwebTrackingStart: document.querySelector("#segonweb-tracking-start"),
+  segonwebTrackingEnd: document.querySelector("#segonweb-tracking-end"),
+  segonwebBoxX1: document.querySelector("#segonweb-box-x1"),
+  segonwebBoxY1: document.querySelector("#segonweb-box-y1"),
+  segonwebBoxX2: document.querySelector("#segonweb-box-x2"),
+  segonwebBoxY2: document.querySelector("#segonweb-box-y2"),
+  segonwebNewObject: document.querySelector("#segonweb-new-object"),
+  segonwebSetBox: document.querySelector("#segonweb-set-box"),
+  segonwebSaveObject: document.querySelector("#segonweb-save-object"),
   toolsDialog: document.querySelector("#tools-dialog"),
   toolsClose: document.querySelector("#tools-close"),
   toolTabs: [...document.querySelectorAll("[data-tool-tab]")],
@@ -194,6 +219,9 @@ const state = {
   calibrationMode: false,
   calibrationPoints: [],
   rgbPickMode: false,
+  segmentationJobs: [],
+  segmentationDraft: null,
+  segmentationBoxMode: null,
 };
 
 const context = elements.canvas.getContext("2d", { alpha: false });
@@ -220,6 +248,7 @@ function setLoading(active, title = "Loading images", detail = "") {
   elements.loadingOverlay.hidden = !active;
   elements.loadingTitle.textContent = title;
   elements.loadingDetail.textContent = detail;
+  elements.importSegonweb.disabled = active;
 }
 
 function setSaveState(text, className = "") {
@@ -231,8 +260,10 @@ function initializeLabels() {
   for (let label = 1; label <= 20; label += 1) {
     const targetOption = new Option(`Obj ${label}`, String(label));
     const transferOption = new Option(`Obj ${label}`, String(label));
+    const jobOption = new Option(`Obj ${label}`, String(label));
     elements.targetLabel.add(targetOption);
     elements.transferLabel.add(transferOption);
+    elements.segonwebObjectId.add(jobOption);
 
     const item = document.createElement("div");
     item.className = `label-item${label === 1 ? " target" : ""}`;
@@ -254,6 +285,7 @@ function initializeLabels() {
   }
   elements.targetLabel.value = "1";
   elements.transferLabel.value = "2";
+  elements.segonwebObjectId.value = "1";
 }
 
 function selectTargetLabel(label) {
@@ -303,6 +335,8 @@ function setControlsEnabled(enabled) {
     elements.exportLabels,
     elements.exportOverlays,
     elements.exportProject,
+    elements.segonwebJobs,
+    elements.exportSegonweb,
     ...elements.modeButtons,
   ];
   for (const control of controls) control.disabled = !enabled;
@@ -467,6 +501,39 @@ function render() {
     context.setLineDash([7 / state.viewport.zoom, 5 / state.viewport.zoom]);
     context.stroke();
     context.setLineDash([]);
+  }
+  const promptBoxes = state.segmentationJobs
+    .filter((job) => job.promptFrame === state.index)
+    .map((job) => ({ ...job, draft: false }));
+  if (
+    state.segmentationDraft?.box &&
+    state.segmentationDraft.promptFrame === state.index &&
+    !promptBoxes.some((job) => job.id === state.segmentationDraft.id)
+  ) {
+    promptBoxes.push({ ...state.segmentationDraft, draft: true });
+  }
+  for (const job of promptBoxes) {
+    const [x1, y1, x2, y2] = job.box;
+    context.strokeStyle = job.draft ? "#d9544b" : LABEL_COLORS[job.id] || "#d9544b";
+    context.lineWidth = 2 / state.viewport.zoom;
+    context.setLineDash(job.draft ? [7 / state.viewport.zoom, 5 / state.viewport.zoom] : []);
+    context.strokeRect(x1, y1, x2 - x1, y2 - y1);
+    context.setLineDash([]);
+    context.fillStyle = context.strokeStyle;
+    context.font = `${Math.max(10 / state.viewport.zoom, 12 / state.viewport.zoom)}px sans-serif`;
+    context.fillText(`Obj ${job.id}`, x1 + 3 / state.viewport.zoom, Math.max(12 / state.viewport.zoom, y1 - 4 / state.viewport.zoom));
+  }
+  if (state.segmentationBoxMode?.firstPoint) {
+    const point = state.segmentationBoxMode.firstPoint;
+    const radius = 6 / state.viewport.zoom;
+    context.strokeStyle = "#d9544b";
+    context.lineWidth = 2 / state.viewport.zoom;
+    context.beginPath();
+    context.moveTo(point.x - radius, point.y);
+    context.lineTo(point.x + radius, point.y);
+    context.moveTo(point.x, point.y - radius);
+    context.lineTo(point.x, point.y + radius);
+    context.stroke();
   }
   context.restore();
 
@@ -1588,6 +1655,20 @@ function applyProjectSettings(settings = {}) {
       if (checkbox) checkbox.checked = state.visibleLabels[label];
     }
   }
+  if (Array.isArray(settings.segmentationJobs)) {
+    state.segmentationJobs = settings.segmentationJobs.map((job) => ({
+      id: Number(job.id),
+      name: String(job.name || `Object ${job.id}`),
+      promptFrame: Number(job.promptFrame),
+      box: Array.isArray(job.box) ? job.box.map(Number) : null,
+      trackingStart: Number(job.trackingStart),
+      trackingEnd: Number(job.trackingEnd),
+    }));
+    state.segmentationDraft = state.segmentationJobs.length
+      ? cloneSegmentationJob(state.segmentationJobs[0])
+      : null;
+    setSegmentationObjectNames();
+  }
   updateLabelTargets();
   for (const image of state.images) image.overlayDirty = true;
 }
@@ -1603,6 +1684,23 @@ function validateProjectManifest(manifest) {
     throw new Error(
       `This project expects ${manifest.images.length} source image(s), but ${state.images.length} are loaded.`,
     );
+  }
+  const savedJobs = manifest.settings?.segmentationJobs;
+  if (Array.isArray(savedJobs) && savedJobs.length > 0) {
+    if (savedJobs.some((job) => Number(job.id) > 20)) {
+      throw new Error("A saved SegOnWeb object ID exceeds the Lite Web label limit of 20.");
+    }
+    createSegmentationJobManifest({
+      images: state.images.map((image, index) => ({
+        name: image.name,
+        originalFilename: image.name,
+        workingFilename: `image${String(index + 1).padStart(4, "0")}.jpg`,
+        width: image.width,
+        height: image.height,
+      })),
+      objects: savedJobs,
+      source: { project_name: manifest.projectName || "Imported project" },
+    });
   }
 }
 
@@ -1738,6 +1836,7 @@ async function exportProjectZip() {
         calibration: { ...state.calibration },
         volumeOrigin: state.volumeOrigin.slice(),
         volumeInfoSource: state.volumeInfoSource,
+        segmentationJobs: state.segmentationJobs.map(cloneSegmentationJob),
       },
     };
     const entries = [
@@ -1766,6 +1865,399 @@ async function exportProjectZip() {
     showToast("Project export failed.");
   } finally {
     setLoading(false);
+  }
+}
+
+function blankSegmentationDraft(objectId = state.targetLabel) {
+  return {
+    id: Number(objectId),
+    name: `Object ${Number(objectId)}`,
+    promptFrame: Math.max(0, state.index),
+    box: null,
+    trackingStart: 0,
+    trackingEnd: Math.max(0, state.images.length - 1),
+  };
+}
+
+function cloneSegmentationJob(job) {
+  return { ...job, box: job.box ? job.box.slice() : null };
+}
+
+function segmentationJobById(objectId) {
+  return state.segmentationJobs.find((job) => job.id === Number(objectId)) || null;
+}
+
+function setSegmentationObjectNames() {
+  const names = new Map(state.segmentationJobs.map((job) => [job.id, job.name]));
+  for (let label = 1; label <= 20; label += 1) {
+    const name = names.get(label);
+    const display = name && name !== `Object ${label}` ? `Obj ${label}: ${name}` : `Obj ${label}`;
+    const copy = elements.labelList.querySelector(`[data-label="${label}"] .label-copy strong`);
+    if (copy) copy.textContent = display;
+    const targetOption = elements.targetLabel.querySelector(`option[value="${label}"]`);
+    const transferOption = elements.transferLabel.querySelector(`option[value="${label}"]`);
+    if (targetOption) targetOption.textContent = display;
+    if (transferOption) transferOption.textContent = display;
+  }
+}
+
+function renderSegmentationJobRows() {
+  elements.segonwebJobRows.replaceChildren();
+  const selectedId = state.segmentationDraft?.id;
+  for (const job of state.segmentationJobs) {
+    const row = document.createElement("tr");
+    row.classList.toggle("selected", job.id === selectedId);
+    row.tabIndex = 0;
+    const objectCell = document.createElement("td");
+    objectCell.textContent = `Obj ${job.id}: ${job.name}`;
+    const promptCell = document.createElement("td");
+    promptCell.textContent = String(job.promptFrame + 1);
+    const rangeCell = document.createElement("td");
+    rangeCell.textContent = `${job.trackingStart + 1}-${job.trackingEnd + 1}`;
+    const actionCell = document.createElement("td");
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "icon-button";
+    remove.title = `Delete object ${job.id}`;
+    remove.setAttribute("aria-label", `Delete object ${job.id}`);
+    remove.innerHTML = '<svg><use href="#i-trash"></use></svg>';
+    remove.addEventListener("click", (event) => {
+      event.stopPropagation();
+      state.segmentationJobs = state.segmentationJobs.filter((item) => item.id !== job.id);
+      state.segmentationDraft = blankSegmentationDraft(job.id);
+      setSegmentationObjectNames();
+      syncSegmentationJobDialog();
+      render();
+    });
+    actionCell.append(remove);
+    row.append(objectCell, promptCell, rangeCell, actionCell);
+    const select = () => {
+      state.segmentationDraft = cloneSegmentationJob(job);
+      syncSegmentationJobDialog();
+      render();
+    };
+    row.addEventListener("click", select);
+    row.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") select();
+    });
+    elements.segonwebJobRows.append(row);
+  }
+  elements.segonwebJobEmpty.hidden = state.segmentationJobs.length > 0;
+}
+
+function syncSegmentationJobDialog() {
+  if (!state.segmentationDraft) state.segmentationDraft = blankSegmentationDraft();
+  const draft = state.segmentationDraft;
+  const frameCount = Math.max(1, state.images.length);
+  elements.segonwebObjectId.value = String(draft.id);
+  elements.segonwebObjectName.value = draft.name;
+  for (const input of [
+    elements.segonwebPromptFrame,
+    elements.segonwebTrackingStart,
+    elements.segonwebTrackingEnd,
+  ]) input.max = String(frameCount);
+  elements.segonwebPromptFrame.value = String(draft.promptFrame + 1);
+  elements.segonwebTrackingStart.value = String(draft.trackingStart + 1);
+  elements.segonwebTrackingEnd.value = String(draft.trackingEnd + 1);
+  const boxValues = draft.box || ["", "", "", ""];
+  [
+    elements.segonwebBoxX1,
+    elements.segonwebBoxY1,
+    elements.segonwebBoxX2,
+    elements.segonwebBoxY2,
+  ].forEach((input, index) => {
+    input.value = boxValues[index];
+  });
+  renderSegmentationJobRows();
+}
+
+function readRequiredNumber(input, label) {
+  if (input.value.trim() === "") throw new Error(`${label} is required.`);
+  const value = Number(input.value);
+  if (!Number.isFinite(value)) throw new Error(`${label} is invalid.`);
+  return value;
+}
+
+function readSegmentationDraft({ requireBox = true } = {}) {
+  if (state.images.length === 0) throw new Error("Load images before creating a batch job.");
+  const id = Number(elements.segonwebObjectId.value);
+  const name = elements.segonwebObjectName.value.trim() || `Object ${id}`;
+  const promptFrame = readRequiredNumber(elements.segonwebPromptFrame, "Prompt Frame") - 1;
+  const trackingStart = readRequiredNumber(elements.segonwebTrackingStart, "Tracking Start") - 1;
+  const trackingEnd = readRequiredNumber(elements.segonwebTrackingEnd, "Tracking End") - 1;
+  if (![promptFrame, trackingStart, trackingEnd].every(Number.isInteger)) {
+    throw new Error("Prompt Frame and Tracking Range must be whole numbers.");
+  }
+  if (!(0 <= trackingStart && trackingStart <= promptFrame && promptFrame <= trackingEnd && trackingEnd < state.images.length)) {
+    throw new Error("Prompt Frame must be inside the Tracking Start/End range.");
+  }
+  const boxInputs = [
+    elements.segonwebBoxX1,
+    elements.segonwebBoxY1,
+    elements.segonwebBoxX2,
+    elements.segonwebBoxY2,
+  ];
+  const hasBox = boxInputs.every((input) => input.value.trim() !== "");
+  if (requireBox && !hasBox) throw new Error("Set a Box Prompt on the desired Prompt Frame first.");
+  const box = hasBox ? boxInputs.map((input, index) => readRequiredNumber(input, ["X1", "Y1", "X2", "Y2"][index])) : null;
+  if (box) {
+    const image = state.images[promptFrame];
+    if (!(0 <= box[0] && box[0] < box[2] && box[2] <= image.width)) {
+      throw new Error("Box X coordinates are outside the prompt image.");
+    }
+    if (!(0 <= box[1] && box[1] < box[3] && box[3] <= image.height)) {
+      throw new Error("Box Y coordinates are outside the prompt image.");
+    }
+  }
+  return { id, name, promptFrame, box, trackingStart, trackingEnd };
+}
+
+function openSegmentationJobs(objectId = null) {
+  if (state.images.length === 0 || state.loading) {
+    setStatus("Load images before creating SegOnWeb jobs.");
+    return;
+  }
+  const requestedId = Number(objectId || state.segmentationDraft?.id || state.targetLabel);
+  const existing = segmentationJobById(requestedId);
+  if (!state.segmentationDraft || objectId !== null) {
+    state.segmentationDraft = existing ? cloneSegmentationJob(existing) : blankSegmentationDraft(requestedId);
+  }
+  syncSegmentationJobDialog();
+  elements.segonwebJobsDialog.showModal();
+}
+
+function newSegmentationObject() {
+  const used = new Set(state.segmentationJobs.map((job) => job.id));
+  const nextId = Array.from({ length: 20 }, (_, index) => index + 1).find((id) => !used.has(id));
+  if (!nextId) {
+    setStatus("All 20 object IDs are already registered.");
+    return;
+  }
+  state.segmentationDraft = blankSegmentationDraft(nextId);
+  syncSegmentationJobDialog();
+  render();
+}
+
+function beginSegmentationBox() {
+  try {
+    const draft = readSegmentationDraft({ requireBox: false });
+    draft.promptFrame = state.index;
+    draft.trackingStart = Math.min(draft.trackingStart, state.index);
+    draft.trackingEnd = Math.max(draft.trackingEnd, state.index);
+    draft.box = null;
+    state.segmentationDraft = draft;
+    state.segmentationBoxMode = { frame: state.index, firstPoint: null };
+    elements.segonwebJobsDialog.close();
+    setStatus(`Obj ${draft.id}: click the top-left and bottom-right corners on frame ${state.index + 1}.`);
+    elements.canvas.focus();
+    render();
+  } catch (error) {
+    setStatus(`SegOnWeb job: ${error.message}`);
+  }
+}
+
+function saveSegmentationObject() {
+  try {
+    const draft = readSegmentationDraft();
+    const index = state.segmentationJobs.findIndex((job) => job.id === draft.id);
+    if (index >= 0) state.segmentationJobs[index] = draft;
+    else state.segmentationJobs.push(draft);
+    state.segmentationJobs.sort((left, right) => left.id - right.id);
+    state.segmentationDraft = cloneSegmentationJob(draft);
+    setSegmentationObjectNames();
+    syncSegmentationJobDialog();
+    setStatus(
+      `Saved Obj ${draft.id}: prompt frame ${draft.promptFrame + 1}, tracking ${draft.trackingStart + 1}-${draft.trackingEnd + 1}.`,
+    );
+    render();
+  } catch (error) {
+    setStatus(`SegOnWeb job: ${error.message}`);
+  }
+}
+
+function workingImageJpegBlob(image) {
+  const canvas = document.createElement("canvas");
+  canvas.width = image.width;
+  canvas.height = image.height;
+  const outputContext = canvas.getContext("2d");
+  const pixels = outputContext.createImageData(image.width, image.height);
+  pixels.data.set(image.basePixels);
+  outputContext.putImageData(pixels, 0, 0);
+  return canvasToBlob(canvas, "image/jpeg", 0.95);
+}
+
+async function exportSegmentationJob() {
+  if (state.images.length === 0 || state.loading) return;
+  if (state.segmentationJobs.length === 0) {
+    setStatus("Add at least one Batch Tracking object before export.");
+    openSegmentationJobs();
+    return;
+  }
+  setLoading(true, "Exporting SegOnWeb job", "Validating manifest");
+  try {
+    const manifest = createSegmentationJobManifest({
+      images: state.images.map((image, index) => ({
+        name: image.name,
+        originalFilename: image.name,
+        workingFilename: `image${String(index + 1).padStart(4, "0")}.jpg`,
+        width: image.width,
+        height: image.height,
+      })),
+      objects: state.segmentationJobs,
+      source: {
+        project_name: state.projectName,
+        exported_at: new Date().toISOString(),
+      },
+    });
+    const entries = [{
+      name: "manifest.json",
+      blob: new Blob([JSON.stringify(manifest, null, 2)], { type: "application/json" }),
+    }];
+    for (let index = 0; index < state.images.length; index += 1) {
+      elements.loadingDetail.textContent = `Preparing image ${index + 1} / ${state.images.length}`;
+      entries.push({
+        name: manifest.images.files[index].archive_path,
+        blob: await workingImageJpegBlob(state.images[index]),
+      });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    elements.loadingDetail.textContent = "Creating ZIP";
+    downloadBlob(await createZip(entries), "segonweb_input.zip");
+    setStatus(`Exported SegOnWeb job: ${state.images.length} images, ${state.segmentationJobs.length} object(s).`);
+    showToast("Downloaded segonweb_input.zip");
+  } catch (error) {
+    console.error(error);
+    setStatus(`SegOnWeb export failed: ${error.message}`);
+    window.alert(`SegOnWeb export failed.\n\n${error.message}`);
+  } finally {
+    setLoading(false);
+  }
+}
+
+async function decodeSegmentationResultImages(manifest, entriesByPath) {
+  const sources = [];
+  const files = [];
+  for (let index = 0; index < manifest.images.files.length; index += 1) {
+    const record = manifest.images.files[index];
+    const entry = entriesByPath.get(record.archive_path);
+    elements.loadingDetail.textContent = `Checking result image ${index + 1} / ${manifest.images.count}`;
+    const decoded = await decodeImage(entry.blob, record.archive_path);
+    try {
+      if (decoded.image.naturalWidth !== manifest.images.width || decoded.image.naturalHeight !== manifest.images.height) {
+        throw new Error(`Result image size mismatch: ${record.archive_path}.`);
+      }
+      sources.push({
+        name: record.original_filename,
+        width: decoded.image.naturalWidth,
+        height: decoded.image.naturalHeight,
+        sourceCanvas: imageElementToCanvas(decoded.image),
+        sourceFormat: "raster",
+      });
+      files.push(new File([entry.blob], record.original_filename, { type: "image/jpeg" }));
+    } finally {
+      URL.revokeObjectURL(decoded.url);
+    }
+  }
+  return { sources, files };
+}
+
+function validateCurrentImagesForSegmentationResult(manifest) {
+  if (state.images.length === 0) return;
+  if (state.images.length !== manifest.images.count) {
+    throw new Error(`Image count mismatch: current project has ${state.images.length}, result has ${manifest.images.count}.`);
+  }
+  const expectedOrder = state.images.map((_, index) => String(index + 1).padStart(4, "0"));
+  if (!expectedOrder.every((key, index) => key === manifest.images.order[index])) {
+    throw new Error("Image order mismatch between the current project and SegOnWeb result.");
+  }
+  for (let index = 0; index < state.images.length; index += 1) {
+    const image = state.images[index];
+    const record = manifest.images.files[index];
+    if (image.width !== manifest.images.width || image.height !== manifest.images.height) {
+      throw new Error(`Image size mismatch at frame ${index + 1}.`);
+    }
+    if (image.name && record.original_filename && image.name !== record.original_filename) {
+      throw new Error(`Original filename mismatch at frame ${index + 1}: ${image.name} vs ${record.original_filename}.`);
+    }
+  }
+}
+
+async function decodeSegmentationResultMasks(manifest, entriesByPath) {
+  const allowed = new Set([0, ...manifest.objects.map((object) => object.id)]);
+  const decoded = [];
+  for (let index = 0; index < manifest.result.masks.length; index += 1) {
+    const record = manifest.result.masks[index];
+    elements.loadingDetail.textContent = `Checking result mask ${index + 1} / ${manifest.images.count}`;
+    const mask = await decodeLabelPng(entriesByPath.get(record.archive_path));
+    if (mask.width !== manifest.images.width || mask.height !== manifest.images.height) {
+      throw new Error(`Mask size mismatch: ${record.archive_path}.`);
+    }
+    for (const value of mask.mask) {
+      if (!allowed.has(value)) throw new Error(`${record.archive_path} contains undeclared object ID ${value}.`);
+    }
+    decoded.push(mask.mask);
+  }
+  return decoded;
+}
+
+async function importSegmentationResult(file) {
+  if (!file || state.loading) return;
+  setLoading(true, "Importing SegOnWeb result", "Opening ZIP");
+  try {
+    const entries = await parseZip(file);
+    const { manifest, entriesByPath } = validateSegmentationArchive(entries, SEGMENTATION_RESULT_KIND);
+    if (manifest.objects.some((object) => object.id > 20)) {
+      throw new Error("SegRef3D Lite Web supports object IDs 1-20.");
+    }
+    validateCurrentImagesForSegmentationResult(manifest);
+    const resultImages = await decodeSegmentationResultImages(manifest, entriesByPath);
+    const decodedMasks = await decodeSegmentationResultMasks(manifest, entriesByPath);
+
+    const hasExistingMasks = state.images.some((image) => image.mask.some((value) => value !== 0));
+    if (
+      hasExistingMasks &&
+      !window.confirm("Importing this SegOnWeb result will replace the current label masks. Continue?")
+    ) {
+      setStatus("SegOnWeb result import canceled. Current masks were not changed.");
+      return;
+    }
+
+    if (state.images.length === 0) {
+      const loaded = await prepareImageSequence(
+        resultImages.sources,
+        resultImages.files,
+        manifest.source.project_name || "SegOnWeb result",
+        "SegOnWeb result image(s)",
+        { preserveDimensions: true },
+      );
+      if (!loaded) return;
+    }
+    const imported = decodedMasks.map((mask, index) => ({ image: state.images[index], mask }));
+    await applyImportedMasks(imported, { mode: "replace" });
+    state.segmentationJobs = manifest.objects.map((object) => ({
+      id: object.id,
+      name: object.name,
+      promptFrame: object.prompt_frame,
+      box: object.box.slice(),
+      trackingStart: object.tracking_start,
+      trackingEnd: object.tracking_end,
+    }));
+    state.segmentationDraft = state.segmentationJobs.length
+      ? cloneSegmentationJob(state.segmentationJobs[0])
+      : null;
+    state.segmentationBoxMode = null;
+    setSegmentationObjectNames();
+    updateImageUi();
+    render();
+    setStatus(`Imported SegOnWeb result: ${decodedMasks.length} masks, ${state.segmentationJobs.length} object(s).`);
+    showToast("SegOnWeb result imported.");
+  } catch (error) {
+    console.error(error);
+    setStatus(`SegOnWeb result import failed: ${error.message}`);
+    window.alert(`SegOnWeb result import failed.\n\n${error.message}`);
+  } finally {
+    setLoading(false);
+    elements.segonwebResultInput.value = "";
   }
 }
 
@@ -1847,13 +2339,14 @@ async function prepareImageSequence(
   projectFiles,
   projectName,
   sourceDescription,
-  { autoExportVolInfo = false } = {},
+  { autoExportVolInfo = false, preserveDimensions = false } = {},
 ) {
   if (sources.length === 0) throw new Error("No readable image slices were found.");
   const largeCount = sources.filter(
     (source) => Math.max(source.width, source.height) > 2000,
   ).length;
   const resizeLarge =
+    !preserveDimensions &&
     largeCount > 0 &&
     window.confirm(
       `${largeCount} image(s) are larger than 2000px.\n\nResize their longest side to 1000px for smoother editing?`,
@@ -1869,6 +2362,7 @@ async function prepareImageSequence(
   });
   const uniqueSizes = new Set(dimensions.map(({ width, height }) => `${width}x${height}`));
   const unifyCanvas =
+    !preserveDimensions &&
     uniqueSizes.size > 1 &&
     window.confirm(
       "The images have different dimensions.\n\nPlace them at the center of a shared white canvas?",
@@ -1944,6 +2438,10 @@ async function prepareImageSequence(
   }
 
   state.images = prepared;
+  state.segmentationJobs = [];
+  state.segmentationDraft = null;
+  state.segmentationBoxMode = null;
+  setSegmentationObjectNames();
   state.projectId = projectId;
   state.index = 0;
   state.projectName = projectName;
@@ -2234,6 +2732,10 @@ async function loadDemo() {
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
   state.images = images;
+  state.segmentationJobs = [];
+  state.segmentationDraft = null;
+  state.segmentationBoxMode = null;
+  setSegmentationObjectNames();
   state.projectId = "segref3d-lite-demo-v1";
   state.projectName = "Demo sequence";
   state.index = 0;
@@ -2267,6 +2769,40 @@ function handlePointerDown(event) {
   if (!pointInsideImage(rawPoint, image.width, image.height)) return;
   event.preventDefault();
   elements.canvas.focus();
+  if (state.segmentationBoxMode) {
+    if (state.segmentationBoxMode.frame !== state.index) {
+      state.segmentationBoxMode = { frame: state.index, firstPoint: null };
+      state.segmentationDraft.promptFrame = state.index;
+    }
+    const point = imagePointerPosition(event, false);
+    if (!state.segmentationBoxMode.firstPoint) {
+      state.segmentationBoxMode.firstPoint = point;
+      setStatus("Click the opposite corner of the Box Prompt.");
+    } else {
+      const first = state.segmentationBoxMode.firstPoint;
+      const box = [
+        Math.min(first.x, point.x),
+        Math.min(first.y, point.y),
+        Math.max(first.x, point.x),
+        Math.max(first.y, point.y),
+      ];
+      if (box[2] - box[0] < 1 || box[3] - box[1] < 1) {
+        setStatus("Box Prompt must have a positive width and height.");
+        state.segmentationBoxMode.firstPoint = null;
+        render();
+        return;
+      }
+      state.segmentationDraft.box = box;
+      state.segmentationDraft.promptFrame = state.index;
+      state.segmentationBoxMode = null;
+      setStatus(`Box Prompt set for Obj ${state.segmentationDraft.id} on frame ${state.index + 1}.`);
+      render();
+      setTimeout(() => openSegmentationJobs(), 0);
+      return;
+    }
+    render();
+    return;
+  }
   if (state.rgbPickMode) {
     const color = rgbAt(image.basePixels, image.width, image.height, rawPoint.x, rawPoint.y);
     elements.rgbTarget.value = rgbToHex(color);
@@ -2407,6 +2943,7 @@ function handleKeyDown(event) {
     elements.localFileDialog.open ||
     elements.maskImportDialog.open ||
     elements.clearMasksDialog.open ||
+    elements.segonwebJobsDialog.open ||
     elements.toolsDialog.open
   ) {
     return;
@@ -2415,6 +2952,14 @@ function handleKeyDown(event) {
   const key = event.key;
   const lowerKey = key.toLowerCase();
   const code = event.code;
+
+  if (key === "Escape" && state.segmentationBoxMode) {
+    state.segmentationBoxMode = null;
+    setStatus("Box Prompt canceled.");
+    render();
+    event.preventDefault();
+    return;
+  }
 
   if ((event.ctrlKey || event.metaKey) && (code === "KeyZ" || lowerKey === "z")) {
     event.shiftKey ? redoEdit() : undoEdit();
@@ -2679,6 +3224,23 @@ function bindEvents() {
   elements.exportLabels.addEventListener("click", () => exportSequence("labels"));
   elements.exportOverlays.addEventListener("click", () => exportSequence("overlays"));
   elements.exportProject.addEventListener("click", exportProjectZip);
+  elements.segonwebJobs.addEventListener("click", () => openSegmentationJobs());
+  elements.segonwebJobsClose.addEventListener("click", () => elements.segonwebJobsDialog.close());
+  elements.segonwebNewObject.addEventListener("click", newSegmentationObject);
+  elements.segonwebSetBox.addEventListener("click", beginSegmentationBox);
+  elements.segonwebSaveObject.addEventListener("click", saveSegmentationObject);
+  elements.segonwebObjectId.addEventListener("change", () => {
+    const objectId = Number(elements.segonwebObjectId.value);
+    const existing = segmentationJobById(objectId);
+    state.segmentationDraft = existing ? cloneSegmentationJob(existing) : blankSegmentationDraft(objectId);
+    syncSegmentationJobDialog();
+    render();
+  });
+  elements.exportSegonweb.addEventListener("click", exportSegmentationJob);
+  elements.importSegonweb.addEventListener("click", () => elements.segonwebResultInput.click());
+  elements.segonwebResultInput.addEventListener("change", () =>
+    importSegmentationResult(elements.segonwebResultInput.files[0]),
+  );
   elements.labelsToggle.addEventListener("click", () => elements.labelsPanel.classList.add("open"));
   elements.labelsClose.addEventListener("click", () => elements.labelsPanel.classList.remove("open"));
   elements.canvas.addEventListener("pointerdown", handlePointerDown);

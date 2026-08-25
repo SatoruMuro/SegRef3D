@@ -337,6 +337,173 @@ svg {
   max-height: min(760px, calc(100dvh - 34px));
 }
 
+.segonweb-jobs-dialog {
+  width: min(860px, calc(100vw - 32px));
+}
+
+.segonweb-jobs-shell {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  max-height: min(760px, calc(100dvh - 34px));
+}
+
+.segonweb-jobs-body {
+  min-height: 0;
+  overflow: auto;
+}
+
+.segonweb-job-table-wrap {
+  min-height: 150px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel-muted);
+}
+
+.segonweb-job-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 13px;
+}
+
+.segonweb-job-table th,
+.segonweb-job-table td {
+  padding: 9px 12px;
+  overflow: hidden;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.segonweb-job-table th {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.segonweb-job-table th:last-child,
+.segonweb-job-table td:last-child {
+  width: 48px;
+  padding-inline: 6px;
+  text-align: center;
+}
+
+.segonweb-job-table tbody tr {
+  background: var(--panel);
+  cursor: pointer;
+}
+
+.segonweb-job-table tbody tr:hover,
+.segonweb-job-table tbody tr.selected {
+  background: var(--teal-soft);
+}
+
+.segonweb-job-table .icon-button {
+  width: 30px;
+  height: 30px;
+}
+
+.segonweb-job-empty {
+  margin: 0;
+  padding: 38px 16px;
+  color: var(--muted);
+  text-align: center;
+  font-size: 13px;
+}
+
+.segonweb-job-editor {
+  padding: 18px 22px 20px;
+}
+
+.segonweb-field-grid {
+  display: grid;
+  grid-template-columns: 120px minmax(180px, 1fr) repeat(3, minmax(112px, 0.55fr));
+  gap: 12px;
+}
+
+.segonweb-field-grid .compact-field {
+  display: grid;
+  gap: 5px;
+  align-items: stretch;
+  white-space: normal;
+}
+
+.segonweb-box-fields label {
+  align-items: stretch;
+}
+
+.segonweb-field-grid input,
+.segonweb-field-grid select,
+.segonweb-box-fields input {
+  width: 100%;
+  height: 34px;
+  padding: 0 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  background: var(--panel);
+  color: var(--ink);
+}
+
+.segonweb-box-fields {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(90px, 1fr));
+  gap: 12px;
+  min-width: 0;
+  padding: 0;
+  margin: 18px 0 0;
+  border: 0;
+}
+
+.segonweb-box-fields legend {
+  grid-column: 1 / -1;
+  padding: 0;
+  margin-bottom: -4px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.segonweb-box-fields label {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.segonweb-job-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 14px 22px;
+  border-top: 1px solid var(--line);
+  background: var(--panel-muted);
+}
+
+@media (max-width: 760px) {
+  .segonweb-field-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .segonweb-name-field {
+    grid-column: 1 / -1;
+  }
+
+  .segonweb-box-fields {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .segonweb-job-actions {
+    flex-wrap: wrap;
+  }
+
+  .segonweb-field-grid .compact-field > span:first-child {
+    display: inline;
+  }
+}
+
 .tools-dialog-header {
   display: flex;
   justify-content: space-between;

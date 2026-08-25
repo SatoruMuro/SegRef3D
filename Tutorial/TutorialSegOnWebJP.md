@@ -4,7 +4,7 @@ SegOnWebは、Google ColabのGPUを計算backendとして利用します。Box P
 
 ## 1. SegRef3Dでobjectを設定
 
-1. SegRef3D GPU版で画像系列を読み込みます。
+1. SegRef3D GPU版またはLite版で画像系列を読み込みます。
 2. **Target Object**でobject IDを選びます。
 3. 対象が明瞭な画像へ移動し、**Set Box Prompt**を押します。
 4. 対象を囲むboxを描きます。この画像がPrompt Frameになります。
@@ -38,6 +38,10 @@ SegOnWebは、Google ColabのGPUを計算backendとして利用します。Box P
 4. 既にlabel maskがある場合は、置換確認に同意します。
 
 SegRef3Dは画像系列とmaskを検証してから反映します。画像を開いていない場合は、result ZIP内のJPG系列も自動復元します。読み込んだmaskは新しい`[autosave]` label PNGフォルダへ直ちに保存されます。
+
+### Lite Webでの操作
+
+ブラウザ版も同じmanifest/ZIP形式を使用します。**Batch Jobs**で各objectのpromptとrangeを設定し、**Export SegOnWeb**で出力、Colabの結果を**Import Result**で復元します。jobの準備にはローカルSAM2やNVIDIA GPUは不要です。
 
 ## 5. 修正と3D構築
 

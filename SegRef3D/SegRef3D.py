@@ -1581,20 +1581,25 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         QMessageBox.information(self, "Version Information", version_text)
 
 
-    def local_sam2_buttons(self):
+    def local_sam2_execution_buttons(self):
         return [
             self.btn_prepare_tracking,
+            self.btn_batch_tracking,
+            self.btn_run_tracking,
+            self.btn_run_sam2,
+        ]
+
+
+    def segonweb_job_buttons(self):
+        return [
             self.btn_set_box_prompt,
             self.btn_clear_box,
             self.btn_set_tracking_start,
             self.btn_set_tracking_end,
             self.btn_add_object_prompt,
-            self.btn_batch_tracking,
             self.btn_manage_batch_jobs,
             self.btn_export_segonweb,
             self.btn_import_segonweb_result,
-            self.btn_run_tracking,
-            self.btn_run_sam2,
         ]
 
 
@@ -1607,7 +1612,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             "Use Seg on Web or the GPU build for AI segmentation."
         )
 
-        for btn in self.local_sam2_buttons():
+        for btn in self.local_sam2_execution_buttons():
             try:
                 btn.clicked.disconnect()
             except (TypeError, RuntimeError):
@@ -1616,6 +1621,11 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             btn.setToolTip(message)
             btn.setStyleSheet("color: gray; background-color: lightgray;")
             btn.clicked.connect(lambda _, m=message: self.label_status.setText(f"⚠ {m}"))
+
+        # Job preparation and ZIP exchange do not require local PyTorch/SAM2.
+        for btn in self.segonweb_job_buttons():
+            btn.setEnabled(True)
+            btn.setToolTip("Available without local SAM2 for the Seg on Web workflow.")
 
         # Keep cloud/web AI routes available in the lightweight build.
         for btn in (self.btn_seg_on_web, self.btn_instant3dweb):
@@ -2159,9 +2169,6 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
     
     def start_box_prompt_mode(self):
-        if not self.ensure_local_sam2_available():
-            return
-
         self.box_mode = True
         self.box_points = []
         print("[DEBUG] start_box_prompt_mode called")
@@ -2201,9 +2208,6 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         
     
     def clear_box(self):
-        if not self.ensure_local_sam2_available():
-            return
-
         # ✅ ボックスが表示されていれば削除
         if hasattr(self, "confirmed_box_item") and self.confirmed_box_item:
             try:
@@ -2382,17 +2386,17 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
     
     def set_tracking_start(self):
-        if not self.ensure_local_sam2_available():
+        if not self.image_paths:
+            self.label_status.setText("⚠ Load images before setting the tracking range.")
             return
-
-        self.tracking_start_index = self.current_image_index
+        self.tracking_start_index = self.current_index
         self.label_status.setText(f"Tracking Start set at frame {self.tracking_start_index + 1}")
     
     def set_tracking_end(self):
-        if not self.ensure_local_sam2_available():
+        if not self.image_paths:
+            self.label_status.setText("⚠ Load images before setting the tracking range.")
             return
-
-        self.tracking_end_index = self.current_image_index
+        self.tracking_end_index = self.current_index
         self.label_status.setText(f"Tracking End set at frame {self.tracking_end_index + 1}")
     
     
@@ -2955,8 +2959,6 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
     
     def add_object_prompt_for_batch(self):
-        if not self.ensure_local_sam2_available():
-            return
         try:
             object_data = self._current_batch_prompt_data()
         except ValueError as exc:
@@ -3042,8 +3044,6 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
 
     def show_batch_tracking_jobs(self):
-        if not self.ensure_local_sam2_available():
-            return
         if not self.image_paths:
             self.label_status.setText("⚠ Load images before editing Batch Tracking jobs.")
             return
@@ -3097,8 +3097,6 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
 
     def export_for_segonweb(self):
-        if not self.ensure_local_sam2_available():
-            return
         if not self.image_paths:
             self.label_status.setText("⚠ No images loaded.")
             return
