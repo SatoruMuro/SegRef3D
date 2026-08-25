@@ -30,6 +30,9 @@ class SegOnWebNotebookTests(unittest.TestCase):
         self.assertIn("files.upload", combined)
         self.assertIn("segref3d_result.zip", combined)
         self.assertIn("2b90b9f5ceec907a1c18123530e92e794ad901a4", combined)
+        self.assertIn("files.upload", sources[0])
+        self.assertEqual(combined.count("files.upload"), 1)
+        self.assertLess(combined.index("files.upload"), combined.index("pip uninstall"))
 
 
 if __name__ == "__main__":

@@ -19,7 +19,8 @@ from PyQt6.QtWidgets import QApplication
 
 # sam2pkg/sam2 を直接追加する
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-SAM2_DIR = os.path.join(BASE_DIR, "sam2pkg", "sam2")
+SAM2_PACKAGE_ROOT = os.path.join(BASE_DIR, "sam2pkg")
+SAM2_DIR = os.path.join(SAM2_PACKAGE_ROOT, "sam2")
 
 
 
@@ -59,8 +60,11 @@ class SAM2Interface:
         except Exception as exc:
             raise RuntimeError("GPU runtime diagnostics are unavailable.") from exc
 
-        if SAM2_DIR not in sys.path:
-            sys.path.insert(0, SAM2_DIR)
+        # build_sam.py is imported as a legacy top-level module, while its
+        # internals import the sam2 package. Both paths are therefore needed.
+        for package_path in (SAM2_PACKAGE_ROOT, SAM2_DIR):
+            if package_path not in sys.path:
+                sys.path.insert(0, package_path)
 
         try:
             from build_sam import build_sam2_video_predictor

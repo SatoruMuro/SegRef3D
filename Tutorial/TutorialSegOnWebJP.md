@@ -41,7 +41,7 @@ SegRef3Dは画像系列とmaskを検証してから反映します。画像を�
 
 ### Lite Webでの操作
 
-ブラウザ版も同じmanifest/ZIP形式を使用します。**Batch Jobs**で各objectのpromptとrangeを設定し、**Export SegOnWeb**で出力、Colabの結果を**Import Result**で復元します。jobの準備にはローカルSAM2やNVIDIA GPUは不要です。
+ブラウザ版も同じmanifest/ZIP形式を使用します。**Batch Jobs**を開いたままmouse wheelまたはF/Rで画像を移動し、**Use current**で現在画像をTracking Start/Endとして取り込みます。**Set Box on Canvas**ではcrosshair補助線を使ってBox Promptを設定できます。**Export SegOnWeb**で出力し、Colabの結果を**Import Result**で復元します。jobの準備にはローカルSAM2やNVIDIA GPUは不要です。
 
 ## 5. 修正と3D構築
 
@@ -54,4 +54,4 @@ mask PNGはsingle-channel label imageです。`0`が背景、`1`から`20`がobj
 - ZIP不正、manifestなし：SegRef3Dからjob ZIPを再出力してください。
 - Prompt Frameが範囲外：**Batch Jobs**でTracking Rangeを修正してください。
 - CUDA/model error：ColabがT4などのGPU runtimeになっていることを確認し、**ランタイム > ランタイムを接続解除して削除**の後に全セルを再実行してください。
-- 処理中断：全セルを再実行し、同じinput ZIPを再度uploadしてください。
+- 処理中断：全セルを再実行し、先頭の実行cellで同じinput ZIPをuploadした後、残りのcellが終わるまでnotebookを開いたままにしてください。

@@ -8,9 +8,10 @@ The public redirect is `segonweb.html`.
 
 1. Configure Batch Tracking objects in SegRef3D GPU.
 2. Export `segonweb_input.zip`.
-3. Open the notebook, select a T4 GPU, and run all cells.
-4. Upload the input ZIP when prompted.
-5. Download `segref3d_result.zip` and import it into SegRef3D.
+3. Open the notebook and select a T4 GPU.
+4. Run all cells and upload the input ZIP in the first executable cell.
+5. Leave the notebook running while setup and SAM2 processing continue.
+6. Download `segref3d_result.zip` and import it into SegRef3D.
 
 `segonweb_backend.py` contains the ZIP-to-SAM2 orchestration. It intentionally uses
 the SAM2 execution path proven in `SAM2GUIforImgSeqv4_8.ipynb`:

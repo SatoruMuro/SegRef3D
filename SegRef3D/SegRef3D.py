@@ -2982,10 +2982,24 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
         self.batch_object_data.sort(key=lambda item: int(item["id"]))
         self.object_label_names[object_data["id"]] = object_data["name"]
+        next_object_id = None
+        if action == "added":
+            next_object_id = self._select_next_unused_batch_object(object_data["id"])
+        next_message = f" Next Target Object: {next_object_id}." if next_object_id else ""
         self.label_status.setText(
             f"Object {object_data['id']} {action}: prompt frame {object_data['box_frame'] + 1}, "
-            f"tracking {object_data['start'] + 1}-{object_data['end'] + 1}."
+            f"tracking {object_data['start'] + 1}-{object_data['end'] + 1}.{next_message}"
         )
+
+
+    def _select_next_unused_batch_object(self, current_object_id):
+        used_ids = {int(item["id"]) for item in self.batch_object_data}
+        for offset in range(1, 21):
+            candidate = ((int(current_object_id) - 1 + offset) % 20) + 1
+            if candidate not in used_ids:
+                self.combo_target_object.setCurrentText(str(candidate))
+                return candidate
+        return None
 
 
     def _current_batch_prompt_data(self, object_id=None):

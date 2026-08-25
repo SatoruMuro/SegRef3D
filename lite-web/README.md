@@ -63,11 +63,13 @@ currently rejected with a clear error instead of being rendered incorrectly.
 ### Seg on Web workflow
 
 1. Load the image sequence and open **Batch Jobs**.
-2. Set each object's Box Prompt on its Prompt Frame and choose its Tracking Start/End frames.
-3. Download `segonweb_input.zip` with **Export SegOnWeb**.
-4. Open **Seg on Web**, run all cells, and upload that one ZIP.
-5. Download `segref3d_result.zip` and open it with **Import Result**.
-6. Refine the returned masks and continue to volume or STL export.
+2. Keep **Batch Jobs** open, move through the sequence with the mouse wheel or F/R, and use
+   **Use current** to capture the Tracking Start/End frames.
+3. Choose **Set Box on Canvas** and use the crosshair guides to set each object's Box Prompt.
+4. Download `segonweb_input.zip` with **Export SegOnWeb**.
+5. Open **Seg on Web**, run all cells, and upload that one ZIP at the first upload cell.
+6. Leave the notebook running, then download `segref3d_result.zip` and open it with **Import Result**.
+7. Refine the returned masks and continue to volume or STL export.
 
 The result ZIP can restore its working JPG sequence when no images are loaded. When the source
 sequence is already open, Lite Web verifies frame count, order, dimensions, and filenames before

@@ -134,6 +134,25 @@ class SegOnWebUiTests(unittest.TestCase):
         self.assertEqual(self.window.tracking_start_index, 1)
         self.assertEqual(self.window.tracking_end_index, 1)
 
+    def test_add_object_prompt_advances_to_the_next_unused_object(self):
+        images = self._images()
+        self.window.image_paths = {record["key"]: record["path"] for record in images}
+        self.window.image_sizes = {record["key"]: (32, 24) for record in images}
+        self.window.last_used_box_px = ((2, 3), (20, 18))
+        self.window.last_used_box_index = 1
+        self.window.tracking_start_index = 0
+        self.window.tracking_end_index = 2
+        self.window.combo_target_object.setCurrentText("1")
+
+        self.window.add_object_prompt_for_batch()
+        self.assertEqual([item["id"] for item in self.window.batch_object_data], [1])
+        self.assertEqual(self.window.combo_target_object.currentText(), "2")
+
+        self.window.last_used_box_px = ((4, 5), (22, 20))
+        self.window.add_object_prompt_for_batch()
+        self.assertEqual([item["id"] for item in self.window.batch_object_data], [1, 2])
+        self.assertEqual(self.window.combo_target_object.currentText(), "3")
+
     def test_import_restores_images_masks_and_objects(self):
         result_zip = self._result_zip()
         with patch.object(app_module.QFileDialog, "getOpenFileName", return_value=(str(result_zip), "")):

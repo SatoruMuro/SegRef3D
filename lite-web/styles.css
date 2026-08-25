@@ -341,6 +341,14 @@ svg {
   width: min(860px, calc(100vw - 32px));
 }
 
+.segonweb-jobs-dialog[open] {
+  position: fixed;
+  z-index: 1000;
+  inset: 158px 16px auto auto;
+  max-height: min(760px, calc(100dvh - 174px));
+  margin: 0;
+}
+
 .segonweb-jobs-shell {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
@@ -418,7 +426,9 @@ svg {
 
 .segonweb-field-grid {
   display: grid;
-  grid-template-columns: 120px minmax(180px, 1fr) repeat(3, minmax(112px, 0.55fr));
+  grid-template-columns:
+    120px minmax(180px, 1fr) minmax(112px, 0.55fr)
+    repeat(2, minmax(170px, 0.75fr));
   gap: 12px;
 }
 
@@ -442,6 +452,54 @@ svg {
   border: 1px solid var(--line-strong);
   border-radius: 4px;
   background: var(--panel);
+  color: var(--ink);
+}
+
+.segonweb-frame-capture {
+  display: grid;
+  grid-template-columns: minmax(62px, 1fr) auto;
+  gap: 5px;
+}
+
+.segonweb-frame-capture button {
+  min-width: 72px;
+  height: 34px;
+  padding: 0 8px;
+  border: 1px solid var(--teal-dark);
+  border-radius: 4px;
+  background: var(--teal-soft);
+  color: var(--teal-dark);
+  font-size: 10px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.segonweb-frame-capture button:hover {
+  background: #cce9eb;
+}
+
+.segonweb-current-frame {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.segonweb-current-frame span {
+  min-width: 118px;
+  text-align: center;
+}
+
+.segonweb-current-frame .icon-button {
+  width: 30px;
+  height: 30px;
+}
+
+.segonweb-current-frame strong {
   color: var(--ink);
 }
 
@@ -483,6 +541,16 @@ svg {
 }
 
 @media (max-width: 760px) {
+  .segonweb-jobs-dialog[open] {
+    inset: 10px;
+    width: auto;
+    max-height: calc(100dvh - 20px);
+  }
+
+  .segonweb-jobs-shell {
+    max-height: calc(100dvh - 22px);
+  }
+
   .segonweb-field-grid {
     grid-template-columns: 1fr 1fr;
   }

@@ -460,12 +460,27 @@
               </label>
               <label class="compact-field">
                 <span>Tracking start</span>
-                <input id="segonweb-tracking-start" type="number" min="1" step="1" />
+                <span class="segonweb-frame-capture">
+                  <input id="segonweb-tracking-start" type="number" min="1" step="1" />
+                  <button id="segonweb-set-start" type="button" title="Use the currently displayed frame as Tracking Start">Use current</button>
+                </span>
               </label>
               <label class="compact-field">
                 <span>Tracking end</span>
-                <input id="segonweb-tracking-end" type="number" min="1" step="1" />
+                <span class="segonweb-frame-capture">
+                  <input id="segonweb-tracking-end" type="number" min="1" step="1" />
+                  <button id="segonweb-set-end" type="button" title="Use the currently displayed frame as Tracking End">Use current</button>
+                </span>
               </label>
+            </div>
+            <div class="segonweb-current-frame">
+              <button id="segonweb-previous-frame" class="icon-button" type="button" title="Previous frame">
+                <svg><use href="#i-chevron-left"></use></svg>
+              </button>
+              <span aria-live="polite">Current frame <strong id="segonweb-current-frame">0 / 0</strong></span>
+              <button id="segonweb-next-frame" class="icon-button" type="button" title="Next frame">
+                <svg><use href="#i-chevron-right"></use></svg>
+              </button>
             </div>
             <fieldset class="segonweb-box-fields">
               <legend>Box prompt (pixels)</legend>

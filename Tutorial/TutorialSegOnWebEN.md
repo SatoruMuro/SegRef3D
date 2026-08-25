@@ -49,7 +49,10 @@ Imported masks are immediately written to a new `[autosave]` label PNG folder.
 
 The browser app uses the same manifest and ZIP formats. Open **Batch Jobs**, set each
 object's prompt and range, choose **Export SegOnWeb**, then restore the Colab output with
-**Import Result**. No local SAM2 package or NVIDIA GPU is required for job preparation.
+**Import Result**. Keep **Batch Jobs** open while navigating with the mouse wheel or F/R,
+then use **Use current** to capture Tracking Start and End. **Set Box on Canvas** displays
+crosshair guides for accurate Box Prompt placement. No local SAM2 package or NVIDIA GPU is
+required for job preparation.
 
 ## 5. Refine And Reconstruct
 
@@ -65,4 +68,5 @@ The mask PNGs are single-channel label images: `0` is background and `1` through
 - Prompt Frame outside Tracking Range: edit the object in **Batch Jobs**.
 - CUDA/model error: confirm that the Colab runtime is using a T4 or another GPU, then
   choose **Runtime > Disconnect and delete runtime** and run all cells again.
-- Interrupted processing: rerun all cells and upload the same input ZIP again.
+- Interrupted processing: rerun all cells, upload the same input ZIP in the first executable
+  cell, then leave the notebook open while the remaining cells continue.

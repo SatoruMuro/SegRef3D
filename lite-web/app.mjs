@@ -133,6 +133,11 @@ const elements = {
   segonwebPromptFrame: document.querySelector("#segonweb-prompt-frame"),
   segonwebTrackingStart: document.querySelector("#segonweb-tracking-start"),
   segonwebTrackingEnd: document.querySelector("#segonweb-tracking-end"),
+  segonwebSetStart: document.querySelector("#segonweb-set-start"),
+  segonwebSetEnd: document.querySelector("#segonweb-set-end"),
+  segonwebPreviousFrame: document.querySelector("#segonweb-previous-frame"),
+  segonwebNextFrame: document.querySelector("#segonweb-next-frame"),
+  segonwebCurrentFrame: document.querySelector("#segonweb-current-frame"),
   segonwebBoxX1: document.querySelector("#segonweb-box-x1"),
   segonwebBoxY1: document.querySelector("#segonweb-box-y1"),
   segonwebBoxX2: document.querySelector("#segonweb-box-x2"),
@@ -371,6 +376,7 @@ function updateImageUi() {
   }
   updateLabelCounts();
   updateHistoryButtons();
+  syncSegmentationCurrentFrame();
 }
 
 function resizeCanvas({ refit = false } = {}) {
@@ -522,6 +528,25 @@ function render() {
     context.fillStyle = context.strokeStyle;
     context.font = `${Math.max(10 / state.viewport.zoom, 12 / state.viewport.zoom)}px sans-serif`;
     context.fillText(`Obj ${job.id}`, x1 + 3 / state.viewport.zoom, Math.max(12 / state.viewport.zoom, y1 - 4 / state.viewport.zoom));
+  }
+  if (state.segmentationBoxMode?.hoverPoint) {
+    const hover = state.segmentationBoxMode.hoverPoint;
+    context.strokeStyle = "rgb(217 84 75 / 75%)";
+    context.lineWidth = 1 / state.viewport.zoom;
+    context.setLineDash([6 / state.viewport.zoom, 5 / state.viewport.zoom]);
+    context.beginPath();
+    context.moveTo(0, hover.y);
+    context.lineTo(image.width, hover.y);
+    context.moveTo(hover.x, 0);
+    context.lineTo(hover.x, image.height);
+    context.stroke();
+    context.setLineDash([]);
+    if (state.segmentationBoxMode.firstPoint) {
+      const first = state.segmentationBoxMode.firstPoint;
+      context.strokeStyle = "#d9544b";
+      context.lineWidth = 2 / state.viewport.zoom;
+      context.strokeRect(first.x, first.y, hover.x - first.x, hover.y - first.y);
+    }
   }
   if (state.segmentationBoxMode?.firstPoint) {
     const point = state.segmentationBoxMode.firstPoint;
@@ -848,6 +873,10 @@ function switchImage(delta) {
   if (nextIndex === state.index) return;
   finalizeActivePath();
   state.index = nextIndex;
+  if (state.segmentationBoxMode) {
+    state.segmentationBoxMode = { frame: nextIndex, firstPoint: null, hoverPoint: null };
+    state.segmentationDraft.promptFrame = nextIndex;
+  }
   updateImageUi();
   render();
 }
@@ -1968,7 +1997,62 @@ function syncSegmentationJobDialog() {
   ].forEach((input, index) => {
     input.value = boxValues[index];
   });
+  syncSegmentationCurrentFrame();
   renderSegmentationJobRows();
+}
+
+function syncSegmentationCurrentFrame() {
+  if (!elements.segonwebCurrentFrame) return;
+  const current = state.images.length > 0 ? state.index + 1 : 0;
+  elements.segonwebCurrentFrame.textContent = `${current} / ${state.images.length}`;
+  elements.segonwebPreviousFrame.disabled = state.images.length === 0 || state.index === 0;
+  elements.segonwebNextFrame.disabled = state.images.length === 0 || state.index === state.images.length - 1;
+}
+
+function captureSegmentationRangeBoundary(boundary) {
+  if (!state.segmentationDraft || state.images.length === 0) return;
+  try {
+    const currentFrame = state.index;
+    const hasBox = [
+      elements.segonwebBoxX1,
+      elements.segonwebBoxY1,
+      elements.segonwebBoxX2,
+      elements.segonwebBoxY2,
+    ].every((input) => input.value.trim() !== "");
+    const promptFrame = readRequiredNumber(elements.segonwebPromptFrame, "Prompt Frame") - 1;
+    if (hasBox && boundary === "start" && currentFrame > promptFrame) {
+      setStatus("Tracking Start must be on or before the Box Prompt frame.");
+      return;
+    }
+    if (hasBox && boundary === "end" && currentFrame < promptFrame) {
+      setStatus("Tracking End must be on or after the Box Prompt frame.");
+      return;
+    }
+
+    let start = readRequiredNumber(elements.segonwebTrackingStart, "Tracking Start") - 1;
+    let end = readRequiredNumber(elements.segonwebTrackingEnd, "Tracking End") - 1;
+    if (boundary === "start") {
+      start = currentFrame;
+      if (end < start) end = start;
+    } else {
+      end = currentFrame;
+      if (start > end) start = end;
+    }
+    const normalizedPrompt = hasBox ? promptFrame : clamp(promptFrame, start, end);
+    state.segmentationDraft = {
+      ...state.segmentationDraft,
+      id: Number(elements.segonwebObjectId.value),
+      name: elements.segonwebObjectName.value.trim() || `Object ${elements.segonwebObjectId.value}`,
+      promptFrame: normalizedPrompt,
+      trackingStart: start,
+      trackingEnd: end,
+    };
+    syncSegmentationJobDialog();
+    setStatus(`Tracking ${boundary === "start" ? "Start" : "End"} set to frame ${currentFrame + 1}.`);
+    elements.canvas.focus();
+  } catch (error) {
+    setStatus(`SegOnWeb job: ${error.message}`);
+  }
 }
 
 function readRequiredNumber(input, label) {
@@ -2023,7 +2107,7 @@ function openSegmentationJobs(objectId = null) {
     state.segmentationDraft = existing ? cloneSegmentationJob(existing) : blankSegmentationDraft(requestedId);
   }
   syncSegmentationJobDialog();
-  elements.segonwebJobsDialog.showModal();
+  if (!elements.segonwebJobsDialog.open) elements.segonwebJobsDialog.show();
 }
 
 function newSegmentationObject() {
@@ -2046,7 +2130,7 @@ function beginSegmentationBox() {
     draft.trackingEnd = Math.max(draft.trackingEnd, state.index);
     draft.box = null;
     state.segmentationDraft = draft;
-    state.segmentationBoxMode = { frame: state.index, firstPoint: null };
+    state.segmentationBoxMode = { frame: state.index, firstPoint: null, hoverPoint: null };
     elements.segonwebJobsDialog.close();
     setStatus(`Obj ${draft.id}: click the top-left and bottom-right corners on frame ${state.index + 1}.`);
     elements.canvas.focus();
@@ -2771,10 +2855,11 @@ function handlePointerDown(event) {
   elements.canvas.focus();
   if (state.segmentationBoxMode) {
     if (state.segmentationBoxMode.frame !== state.index) {
-      state.segmentationBoxMode = { frame: state.index, firstPoint: null };
+      state.segmentationBoxMode = { frame: state.index, firstPoint: null, hoverPoint: null };
       state.segmentationDraft.promptFrame = state.index;
     }
     const point = imagePointerPosition(event, false);
+    state.segmentationBoxMode.hoverPoint = point;
     if (!state.segmentationBoxMode.firstPoint) {
       state.segmentationBoxMode.firstPoint = point;
       setStatus("Click the opposite corner of the Box Prompt.");
@@ -2875,6 +2960,14 @@ function handlePointerMove(event) {
     render();
     return;
   }
+  if (state.segmentationBoxMode) {
+    const rawPoint = screenToImage(local.x, local.y, state.viewport);
+    state.segmentationBoxMode.hoverPoint = pointInsideImage(rawPoint, image.width, image.height)
+      ? imagePointerPosition(event, false)
+      : null;
+    render();
+    return;
+  }
   if (!state.pointer.drawing || state.pointer.id !== event.pointerId) return;
   const point = imagePointerPosition(event, false);
   const previous = image.activePath.at(-1);
@@ -2882,6 +2975,12 @@ function handlePointerMove(event) {
     image.activePath.push(point);
     render();
   }
+}
+
+function handlePointerLeave() {
+  if (!state.segmentationBoxMode?.hoverPoint || state.pointer.drawing || state.pointer.panning) return;
+  state.segmentationBoxMode.hoverPoint = null;
+  render();
 }
 
 function handlePointerUp(event) {
@@ -2939,12 +3038,16 @@ function zoomFromKeyboard(factor) {
 }
 
 function handleKeyDown(event) {
+  const editingJobField =
+    elements.segonwebJobsDialog.open &&
+    elements.segonwebJobsDialog.contains(event.target) &&
+    event.target.closest?.("input, select, button");
   if (
     elements.localFileDialog.open ||
     elements.maskImportDialog.open ||
     elements.clearMasksDialog.open ||
-    elements.segonwebJobsDialog.open ||
-    elements.toolsDialog.open
+    elements.toolsDialog.open ||
+    editingJobField
   ) {
     return;
   }
@@ -3228,6 +3331,10 @@ function bindEvents() {
   elements.segonwebJobsClose.addEventListener("click", () => elements.segonwebJobsDialog.close());
   elements.segonwebNewObject.addEventListener("click", newSegmentationObject);
   elements.segonwebSetBox.addEventListener("click", beginSegmentationBox);
+  elements.segonwebPreviousFrame.addEventListener("click", () => switchImage(-1));
+  elements.segonwebNextFrame.addEventListener("click", () => switchImage(1));
+  elements.segonwebSetStart.addEventListener("click", () => captureSegmentationRangeBoundary("start"));
+  elements.segonwebSetEnd.addEventListener("click", () => captureSegmentationRangeBoundary("end"));
   elements.segonwebSaveObject.addEventListener("click", saveSegmentationObject);
   elements.segonwebObjectId.addEventListener("change", () => {
     const objectId = Number(elements.segonwebObjectId.value);
@@ -3245,6 +3352,7 @@ function bindEvents() {
   elements.labelsClose.addEventListener("click", () => elements.labelsPanel.classList.remove("open"));
   elements.canvas.addEventListener("pointerdown", handlePointerDown);
   elements.canvas.addEventListener("pointermove", handlePointerMove);
+  elements.canvas.addEventListener("pointerleave", handlePointerLeave);
   elements.canvas.addEventListener("pointerup", handlePointerUp);
   elements.canvas.addEventListener("pointercancel", handlePointerUp);
   elements.canvas.addEventListener("dblclick", (event) => {
