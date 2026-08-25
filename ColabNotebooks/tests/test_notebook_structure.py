@@ -33,6 +33,11 @@ class SegOnWebNotebookTests(unittest.TestCase):
         self.assertIn("files.upload", sources[0])
         self.assertEqual(combined.count("files.upload"), 1)
         self.assertLess(combined.index("files.upload"), combined.index("pip uninstall"))
+        self.assertNotIn("filelink", combined)
+        self.assertEqual(combined.count("files.download"), 1)
+        self.assertIn("files.download", sources[-1].lower())
+        self.assertNotIn("process_segmentation_job(", sources[-1].lower())
+        self.assertLess(combined.index("process_segmentation_job("), combined.index("files.download"))
 
 
 if __name__ == "__main__":

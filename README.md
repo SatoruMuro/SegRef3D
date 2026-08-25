@@ -220,7 +220,7 @@ SegRef3D and use Google Colab only as a SAM2 computation backend:
 1. Configure each object's Box Prompt, Prompt Frame, and Tracking Range in SegRef3D.
 2. Choose **Extensions > Batch Tracking > Export for SegOnWeb**.
 3. Open SegOnWeb, select a T4 GPU, run all cells, and upload `segonweb_input.zip`.
-4. Download `segref3d_result.zip` after segmentation completes.
+4. The final Colab cell automatically downloads `segref3d_result.zip` after segmentation completes.
 5. Choose **Import SegOnWeb Result** in SegRef3D, then refine the masks and build 3D output normally.
 
 The Colab notebook does not use Gradio. It validates the job, automatically processes

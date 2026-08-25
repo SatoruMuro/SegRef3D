@@ -11,7 +11,8 @@ The public redirect is `segonweb.html`.
 3. Open the notebook and select a T4 GPU.
 4. Run all cells and upload the input ZIP in the first executable cell.
 5. Leave the notebook running while setup and SAM2 processing continue.
-6. Download `segref3d_result.zip` and import it into SegRef3D.
+6. The final, separate download cell automatically starts the `segref3d_result.zip` download.
+7. Import the downloaded ZIP into SegRef3D.
 
 `segonweb_backend.py` contains the ZIP-to-SAM2 orchestration. It intentionally uses
 the SAM2 execution path proven in `SAM2GUIforImgSeqv4_8.ipynb`:

@@ -30,7 +30,8 @@ Under **Extensions > Batch Tracking**, choose **Export for SegOnWeb** and save
 3. Select **Runtime > Run all**.
 4. Upload `segonweb_input.zip` when the upload control appears.
 5. Leave the notebook open while it processes every object forward and backward.
-6. At **Segmentation complete**, choose the `segref3d_result.zip` download link.
+6. At **Segmentation complete**, the separate final cell automatically starts downloading
+   `segref3d_result.zip` through the browser.
 
 The progress display shows the current step, object, frame, and overall progress.
 
@@ -70,3 +71,5 @@ The mask PNGs are single-channel label images: `0` is background and `1` through
   choose **Runtime > Disconnect and delete runtime** and run all cells again.
 - Interrupted processing: rerun all cells, upload the same input ZIP in the first executable
   cell, then leave the notebook open while the remaining cells continue.
+- Download did not start: run only the final download cell again. It uses Colab's native
+  `files.download()` instead of a localhost notebook link.

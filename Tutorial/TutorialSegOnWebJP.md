@@ -26,7 +26,7 @@ SegOnWebは、Google ColabのGPUを計算backendとして利用します。Box P
 3. **ランタイム > すべてのセルを実行**を選びます。
 4. upload欄が表示されたら`segonweb_input.zip`を選びます。
 5. 各objectのforward/backward trackingが終わるまでnotebookを開いたまま待ちます。
-6. **Segmentation complete**の下に表示されるリンクから`segref3d_result.zip`を取得します。
+6. **Segmentation complete**になると、独立した最後のcellから`segref3d_result.zip`のdownloadがbrowserで自動的に始まります。
 
 処理中は、現在のstep、object、frame、全体進捗が表示されます。
 
@@ -55,3 +55,4 @@ mask PNGはsingle-channel label imageです。`0`が背景、`1`から`20`がobj
 - Prompt Frameが範囲外：**Batch Jobs**でTracking Rangeを修正してください。
 - CUDA/model error：ColabがT4などのGPU runtimeになっていることを確認し、**ランタイム > ランタイムを接続解除して削除**の後に全セルを再実行してください。
 - 処理中断：全セルを再実行し、先頭の実行cellで同じinput ZIPをuploadした後、残りのcellが終わるまでnotebookを開いたままにしてください。
+- downloadが始まらない：最後のdownload cellだけを再実行してください。localhostへのlinkではなく、Colab標準の`files.download()`を使用します。
