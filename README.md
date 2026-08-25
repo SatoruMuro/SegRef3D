@@ -211,10 +211,25 @@ If you do not have a CUDA-compatible GPU, you can still use SegRef3D through a h
 * Download the generated **standard PNG label masks**
 * Load the masks into the local SegRef3D application for manual refinement, STL export, NIfTI export, and measurement CSV output
 
+### SegOnWeb Job Workflow
+
+The Phase 1 GPU desktop workflow moves every prompt operation into SegRef3D and uses
+Google Colab only as a SAM2 computation backend:
+
+1. Configure each object's Box Prompt, Prompt Frame, and Tracking Range in SegRef3D.
+2. Choose **Extensions > Batch Tracking > Export for SegOnWeb**.
+3. Open SegOnWeb, select a T4 GPU, run all cells, and upload `segonweb_input.zip`.
+4. Download `segref3d_result.zip` after segmentation completes.
+5. Choose **Import SegOnWeb Result** in SegRef3D, then refine the masks and build 3D output normally.
+
+The Colab notebook does not use Gradio. It validates the job, automatically processes
+multiple objects forward and backward from each object's Prompt Frame, displays
+progress, and returns standard single-label PNG masks with the working JPG sequence.
+
 ### 🔗 Web-based Segmentation Tutorial
 
-* 🇯🇵 Japanese: [TutorialSegOnWebJP.md](https://github.com/SatoruMuro/SAM2GUIfor3Drecon/blob/main/Tutorial/TutorialSegOnWebJP.md)
-* 🇺🇸 English: [TutorialSegOnWebEN.md](https://github.com/SatoruMuro/SAM2GUIfor3Drecon/blob/main/Tutorial/TutorialSegOnWebEN.md)
+* 🇯🇵 Japanese: [TutorialSegOnWebJP.md](https://github.com/SatoruMuro/SegRef3D/blob/main/Tutorial/TutorialSegOnWebJP.md)
+* 🇺🇸 English: [TutorialSegOnWebEN.md](https://github.com/SatoruMuro/SegRef3D/blob/main/Tutorial/TutorialSegOnWebEN.md)
 
 ### 📷 Notes for Web-based Workflow
 
@@ -264,6 +279,14 @@ https://github.com/SatoruMuro/SegRef3DViewer
 ---
 
 # Update  
+**2026.8.24**
+
+SegRef3D source versionを**1.2.4**へ更新。
+
+SegRef3D GPU版のBatch Trackingにobject名、Prompt Frame、object別Tracking Rangeを確認・編集できる**Batch Jobs**を追加。作業JPGと正式な`manifest.json`を含む`segonweb_input.zip`の出力、および`segref3d_result.zip`の検証・画像/mask/object情報復元に対応。
+
+SegOnWebにGradioを使用しないjob backend notebookを追加。既存`SAM2GUIforImgSeqv4_8.ipynb`のSAM2.1 commit、checkpoint、config、box prompt、forward/reversed backward propagation、label PNG処理を維持し、複数object自動処理、進捗表示、result ZIP生成へ入出力部分を置換。
+
 **2026.8.21**
 
 Lite Webに**Auto Add / Auto Erase / Auto Transfer**、読み込み後のwindow/level・明るさ・コントラスト調整、基準線キャリブレーション、Threshold/RGB抽出を追加。抽出は現在画像または全画像へAdd/Eraseでき、マスク編集履歴とブラウザ自動保存へ反映。

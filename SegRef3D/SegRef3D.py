@@ -1,9 +1,12 @@
-__version__ = "1.2.2"
+__version__ = "1.2.4"
 
 
 import sys
 import os
 import re
+import io
+import zipfile
+from pathlib import Path
 
 from PyQt6.QtWidgets import (
     QApplication,
@@ -39,6 +42,12 @@ import nrrd  # pip install pynrrd
 import numpy as np
 
 from ui_SegRef3D import Ui_MainWindow
+from batch_tracking_dialog import BatchTrackingDialog
+from segmentation_job import (
+    SegmentationJobError,
+    create_job_zip,
+    validate_result_zip,
+)
 
 from svgpathtools import parse_path
 
@@ -168,8 +177,12 @@ def get_ffmpeg_path():
     
     return ffmpeg_path
 
-# グローバル定数として取得
-FFMPEG_PATH = get_ffmpeg_path()
+# Do not block source or Lite startup when the optional bundled ffmpeg is absent.
+try:
+    FFMPEG_PATH = get_ffmpeg_path()
+except FileNotFoundError as exc:
+    FFMPEG_PATH = None
+    print(f"[WARN] {exc}")
 
 
 
@@ -666,6 +679,8 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         # 一括トラッキング用
         self.batch_object_data = []  # 各オブジェクトの情報を辞書形式で保持
         self.box_per_frame = {}  # 例: {0: ((x1,y1), (x2,y2)), 1: ((x1,y1), (x2,y2)), ...}
+        self.object_label_names = {}
+        self.original_image_filenames = {}
 
 
         
@@ -925,6 +940,9 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         self.btn_run_tracking.clicked.connect(self.run_tracking)
         self.btn_add_object_prompt.clicked.connect(self.add_object_prompt_for_batch)
         self.btn_batch_tracking.clicked.connect(self.run_batch_tracking)
+        self.btn_manage_batch_jobs.clicked.connect(self.show_batch_tracking_jobs)
+        self.btn_export_segonweb.clicked.connect(self.export_for_segonweb)
+        self.btn_import_segonweb_result.clicked.connect(self.import_segonweb_result)
         self.initialize_sam2()
         
         #オーバーラップの検出
@@ -1572,6 +1590,9 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             self.btn_set_tracking_end,
             self.btn_add_object_prompt,
             self.btn_batch_tracking,
+            self.btn_manage_batch_jobs,
+            self.btn_export_segonweb,
+            self.btn_import_segonweb_result,
             self.btn_run_tracking,
             self.btn_run_sam2,
         ]
@@ -1669,14 +1690,14 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
     def open_seg_on_web(self):
         import webbrowser
         webbrowser.open(
-            "https://satorumuro.github.io/SAM2GUIfor3Drecon/ColabNotebooks/segonweb.html?v=48"
+            "https://satorumuro.github.io/SegRef3D/ColabNotebooks/segonweb.html"
         )
         self.label_status.setText("Opening Seg on Web...")
             
     def open_instant3dweb(self):
         import webbrowser
         webbrowser.open(
-            "https://satorumuro.github.io/SAM2GUIfor3Drecon/ColabNotebooks/instant3dweb.html?v=1"
+            "https://satorumuro.github.io/SegRef3D/ColabNotebooks/instant3dweb.html"
         )
         self.label_status.setText("Opening Instant3DWeb...")        
         
@@ -2185,11 +2206,19 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
         # ✅ ボックスが表示されていれば削除
         if hasattr(self, "confirmed_box_item") and self.confirmed_box_item:
-            self.scene.removeItem(self.confirmed_box_item)
+            try:
+                if self.confirmed_box_item.scene() is not None:
+                    self.scene.removeItem(self.confirmed_box_item)
+            except RuntimeError:
+                print("[WARN] confirmed_box_item has already been deleted.")
             self.confirmed_box_item = None
     
         if hasattr(self, "temp_box_item") and self.temp_box_item:
-            self.scene.removeItem(self.temp_box_item)
+            try:
+                if self.temp_box_item.scene() is not None:
+                    self.scene.removeItem(self.temp_box_item)
+            except RuntimeError:
+                print("[WARN] temp_box_item has already been deleted.")
             self.temp_box_item = None
     
         # ✅ 状態を初期化
@@ -2643,7 +2672,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             return
 
         # 🔎 チェック：開始・終了フレーム
-        if not hasattr(self, 'tracking_start_index') or not hasattr(self, 'tracking_end_index'):
+        if self.tracking_start_index is None or self.tracking_end_index is None:
             self.label_status.setText("Please set both start and end frames for tracking.")
             return
     
@@ -2928,34 +2957,343 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
     def add_object_prompt_for_batch(self):
         if not self.ensure_local_sam2_available():
             return
+        try:
+            object_data = self._current_batch_prompt_data()
+        except ValueError as exc:
+            self.label_status.setText(f"⚠ {exc}")
+            return
+
+        existing_index = next(
+            (index for index, item in enumerate(self.batch_object_data) if item.get("id") == object_data["id"]),
+            None,
+        )
+        if existing_index is None:
+            if len(self.batch_object_data) >= 20:
+                self.label_status.setText("⚠ Max 20 objects allowed.")
+                return
+            self.batch_object_data.append(object_data)
+            action = "added"
+        else:
+            object_data["name"] = self.batch_object_data[existing_index].get("name", object_data["name"])
+            self.batch_object_data[existing_index] = object_data
+            action = "updated"
+
+        self.batch_object_data.sort(key=lambda item: int(item["id"]))
+        self.object_label_names[object_data["id"]] = object_data["name"]
+        self.label_status.setText(
+            f"Object {object_data['id']} {action}: prompt frame {object_data['box_frame'] + 1}, "
+            f"tracking {object_data['start'] + 1}-{object_data['end'] + 1}."
+        )
 
 
-        
-        if not hasattr(self, 'last_used_box_px'):
-            self.label_status.setText("⚠ Box prompt not set.")
-            return
-        if not hasattr(self, 'tracking_start_index') or not hasattr(self, 'tracking_end_index'):
-            self.label_status.setText("⚠ Start and End frame must be set.")
-            return
-    
-        box = self.last_used_box_px
-        point = self.last_used_point if hasattr(self, 'last_used_point') else None
-        start_frame = self.tracking_start_index
-        end_frame = self.tracking_end_index
-    
-        if len(self.batch_object_data) >= 20:
-            self.label_status.setText("⚠ Max 20 objects allowed.")
-            return
-    
-        self.batch_object_data.append({
-            "box": box,
-            "point": point,
+    def _current_batch_prompt_data(self, object_id=None):
+        if not self.image_paths:
+            raise ValueError("Load images before creating a batch object.")
+
+        box = getattr(self, "last_used_box_px", None)
+        prompt_frame = getattr(self, "last_used_box_index", None)
+        start_frame = getattr(self, "tracking_start_index", None)
+        end_frame = getattr(self, "tracking_end_index", None)
+        if box is None or prompt_frame is None:
+            raise ValueError("Set a Box Prompt on the desired Prompt Frame first.")
+        if start_frame is None or end_frame is None:
+            raise ValueError("Set both Tracking Start and Tracking End frames.")
+
+        image_count = len(self.image_paths)
+        if not all(isinstance(value, int) for value in (prompt_frame, start_frame, end_frame)):
+            raise ValueError("Prompt Frame and Tracking Range are invalid.")
+        if not 0 <= start_frame <= prompt_frame <= end_frame < image_count:
+            raise ValueError("Prompt Frame must be inside the Tracking Start/End range.")
+
+        try:
+            x1, y1 = float(box[0][0]), float(box[0][1])
+            x2, y2 = float(box[1][0]), float(box[1][1])
+        except (TypeError, ValueError, IndexError) as exc:
+            raise ValueError("Box Prompt coordinates are invalid.") from exc
+        x1, x2 = sorted((x1, x2))
+        y1, y2 = sorted((y1, y2))
+
+        keys = sorted(self.image_paths.keys())
+        prompt_key = keys[prompt_frame]
+        width, height = self.image_sizes.get(prompt_key, (None, None))
+        if width is None or height is None:
+            with Image.open(self.image_paths[prompt_key]) as image:
+                width, height = image.size
+        x1, x2 = max(0.0, x1), min(float(width), x2)
+        y1, y2 = max(0.0, y1), min(float(height), y2)
+        if x1 >= x2 or y1 >= y2:
+            raise ValueError("Box Prompt must have a positive width and height inside the image.")
+
+        if object_id is None:
+            object_id = int(self.combo_target_object.currentText())
+        object_id = int(object_id)
+        if not 1 <= object_id <= 20:
+            raise ValueError("Object ID must be between 1 and 20.")
+
+        return {
+            "id": object_id,
+            "name": self.object_label_names.get(object_id, f"Object {object_id}"),
+            "box": ((x1, y1), (x2, y2)),
+            "point": getattr(self, "last_used_point", None),
             "start": start_frame,
             "end": end_frame,
-            "box_frame": self.last_used_box_index  # ✅ 新規追加
-        })
-    
-        self.label_status.setText(f"🧩 Object {len(self.batch_object_data)} added (Frame {start_frame+1}–{end_frame+1})")
+            "box_frame": prompt_frame,
+        }
+
+
+    def show_batch_tracking_jobs(self):
+        if not self.ensure_local_sam2_available():
+            return
+        if not self.image_paths:
+            self.label_status.setText("⚠ Load images before editing Batch Tracking jobs.")
+            return
+        dialog = BatchTrackingDialog(
+            self.batch_object_data,
+            len(self.image_paths),
+            self._current_batch_prompt_data,
+            self,
+        )
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.batch_object_data = dialog.objects
+            self.object_label_names = {
+                int(item["id"]): str(item.get("name") or f"Object {item['id']}")
+                for item in self.batch_object_data
+            }
+            self._apply_object_names_to_checkboxes()
+            self.label_status.setText(f"Batch Tracking jobs updated: {len(self.batch_object_data)} object(s).")
+
+
+    def _apply_object_names_to_checkboxes(self):
+        for object_id, checkbox in enumerate(self.checkboxes, start=1):
+            name = self.object_label_names.get(object_id)
+            checkbox.setText(f"Obj {object_id}: {name}" if name and name != f"Object {object_id}" else f"Obj {object_id}")
+
+
+    def _segonweb_image_records(self):
+        records = []
+        for key in sorted(self.image_paths.keys()):
+            path = self.image_paths[key]
+            records.append({
+                "key": key,
+                "path": path,
+                "original_filename": self.original_image_filenames.get(key, os.path.basename(path)),
+            })
+        return records
+
+
+    def _segonweb_object_records(self):
+        objects = []
+        for item in sorted(self.batch_object_data, key=lambda value: int(value.get("id", 0))):
+            box = item["box"]
+            objects.append({
+                "id": int(item["id"]),
+                "name": str(item.get("name") or f"Object {item['id']}"),
+                "prompt_frame": int(item["box_frame"]),
+                "box": [float(box[0][0]), float(box[0][1]), float(box[1][0]), float(box[1][1])],
+                "tracking_start": int(item["start"]),
+                "tracking_end": int(item["end"]),
+            })
+        return objects
+
+
+    def export_for_segonweb(self):
+        if not self.ensure_local_sam2_available():
+            return
+        if not self.image_paths:
+            self.label_status.setText("⚠ No images loaded.")
+            return
+        if not self.batch_object_data:
+            self.label_status.setText("⚠ Add at least one Batch Tracking object before export.")
+            return
+
+        output_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export for SegOnWeb",
+            os.path.join(os.getcwd(), "segonweb_input.zip"),
+            "ZIP Archives (*.zip)",
+        )
+        if not output_path:
+            self.label_status.setText("SegOnWeb export canceled.")
+            return
+        if not output_path.lower().endswith(".zip"):
+            output_path += ".zip"
+
+        source_names = sorted(set(self.original_image_filenames.values()))
+        source = {
+            "project_name": Path(next(iter(self.image_paths.values()))).parent.name,
+            "original_inputs": source_names,
+            "exported_at": datetime.now().isoformat(timespec="seconds"),
+        }
+        try:
+            manifest = create_job_zip(
+                output_path,
+                self._segonweb_image_records(),
+                self._segonweb_object_records(),
+                app_version=__version__,
+                source=source,
+            )
+        except (SegmentationJobError, OSError, ValueError) as exc:
+            self.label_status.setText(f"⚠ SegOnWeb export failed: {exc}")
+            QMessageBox.warning(self, "SegOnWeb Export Failed", str(exc))
+            return
+
+        self.label_status.setText(
+            f"Exported SegOnWeb job: {manifest['images']['count']} images, "
+            f"{len(manifest['objects'])} object(s)."
+        )
+        QMessageBox.information(
+            self,
+            "SegOnWeb Job Exported",
+            f"SegOnWeb input ZIP was created:\n{output_path}\n\n"
+            "Open Seg on Web, run all cells, and upload this ZIP.",
+        )
+
+
+    def _validate_current_images_for_result(self, manifest):
+        if not self.image_paths:
+            return
+        current_keys = sorted(self.image_paths.keys())
+        if len(current_keys) != manifest["images"]["count"]:
+            raise SegmentationJobError(
+                f"Image count mismatch: current project has {len(current_keys)}, result has {manifest['images']['count']}."
+            )
+        expected_keys = manifest["images"]["order"]
+        if current_keys != expected_keys:
+            raise SegmentationJobError(
+                "Image order mismatch between the current project and the SegOnWeb result."
+            )
+        expected_size = (manifest["images"]["width"], manifest["images"]["height"])
+        manifest_files = manifest["images"]["files"]
+        for key, record in zip(current_keys, manifest_files):
+            with Image.open(self.image_paths[key]) as image:
+                if image.size != expected_size:
+                    raise SegmentationJobError(
+                        f"Image size mismatch at {key}: current {image.size}, result {expected_size}."
+                    )
+            current_original = self.original_image_filenames.get(key)
+            result_original = record.get("original_filename")
+            if current_original and result_original and current_original != result_original:
+                raise SegmentationJobError(
+                    f"Original filename mismatch at {key}: current {current_original!r}, "
+                    f"result {result_original!r}."
+                )
+
+
+    def _restore_result_images(self, archive, manifest):
+        now = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_dir = Path(os.getcwd()) / f"segonweb_result_images_{now}"
+        suffix = 1
+        while output_dir.exists():
+            output_dir = Path(os.getcwd()) / f"segonweb_result_images_{now}_{suffix}"
+            suffix += 1
+        output_dir.mkdir(parents=True)
+
+        restored_paths = {}
+        restored_sizes = {}
+        restored_names = {}
+        try:
+            for record in manifest["images"]["files"]:
+                key = record["key"]
+                target = output_dir / f"image{key}.jpg"
+                with archive.open(record["archive_path"], "r") as source, open(target, "wb") as output:
+                    shutil.copyfileobj(source, output)
+                restored_paths[key] = str(target)
+                restored_sizes[key] = (manifest["images"]["width"], manifest["images"]["height"])
+                restored_names[key] = record.get("original_filename") or target.name
+        except Exception:
+            shutil.rmtree(output_dir, ignore_errors=True)
+            raise
+
+        self.image_paths = restored_paths
+        self.image_sizes = restored_sizes
+        self.original_image_filenames = restored_names
+        self.current_index = 0
+        self.mask_paths.clear()
+        now = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.output_mask_dir = os.path.join(os.getcwd(), f"masks_{now}")
+        os.makedirs(self.output_mask_dir, exist_ok=True)
+        for key, image_path in self.image_paths.items():
+            svg_path = os.path.join(self.output_mask_dir, f"mask{key}.svg")
+            self._create_empty_svg(svg_path, image_path)
+            self.mask_paths[key] = svg_path
+
+
+    def import_segonweb_result(self):
+        zip_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Import SegOnWeb Result",
+            "",
+            "ZIP Archives (*.zip)",
+        )
+        if not zip_path:
+            self.label_status.setText("SegOnWeb result import canceled.")
+            return
+
+        try:
+            manifest = validate_result_zip(zip_path)
+            self._validate_current_images_for_result(manifest)
+            current_keys = sorted(self.image_paths.keys()) if self.image_paths else manifest["images"]["order"]
+            allowed_ids = {0, *(int(item["id"]) for item in manifest["objects"])}
+            incoming_masks = {}
+            with zipfile.ZipFile(zip_path, "r") as archive:
+                for target_key, record in zip(current_keys, manifest["result"]["masks"]):
+                    with Image.open(io.BytesIO(archive.read(record["archive_path"]))) as image:
+                        label = np.array(image, dtype=np.uint8)
+                    unexpected = set(int(value) for value in np.unique(label)) - allowed_ids
+                    if unexpected:
+                        raise SegmentationJobError(
+                            f"Mask {record['archive_path']} contains undeclared object IDs: {sorted(unexpected)}."
+                        )
+                    incoming_masks[target_key] = label
+
+                has_existing_masks = any(np.any(mask) for mask in self.label_masks.values())
+                if has_existing_masks:
+                    reply = QMessageBox.question(
+                        self,
+                        "Replace Label Masks",
+                        "Importing this SegOnWeb result will replace the current label masks. Continue?",
+                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+                        QMessageBox.StandardButton.Cancel,
+                    )
+                    if reply != QMessageBox.StandardButton.Yes:
+                        self.label_status.setText("SegOnWeb result import canceled.")
+                        return
+
+                if not self.image_paths:
+                    self._restore_result_images(archive, manifest)
+        except (SegmentationJobError, OSError, ValueError, zipfile.BadZipFile) as exc:
+            self.label_status.setText(f"⚠ SegOnWeb result import failed: {exc}")
+            QMessageBox.warning(self, "SegOnWeb Result Import Failed", str(exc))
+            return
+
+        self.label_masks = incoming_masks
+        self.label_mask_paths.clear()
+        self.reset_autosave_label_dir()
+        for key in sorted(self.label_masks.keys()):
+            self.save_label_mask_png(key)
+
+        self.batch_object_data = []
+        self.object_label_names = {}
+        for obj in manifest["objects"]:
+            x1, y1, x2, y2 = obj["box"]
+            self.batch_object_data.append({
+                "id": int(obj["id"]),
+                "name": obj["name"],
+                "box": ((x1, y1), (x2, y2)),
+                "point": None,
+                "start": int(obj["tracking_start"]),
+                "end": int(obj["tracking_end"]),
+                "box_frame": int(obj["prompt_frame"]),
+            })
+            self.object_label_names[int(obj["id"])] = obj["name"]
+
+        self._apply_object_names_to_checkboxes()
+        self.update_checkboxes_based_on_used_colors()
+        self.display_current_image()
+        self.label_status.setText(
+            f"Imported SegOnWeb result: {len(self.label_masks)} masks, "
+            f"{len(self.batch_object_data)} object(s). Autosaved to: {self.output_label_dir}"
+        )
         
 
 
@@ -3399,13 +3737,14 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             return
     
         for obj_idx, obj_info in enumerate(self.batch_object_data, 1):
+            object_id = int(obj_info.get("id", obj_idx))
             self.label_status.setText(
-                f"🚀 Tracking object {obj_idx} (Frame {obj_info['start']+1}–{obj_info['end']+1})..."
+                f"Tracking object {object_id} (Frame {obj_info['start']+1}-{obj_info['end']+1})..."
             )
             QApplication.processEvents()
-    
+
             self.run_tracking_for_object(
-                obj_id=obj_idx,
+                obj_id=object_id,
                 box=obj_info["box"],
                 point=obj_info["point"],
                 start_frame=obj_info["start"],
@@ -3994,6 +4333,10 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         self.path_elements_by_color.clear()
         self.pixmap_cache.clear()
         self.svg_renderer_cache.clear()
+        self.batch_object_data.clear()
+        self.object_label_names.clear()
+        self.original_image_filenames.clear()
+        self._apply_object_names_to_checkboxes()
         
         self.current_index = 0
         self.drawing = False  # 念のため描画中もリセット
@@ -4245,6 +4588,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
                     # continue
                     self.image_paths[key] = output_jpg_path
                     self.image_sizes[key] = Image.open(output_jpg_path).size
+                    self.original_image_filenames[key] = filename
                     num_converted += 1
                     next_idx += 1   # ★ 採用したのでカウントアップ
                     continue                
@@ -4356,6 +4700,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
                         # num_converted += 1
                         self.image_paths[key] = output_jpg_path
                         self.image_sizes[key] = (w, h)
+                        self.original_image_filenames[key] = f"{filename}#slice={s + 1}"
                         num_converted += 1
                         next_idx += 1   # ★ 1スライスごとに加算                        
                         
@@ -4420,6 +4765,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
                     self.image_paths[key] = input_path
                     with Image.open(input_path) as im:
                         self.image_sizes[key] = im.size
+                    self.original_image_filenames[key] = filename
                     next_idx += 1   # ★ 採用時に加算
                     
     
@@ -4450,6 +4796,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
                             im.save(output_jpg_path, "JPEG")
                             self.image_paths[key] = output_jpg_path
                             self.image_sizes[key] = im.size
+                            self.original_image_filenames[key] = filename
                         num_converted += 1
                         next_idx += 1   # ★
                         
@@ -4458,6 +4805,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
                         self.image_paths[key] = input_path
                         with Image.open(input_path) as im:
                             self.image_sizes[key] = im.size
+                        self.original_image_filenames[key] = filename
                         next_idx += 1   # ★    
     
                 else:
@@ -4469,6 +4817,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
                         im.save(output_jpg_path, "JPEG")
                         self.image_paths[key] = output_jpg_path
                         self.image_sizes[key] = im.size
+                        self.original_image_filenames[key] = filename
                     num_converted += 1
                     next_idx += 1   # ★
     
@@ -4508,6 +4857,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
                         # next_idx += 1   # ★
                         self.image_paths[key] = out2
                         self.image_sizes[key] = (W, H)
+                        self.original_image_filenames[key] = os.path.basename(file_names[s])
                         num_converted += 1
                         next_idx += 1   # ★                        
         

@@ -1,179 +1,62 @@
-# How to Use Seg on Web
+# Seg on Web: SegRef3D Job Workflow
 
-## Web-based SegRef3D: Automatic AI Segmentation
+SegOnWeb uses a Google Colab GPU as a computation backend. All prompt configuration
+is performed in SegRef3D; there is no separate Gradio interface.
 
----
+## 1. Configure Objects In SegRef3D
 
-## 🖼 Preparing the Images
+1. Load the image sequence in SegRef3D GPU.
+2. Select an object ID under **Target Object**.
+3. Move to a frame where the object is clear and choose **Set Box Prompt**.
+4. Draw the box around the object. This frame becomes its Prompt Frame.
+5. Move to the first desired frame and choose **Set Tracking Start**.
+6. Move to the last desired frame and choose **Set Tracking End**.
+7. Choose **Add Object Prompt**.
+8. Repeat for other objects.
 
-- **Target images**: Serial section images or serial tomographic images
-- **Format**: JPEG (`.jpg`) images
-- **File names**: Save the images with sequential names such as `image0001.jpg`, `image0002.jpg`, ...
-- **Recommended size**: Each side should be **1000 pixels or smaller**  
-  Larger images can also be used, but processing will take longer.
+Open **Extensions > Batch Tracking > Batch Jobs** to review names, Prompt Frames,
+Tracking Ranges, and box coordinates. Prompt Frame must be inside its Tracking Range.
 
-The following tools are useful for batch resizing:
+## 2. Export The Job
 
-- 🔗 [ImageJ（Mac/Windows）](https://imagej.net/ij/)
-- 🔗 [IrfanView（Windows only）](https://www.irfanview.com/)
+Under **Extensions > Batch Tracking**, choose **Export for SegOnWeb** and save
+`segonweb_input.zip`. It contains the working JPG sequence and `manifest.json`.
 
----
+## 3. Run SegOnWeb
 
-## 🚀 Launching Seg on Web
+1. Choose **Seg on Web** in SegRef3D, or open
+   [Seg on Web](https://satorumuro.github.io/SegRef3D/ColabNotebooks/segonweb.html).
+2. In Colab, select **Runtime > Change runtime type > T4 GPU > Save**.
+3. Select **Runtime > Run all**.
+4. Upload `segonweb_input.zip` when the upload control appears.
+5. Leave the notebook open while it processes every object forward and backward.
+6. At **Segmentation complete**, choose the `segref3d_result.zip` download link.
 
-Seg on Web can be launched from the local SegRef3D application.
+The progress display shows the current step, object, frame, and overall progress.
 
-### Launch Steps
+## 4. Import The Result
 
-1. Open the local SegRef3D application.
-2. Click the **Seg on Web** button in the upper-right area of the SegRef3D window.
-3. A Google Colab notebook will open in your browser.
-4. In Google Colab, open  
-   **Runtime > Change runtime type**.
-5. Select **T4 GPU** as the hardware accelerator and save the setting.
-6. Select  
-   **Runtime > Run all**.
-7. If a warning appears, review it and select  
-   **Run anyway**.
-8. Wait several minutes until execution is complete.  
-   Scroll to the bottom of the notebook and click the `Running on public URL` link displayed under the final cell.
-9. The Gradio GUI will open.
+1. Return to SegRef3D.
+2. Under **Extensions > Batch Tracking**, choose **Import SegOnWeb Result**.
+3. Select `segref3d_result.zip`.
+4. Confirm replacement if the current project already contains label masks.
 
-⚠️ **Do not close the Colab notebook page.**  
-The Gradio GUI is available only while the Colab notebook is running.
+SegRef3D validates the image sequence and masks before applying them. If no images
+are currently loaded, the JPG sequence in the result ZIP is restored automatically.
+Imported masks are immediately written to a new `[autosave]` label PNG folder.
 
-If you cannot launch SegRef3D locally, you can also open [Seg on Web](https://satorumuro.github.io/SAM2GUIfor3Drecon/ColabNotebooks/segonweb.html) directly.
+## 5. Refine And Reconstruct
 
-<img src="https://github.com/SatoruMuro/SAM2GUIfor3Drecon/blob/main/images/step1-01-2.PNG" alt="Colab launch" width="50%">
+Use the normal SegRef3D tools to add, erase, transfer, relabel, interpolate, measure,
+and export NIfTI, TIFF, STL, overlay PNG, or volume CSV files.
 
----
+The mask PNGs are single-channel label images: `0` is background and `1` through
+`20` are object IDs.
 
-## 🖱 Basic GUI Workflow
+## Troubleshooting
 
-1. Upload multiple images using **Upload Images**.
-2. Select the reference frame using **Frame Selection**.
-3. Specify the target object region.
-   - Adjust `X Coordinate (%)`
-   - Adjust `Y Coordinate (%)`
-   to define the top-left and bottom-right corners around the target object.
-4. Click **Set Top Left** to register the top-left point.
-5. Click **Set Bottom Right** to register the bottom-right point and run segmentation.
-6. Check the result. If it is acceptable, click  
-   **Complete Segmentation or Add Next Object**.
-7. If there are additional objects, repeat the same procedure.  
-   Up to 20 objects are supported.
-8. After registering all objects, click **Start Tracking**.
-9. Check the segmentation results.
-10. Download the generated files.
-
-<img src="https://github.com/SatoruMuro/SAM2GUIfor3Drecon/blob/main/images/GUIimage.JPG" alt="Seg on Web GUI" width="50%">
-
----
-
-## 📁 Output Files
-
-Seg on Web outputs **standard PNG label masks** by default.  
-These are intended to be loaded into the local SegRef3D application.
-
-### Standard Output
-
-| Output name | Description | Format | Purpose |
-|---|---|---|---|
-| `Label mask PNGs (ZIP)` | Standard PNG label masks | PNG | Refinement and STL/NIfTI/CSV export in local SegRef3D |
-
-The standard PNG mask is a **single-channel label image**.
-
-| Pixel value | Meaning |
-|---|---|
-| `0` | Background |
-| `1` | Object 1 |
-| `2` | Object 2 |
-| `...` | ... |
-| `20` | Object 20 |
-
-In most cases, downloading **Label mask PNGs (ZIP)** is sufficient.
-
----
-
-## 🧩 Optional Outputs
-
-Additional outputs can be selected from `Optional Outputs` when needed.
-
-| Option | Description | Format | Purpose |
-|---|---|---|---|
-| `Overlay images` | Images with masks overlaid on the original images | JPG/ZIP | Checking, documentation, presentation |
-| `Color preview masks` | Color masks on a black background | PNG/ZIP | Checking, documentation, presentation |
-| `SVG vector masks` | Vector-format masks | SVG/ZIP | Compatibility with the legacy workflow |
-| `Grayscale masks` | Grayscale masks | PNG/ZIP | Compatibility with the legacy workflow |
-
-⚠️ Selecting many Optional Outputs increases processing time and download size.  
-Usually, **Label mask PNGs (ZIP)** alone is sufficient.
-
----
-
-## 🎨 Segmentation Color Labels
-
-In the web preview, each object is assigned one of the following color labels.
-
-<img src="https://github.com/SatoruMuro/SAM2GUIfor3Drecon/blob/main/images/colorlabels1.jpg" alt="Color labels" width="50%">
-
----
-
-## 🔁 Importing into Local SegRef3D
-
-The standard PNG masks generated by the web version can be loaded into the local SegRef3D application for further refinement.
-
-### Steps
-
-1. Download `Label mask PNGs (ZIP)`.
-2. Extract the ZIP file.
-3. Open the local SegRef3D application.
-4. Use **Load Images** to load the original image folder.
-5. Use **Load Masks** to load the extracted standard PNG mask folder.
-6. The detected objects will be automatically turned on for display.
-7. Refine the masks manually if necessary.
-8. Export STL, NIfTI, CSV, or other outputs.
-
-⚠️ The standard PNG masks must have the same image size as the original images.  
-Seg on Web outputs the standard PNG masks using the original image size.
-
----
-
-## 🛠 What You Can Do in Local SegRef3D
-
-After loading the standard PNG masks, the local SegRef3D application can be used for:
-
-- Manual mask refinement
-- Adding or deleting objects
-- Erasing unnecessary regions
-- Changing object labels
-- STL export
-- NIfTI label map export
-- Measurement CSV export, including volume, area, and fat infiltration ratio
-
-On non-GPU systems, automatic SAM2 segmentation features in the local SegRef3D application are disabled.  
-However, if you load the standard PNG masks generated by the web version, manual refinement, measurement, and 3D output can still be performed locally.
-
----
-
-## 🔁 How to Reset the Tool
-
-If the Gradio GUI becomes unstable, reset it using the following steps:
-
-1. Close the Gradio GUI page.
-2. Return to the Colab notebook page.
-3. Select  
-   **Runtime > Disconnect and delete runtime**.
-4. Then run  
-   **Runtime > Run all**  
-   again.
-
----
-
-## ▶️ Next Step
-
-After creating the standard PNG masks with Seg on Web, proceed to local SegRef3D for mask refinement, checking, and output.
-
-- 👉 [Mask refinement and 3D output workflow in SegRef3D](https://github.com/SatoruMuro/SAM2GUIfor3Drecon/blob/main/Tutorial/TutorialSegRef3DJP.md)
-
----
+- Invalid ZIP or missing manifest: export the job again from SegRef3D.
+- Prompt Frame outside Tracking Range: edit the object in **Batch Jobs**.
+- CUDA/model error: confirm that the Colab runtime is using a T4 or another GPU, then
+  choose **Runtime > Disconnect and delete runtime** and run all cells again.
+- Interrupted processing: rerun all cells and upload the same input ZIP again.

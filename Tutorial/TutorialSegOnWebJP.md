@@ -1,180 +1,53 @@
-# Seg on Web の使い方（日本語）
+# Seg on Web：SegRef3D Job ワークフロー
 
-## Web版SegRef3D：AIによる自動セグメンテーション
+SegOnWebは、Google ColabのGPUを計算backendとして利用します。Box Prompt、Prompt Frame、Tracking Rangeの設定はすべてSegRef3Dで行い、別のGradio画面は使用しません。
 
----
+## 1. SegRef3Dでobjectを設定
 
-## 🖼 使用する画像の準備
+1. SegRef3D GPU版で画像系列を読み込みます。
+2. **Target Object**でobject IDを選びます。
+3. 対象が明瞭な画像へ移動し、**Set Box Prompt**を押します。
+4. 対象を囲むboxを描きます。この画像がPrompt Frameになります。
+5. 追跡を始める画像で**Set Tracking Start**を押します。
+6. 追跡を終える画像で**Set Tracking End**を押します。
+7. **Add Object Prompt**を押します。
+8. 複数objectがある場合は同じ操作を繰り返します。
 
-- **対象**：連続切片画像・連続断層画像
-- **形式**：JPEG（`.jpg`）形式の画像
-- **ファイル名**：`image0001.jpg`, `image0002.jpg`, ... のように連番で保存
-- **推奨サイズ**：1辺が **1000ピクセル以下**  
-  大きい画像も使用できますが、処理時間が長くなります。
+**Extensions > Batch Tracking > Batch Jobs**では、object名、Prompt Frame、Tracking Range、box座標を一覧で確認・編集・削除できます。Prompt FrameはTracking Rangeの内側に設定してください。
 
-一括リサイズには以下のツールが便利です。
+## 2. Job ZIPを出力
 
-- 🔗 [ImageJ（Mac/Windows対応）](https://imagej.net/ij/)
-- 🔗 [IrfanView（Windows専用）](https://www.irfanview.com/)
+**Extensions > Batch Tracking**から**Export for SegOnWeb**を押し、`segonweb_input.zip`を保存します。ZIPには作業用JPG画像系列と`manifest.json`が入ります。
 
----
+## 3. SegOnWebを実行
 
-## 🚀 Seg on Web の起動
+1. SegRef3Dの**Seg on Web**を押すか、[Seg on Web](https://satorumuro.github.io/SegRef3D/ColabNotebooks/segonweb.html)を開きます。
+2. Colabで**ランタイム > ランタイムのタイプを変更 > T4 GPU > 保存**を選びます。
+3. **ランタイム > すべてのセルを実行**を選びます。
+4. upload欄が表示されたら`segonweb_input.zip`を選びます。
+5. 各objectのforward/backward trackingが終わるまでnotebookを開いたまま待ちます。
+6. **Segmentation complete**の下に表示されるリンクから`segref3d_result.zip`を取得します。
 
-Seg on Web は、ローカル版 SegRef3D から起動できます。
+処理中は、現在のstep、object、frame、全体進捗が表示されます。
 
-### 起動手順
+## 4. 結果ZIPを読み込み
 
-1. ローカル版 SegRef3D を起動します。
-2. 画面右上部にある **Seg on Web** ボタンをクリックします。
-3. ブラウザで Google Colab ノートブックが開きます。
-4. Google Colab が開いたら、メニューから  
-   **「ランタイム」＞「ランタイムのタイプを変更」** を選択します。
-5. ハードウェアアクセラレータで **T4 GPU** を選択して保存します。
-6. メニューから  
-   **「ランタイム」＞「すべてのセルを実行」** を選択します。
-7. 警告が表示された場合は、内容を確認したうえで  
-   **「このまま実行」** を選択します。
-8. 実行完了まで数分かかります。  
-   ノートブックの最下部までスクロールし、セルの下に表示される  
-   `Running on public URL` のリンクをクリックします。
-9. Gradio GUI が開きます。
+1. SegRef3Dへ戻ります。
+2. **Extensions > Batch Tracking > Import SegOnWeb Result**を押します。
+3. `segref3d_result.zip`を選びます。
+4. 既にlabel maskがある場合は、置換確認に同意します。
 
-⚠️ **Colabノートブックの画面は閉じないでください。**  
-Gradio GUI は、Colabノートブックが実行中の間だけ使用できます。
+SegRef3Dは画像系列とmaskを検証してから反映します。画像を開いていない場合は、result ZIP内のJPG系列も自動復元します。読み込んだmaskは新しい`[autosave]` label PNGフォルダへ直ちに保存されます。
 
-※ SegRef3D を起動できない場合は、[Seg on Web](https://satorumuro.github.io/SAM2GUIfor3Drecon/ColabNotebooks/segonweb.html) から直接開くこともできます。
+## 5. 修正と3D構築
 
-<img src="https://github.com/SatoruMuro/SAM2GUIfor3Drecon/blob/main/images/step1-01-2.PNG" alt="Colab launch" width="50%">
+読み込み後は通常のSegRef3Dと同じように、Add、Erase、Transfer、label変更、補間、計測、NIfTI、TIFF、STL、overlay PNG、volume CSV出力を利用できます。
 
----
+mask PNGはsingle-channel label imageです。`0`が背景、`1`から`20`がobject IDです。
 
-## 🖱 GUIの基本操作フロー
+## トラブルシューティング
 
-1. **Upload Images** から画像を複数枚アップロードします。
-2. **Frame Selection** で、基準となる画像を選択します。
-3. 対象物の範囲を指定します。
-   - `X Coordinate (%)`
-   - `Y Coordinate (%)`
-   を調整しながら、対象物を囲む左上・右下の位置を指定します。
-4. **Set Top Left** を押して左上を登録します。
-5. **Set Bottom Right** を押して右下を登録し、セグメンテーションを実行します。
-6. 結果を確認し、問題なければ  
-   **Complete Segmentation or Add Next Object** を押します。
-7. 2つ目以降の対象物がある場合は、同じ手順で追加します。  
-   最大20個までのオブジェクトに対応しています。
-8. すべての対象物を登録したら、**Start Tracking** を押します。
-9. セグメンテーション結果を確認します。
-10. 生成されたファイルをダウンロードします。
-
-<img src="https://github.com/SatoruMuro/SAM2GUIfor3Drecon/blob/main/images/GUIimage.JPG" alt="Seg on Web GUI" width="50%">
-
----
-
-## 📁 出力されるファイル
-
-Seg on Web では、ローカル版SegRef3Dで読み込むための **正本PNGマスク** が標準出力されます。
-
-### 標準出力
-
-| 出力名 | 内容 | 形式 | 使用用途 |
-|---|---|---|---|
-| `Label mask PNGs (ZIP)` | 正本PNGマスク | PNG | ローカル版SegRef3Dでの修正・STL/NIfTI/CSV出力 |
-
-正本PNGマスクは、**single-channel label image** です。
-
-| ピクセル値 | 意味 |
-|---|---|
-| `0` | 背景 |
-| `1` | Object 1 |
-| `2` | Object 2 |
-| `...` | ... |
-| `20` | Object 20 |
-
-通常はこの **Label mask PNGs (ZIP)** をダウンロードすれば十分です。
-
----
-
-## 🧩 Optional Outputs
-
-必要に応じて、`Optional Outputs` から追加出力を選択できます。
-
-| オプション | 内容 | 形式 | 使用用途 |
-|---|---|---|---|
-| `Overlay images` | 元画像とマスクを重ねた確認用画像 | JPG/ZIP | 確認・記録・プレゼン |
-| `Color preview masks` | 黒背景のカラー確認用マスク | PNG/ZIP | 確認・記録・プレゼン |
-| `SVG vector masks` | ベクター形式マスク | SVG/ZIP | 旧ワークフローとの互換用 |
-| `Grayscale masks` | グレースケールマスク | PNG/ZIP | 旧ワークフローとの互換用 |
-
-⚠️ Optional Outputs を多く選択すると、処理時間とダウンロードファイルサイズが増加します。  
-通常は、**Label mask PNGs (ZIP)** のみで問題ありません。
-
----
-
-## 🎨 セグメンテーションの色ラベル
-
-Web画面上のプレビューでは、各オブジェクトに以下の色ラベルが割り当てられます。
-
-<img src="https://github.com/SatoruMuro/SAM2GUIfor3Drecon/blob/main/images/colorlabels1.jpg" alt="Color labels" width="50%">
-
----
-
-## 🔁 ローカル版SegRef3Dへの取り込み
-
-Web版で生成した正本PNGマスクは、ローカル版SegRef3Dで読み込んで修正できます。
-
-### 手順
-
-1. `Label mask PNGs (ZIP)` をダウンロードします。
-2. ZIPファイルを展開します。
-3. ローカル版SegRef3Dを起動します。
-4. **Load Images** から、元画像フォルダを読み込みます。
-5. **Load Masks** から、展開した正本PNGマスクフォルダを読み込みます。
-6. 読み込まれたオブジェクトは自動的に表示ONになります。
-7. 必要に応じて、手動でマスクを修正します。
-8. STL / NIfTI / CSV などを出力します。
-
-⚠️ 正本PNGマスクは、元画像と同じ画像サイズである必要があります。  
-Seg on Web では、元画像サイズに合わせて正本PNGが出力されます。
-
----
-
-## 🛠 ローカル版SegRef3Dで可能な作業
-
-正本PNGを読み込んだ後は、ローカル版SegRef3Dで以下の作業が可能です。
-
-- マスクの手動修正
-- オブジェクトの追加・削除
-- 不要領域の消去
-- 色ラベルの変更
-- STL出力
-- NIfTI label map出力
-- 体積・面積・脂肪浸潤率などの計測CSV出力
-
-GPU非搭載環境では、ローカル版SegRef3D上のSAM2自動セグメンテーション機能は無効になります。  
-ただし、Web版で作成した正本PNGを読み込めば、修正・計測・3D出力はローカルで実行できます。
-
----
-
-## 🔁 ツールをリセットするには？
-
-Gradio GUIの動作がおかしい場合は、以下の手順でリセットしてください。
-
-1. Gradio GUI画面を閉じます。
-2. Colabノートブック画面に戻ります。
-3. メニューから  
-   **「ランタイム」＞「ランタイムを接続解除して削除」**  
-   を選択します。
-4. 再度、  
-   **「ランタイム」＞「すべてのセルを実行」**  
-   を実行します。
-
----
-
-## ▶️ 次のステップへ進む
-
-Seg on Web で正本PNGを作成した後は、ローカル版 SegRef3D でマスクの修正・確認・出力を行います。
-
-- 👉 [SegRef3Dでのマスク修正・3D出力手順](https://github.com/SatoruMuro/SAM2GUIfor3Drecon/blob/main/Tutorial/TutorialSegRef3DJP.md)
-
----
+- ZIP不正、manifestなし：SegRef3Dからjob ZIPを再出力してください。
+- Prompt Frameが範囲外：**Batch Jobs**でTracking Rangeを修正してください。
+- CUDA/model error：ColabがT4などのGPU runtimeになっていることを確認し、**ランタイム > ランタイムを接続解除して削除**の後に全セルを再実行してください。
+- 処理中断：全セルを再実行し、同じinput ZIPを再度uploadしてください。

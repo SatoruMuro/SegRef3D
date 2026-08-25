@@ -208,10 +208,12 @@ CUDA非対応環境でも、以下のように段階的に処理することで 
 * 生成された正本 PNG マスクをローカル PC の SegRef3D に読み込み
 * ローカル環境でマスクを確認・修正し、STL / NIfTI / 計測用 CSV などを出力
 
+Phase 1のGPU版では、SegRef3D内でobjectごとのBox Prompt、Prompt Frame、Tracking Rangeを設定し、**Export for SegOnWeb**で`segonweb_input.zip`を作成できます。Colabで全セルを実行してZIPを1つuploadすると、複数objectを自動処理した`segref3d_result.zip`が生成されます。SegRef3Dの**Import SegOnWeb Result**で戻すと、そのままmask修正と3D構築へ進めます。Colab側でGradio操作は行いません。
+
 ### 🔗 Webベースのセグメンテーション手順
 
-* 🇯🇵 日本語: [TutorialSegOnWebJP.md](https://github.com/SatoruMuro/SAM2GUIfor3Drecon/blob/main/Tutorial/TutorialSegOnWebJP.md)
-* 🇺🇸 英語: [TutorialSegOnWebEN.md](https://github.com/SatoruMuro/SAM2GUIfor3Drecon/blob/main/Tutorial/TutorialSegOnWebEN.md)
+* 🇯🇵 日本語: [TutorialSegOnWebJP.md](https://github.com/SatoruMuro/SegRef3D/blob/main/Tutorial/TutorialSegOnWebJP.md)
+* 🇺🇸 英語: [TutorialSegOnWebEN.md](https://github.com/SatoruMuro/SegRef3D/blob/main/Tutorial/TutorialSegOnWebEN.md)
 
 ### 📷 Web処理用画像の注意点
 

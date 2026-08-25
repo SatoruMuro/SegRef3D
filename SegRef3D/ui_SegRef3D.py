@@ -251,7 +251,10 @@ class Ui_MainWindow:
         self.btn_set_tracking_start = QPushButton("Set Tracking Start")                     
         self.btn_set_tracking_end = QPushButton("Set Tracking End")
         self.btn_add_object_prompt = QPushButton("Add Object Prompt")
-        self.btn_batch_tracking = QPushButton("Run Batch Tracking")        
+        self.btn_batch_tracking = QPushButton("Run Batch Tracking")
+        self.btn_manage_batch_jobs = QPushButton("Batch Jobs")
+        self.btn_export_segonweb = QPushButton("Export for SegOnWeb")
+        self.btn_import_segonweb_result = QPushButton("Import SegOnWeb Result")
         self.btn_run_tracking = QPushButton("Run Tracking")
         self.btn_run_sam2 = QPushButton("Run Seg")
         self.btn_seg_on_web = QPushButton("Seg on Web")
@@ -264,6 +267,9 @@ class Ui_MainWindow:
         sam_layout.addWidget(self.btn_set_tracking_end)
         sam_layout.addWidget(self.btn_add_object_prompt)
         sam_layout.addWidget(self.btn_batch_tracking)
+        sam_layout.addWidget(self.btn_manage_batch_jobs)
+        sam_layout.addWidget(self.btn_export_segonweb)
+        sam_layout.addWidget(self.btn_import_segonweb_result)
         sam_layout.addWidget(self.btn_run_tracking)
         sam_layout.addWidget(self.btn_run_sam2)
         sam_layout.addWidget(self.btn_seg_on_web)   
@@ -788,6 +794,9 @@ class Ui_MainWindow:
             "Batch Tracking": [
                 self.btn_add_object_prompt,
                 self.btn_batch_tracking,
+                self.btn_manage_batch_jobs,
+                self.btn_export_segonweb,
+                self.btn_import_segonweb_result,
             ],
             # "Overlap": [
             #     self.label_overlap,
