@@ -302,6 +302,50 @@ export function signedDistanceForLabel(mask, width, height, label) {
   return output;
 }
 
+export function cropLabelVolume(masks, width, height, label, padding = 2) {
+  validateVolume(masks, width, height);
+  const safePadding = Math.max(0, Math.floor(Number(padding) || 0));
+  let minimumX = width;
+  let minimumY = height;
+  let maximumX = -1;
+  let maximumY = -1;
+  for (const mask of masks) {
+    for (let y = 0; y < height; y += 1) {
+      const rowStart = y * width;
+      for (let x = 0; x < width; x += 1) {
+        if (mask[rowStart + x] !== label) continue;
+        minimumX = Math.min(minimumX, x);
+        minimumY = Math.min(minimumY, y);
+        maximumX = Math.max(maximumX, x);
+        maximumY = Math.max(maximumY, y);
+      }
+    }
+  }
+  if (maximumX < 0) return null;
+
+  minimumX = Math.max(0, minimumX - safePadding);
+  minimumY = Math.max(0, minimumY - safePadding);
+  maximumX = Math.min(width - 1, maximumX + safePadding);
+  maximumY = Math.min(height - 1, maximumY + safePadding);
+  const croppedWidth = maximumX - minimumX + 1;
+  const croppedHeight = maximumY - minimumY + 1;
+  const croppedMasks = masks.map((mask) => {
+    const output = new Uint8Array(croppedWidth * croppedHeight);
+    for (let y = 0; y < croppedHeight; y += 1) {
+      const sourceStart = (minimumY + y) * width + minimumX;
+      output.set(mask.subarray(sourceStart, sourceStart + croppedWidth), y * croppedWidth);
+    }
+    return output;
+  });
+  return {
+    masks: croppedMasks,
+    width: croppedWidth,
+    height: croppedHeight,
+    offsetX: minimumX,
+    offsetY: minimumY,
+  };
+}
+
 export function interpolateLabelVolume(masks, width, height, label, factor) {
   validateVolume(masks, width, height);
   const scale = Number(factor);
@@ -319,10 +363,9 @@ export function interpolateLabelVolume(masks, width, height, label, factor) {
 
   const depth = (masks.length - 1) * scale + 1;
   const output = new Uint8Array(sliceSize * depth);
-  const distances = masks.map((mask) => signedDistanceForLabel(mask, width, height, label));
+  let left = signedDistanceForLabel(masks[0], width, height, label);
   for (let z = 0; z < masks.length - 1; z += 1) {
-    const left = distances[z];
-    const right = distances[z + 1];
+    const right = signedDistanceForLabel(masks[z + 1], width, height, label);
     for (let step = 0; step < scale; step += 1) {
       const ratio = step / scale;
       const targetStart = (z * scale + step) * sliceSize;
@@ -330,6 +373,7 @@ export function interpolateLabelVolume(masks, width, height, label, factor) {
         output[targetStart + index] = left[index] * (1 - ratio) + right[index] * ratio <= 0 ? 1 : 0;
       }
     }
+    left = right;
   }
   const lastStart = (depth - 1) * sliceSize;
   const lastMask = masks.at(-1);
@@ -378,9 +422,17 @@ function tetraTriangles(points, values) {
   return [[p00, p01, p10], [p10, p01, p11]];
 }
 
-export function marchingTetrahedra(volume, width, height, depth, spacing = [1, 1, 1]) {
+export function marchingTetrahedra(
+  volume,
+  width,
+  height,
+  depth,
+  spacing = [1, 1, 1],
+  origin = [0, 0, 0],
+) {
   if (volume.length !== width * height * depth) throw new Error("Volume dimensions do not match.");
   const [spacingX, spacingY, spacingZ] = normalizedSpacing(spacing);
+  const [originX, originY, originZ] = normalizedOrigin(origin);
   const offsets = [
     [0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0],
     [0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1],
@@ -421,9 +473,9 @@ export function marchingTetrahedra(volume, width, height, depth, spacing = [1, 1
         const total = values.reduce((sum, value) => sum + (value ? 1 : 0), 0);
         if (total === 0 || total === 8) continue;
         const points = offsets.map(([dx, dy, dz]) => [
-          (x + dx) * spacingX,
-          (y + dy) * spacingY,
-          (z + dz) * spacingZ,
+          originX + (x + dx) * spacingX,
+          originY + (y + dy) * spacingY,
+          originZ + (z + dz) * spacingZ,
         ]);
         for (const tetra of tetrahedra) {
           const tetraPoints = tetra.map((index) => points[index]);

@@ -13,6 +13,7 @@ import {
   createNiftiLabelVolume,
   createTiffLabelStack,
   createVolInfoCsv,
+  cropLabelVolume,
   interpolateLabelVolume,
   marchingTetrahedra,
   parseVolInfoCsv,
@@ -140,6 +141,22 @@ test("signed-distance interpolation bridges moving shapes between slices", () =>
   assert.deepEqual([...tenfold.data.slice(-25)], [...right].map((value) => (value ? 1 : 0)));
 });
 
+test("label-volume cropping preserves masks and reports the original XY offset", () => {
+  const first = new Uint8Array(8 * 6);
+  const second = new Uint8Array(8 * 6);
+  first[2 * 8 + 3] = 2;
+  second[4 * 8 + 5] = 2;
+  first[0] = 1;
+  const cropped = cropLabelVolume([first, second], 8, 6, 2, 1);
+  assert.equal(cropped.width, 5);
+  assert.equal(cropped.height, 5);
+  assert.equal(cropped.offsetX, 2);
+  assert.equal(cropped.offsetY, 1);
+  assert.equal(cropped.masks[0][1 * 5 + 1], 2);
+  assert.equal(cropped.masks[1][3 * 5 + 3], 2);
+  assert.equal(cropLabelVolume([first, second], 8, 6, 3), null);
+});
+
 test("marching tetrahedra creates a readable binary STL surface", () => {
   const volume = new Uint8Array(8);
   volume[0] = 1;
@@ -148,4 +165,19 @@ test("marching tetrahedra creates a readable binary STL surface", () => {
   const stl = createBinaryStl(triangles, "Obj 1");
   assert.equal(new DataView(stl.buffer).getUint32(80, true), triangles.length);
   assert.equal(stl.length, 84 + triangles.length * 50);
+});
+
+test("marching tetrahedra applies a crop origin without changing surface topology", () => {
+  const volume = new Uint8Array(8);
+  volume[0] = 1;
+  const base = marchingTetrahedra(volume, 2, 2, 2, [0.5, 2, 3]);
+  const shifted = marchingTetrahedra(volume, 2, 2, 2, [0.5, 2, 3], [10, 20, 0]);
+  assert.equal(shifted.length, base.length);
+  for (let triangleIndex = 0; triangleIndex < base.length; triangleIndex += 1) {
+    for (let vertexIndex = 0; vertexIndex < 3; vertexIndex += 1) {
+      assert.equal(shifted[triangleIndex][vertexIndex][0], base[triangleIndex][vertexIndex][0] + 10);
+      assert.equal(shifted[triangleIndex][vertexIndex][1], base[triangleIndex][vertexIndex][1] + 20);
+      assert.equal(shifted[triangleIndex][vertexIndex][2], base[triangleIndex][vertexIndex][2]);
+    }
+  }
 });

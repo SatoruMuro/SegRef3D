@@ -49,10 +49,11 @@ import {
   createNiftiLabelVolume,
   createTiffLabelStack,
   createVolInfoCsv,
+  cropLabelVolume,
   interpolateLabelVolume,
   marchingTetrahedra,
   parseVolInfoCsv,
-} from "./volume-tools.mjs";
+} from "./volume-tools.mjs?v=15";
 
 const elements = {
   canvas: document.querySelector("#editor-canvas"),
@@ -1391,33 +1392,46 @@ async function exportStlMeshes() {
           )
         : [state.targetLabel].filter((label) => labelIsUsed(label, masks));
     if (labels.length === 0) throw new Error("The selected object set has no label pixels.");
-    const interpolatedDepth = (masks.length - 1) * factor + 1;
-    const voxelCount = width * height * interpolatedDepth;
-    if (voxelCount > 200_000_000) {
-      throw new Error("The interpolated volume is too large for safe browser processing.");
-    }
-    if (
-      voxelCount > 50_000_000 &&
-      !window.confirm(
-        `The ${factor}x interpolated volume contains about ${Math.round(voxelCount / 1_000_000)} million voxels.\n\nContinue STL generation?`,
-      )
-    ) {
-      setStatus("STL export canceled.");
-      return;
-    }
-
     const entries = [];
     for (let index = 0; index < labels.length; index += 1) {
       const label = labels[index];
+      elements.loadingDetail.textContent = `Obj ${label}: optimizing volume`;
+      const cropped = cropLabelVolume(masks, width, height, label);
+      if (!cropped) continue;
+      const interpolatedDepth = (masks.length - 1) * factor + 1;
+      const voxelCount = cropped.width * cropped.height * interpolatedDepth;
+      if (voxelCount > 200_000_000) {
+        throw new Error(
+          `Obj ${label} is still too large after mask-area optimization (${Math.round(voxelCount / 1_000_000)} million voxels).`,
+        );
+      }
+      if (
+        voxelCount > 50_000_000 &&
+        !window.confirm(
+          `Obj ${label}: the optimized ${factor}x volume contains about ${Math.round(voxelCount / 1_000_000)} million voxels.\n\nContinue STL generation?`,
+        )
+      ) {
+        setStatus("STL export canceled.");
+        return;
+      }
       elements.loadingDetail.textContent = `Obj ${label}: interpolation`;
-      const interpolated = interpolateLabelVolume(masks, width, height, label, factor);
+      const interpolated = interpolateLabelVolume(
+        cropped.masks,
+        cropped.width,
+        cropped.height,
+        label,
+        factor,
+      );
       await new Promise((resolve) => setTimeout(resolve, 0));
       elements.loadingDetail.textContent = `Obj ${label}: meshing`;
-      const triangles = marchingTetrahedra(interpolated.data, width, height, interpolated.depth, [
-        spacing[0],
-        spacing[1],
-        spacing[2] / factor,
-      ]);
+      const triangles = marchingTetrahedra(
+        interpolated.data,
+        cropped.width,
+        cropped.height,
+        interpolated.depth,
+        [spacing[0], spacing[1], spacing[2] / factor],
+        [cropped.offsetX * spacing[0], cropped.offsetY * spacing[1], 0],
+      );
       if (triangles.length === 0) continue;
       const name = `obj${String(label).padStart(2, "0")}_${factor}x.stl`;
       entries.push({
