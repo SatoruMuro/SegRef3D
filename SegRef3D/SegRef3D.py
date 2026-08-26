@@ -1,4 +1,4 @@
-__version__ = "1.2.5"
+__version__ = "1.2.6"
 
 
 import sys
@@ -33,7 +33,7 @@ from PyQt6.QtGui import (
     QBrush
 )
 
-from PyQt6.QtCore import Qt, QPointF
+from PyQt6.QtCore import Qt, QPointF, QSignalBlocker
 from PyQt6.QtSvg import QSvgRenderer
 
 from PyQt6.QtWidgets import QFileDialog, QDialogButtonBox, QPushButton, QProgressDialog
@@ -697,7 +697,8 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         self.installEventFilter(self)
 
         # ✅ graphicsView を CustomGraphicsView に差し替え
-        layout = self.central_widget.layout()
+        view_parent = self.graphicsView.parentWidget()
+        layout = view_parent.layout()
         index = layout.indexOf(self.graphicsView)
         layout.removeWidget(self.graphicsView)
         self.graphicsView.deleteLater()
@@ -714,6 +715,17 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         # ✅ チェックボックスのイベント接続
         for checkbox in self.checkboxes:
             checkbox.stateChanged.connect(self.display_current_image)
+
+        for index, button in enumerate(self.object_target_buttons):
+            button.clicked.connect(
+                lambda checked=False, object_index=index: self.set_target_object(object_index)
+            )
+        self.combo_target_object.currentIndexChanged.connect(self._sync_object_target_ui)
+        self.btn_previous_slice.clicked.connect(self.go_to_previous_image)
+        self.btn_next_slice.clicked.connect(self.go_to_next_image)
+        self.slice_slider.valueChanged.connect(self.jump_to_slice)
+        self.spin_slice.valueChanged.connect(self.jump_to_slice)
+        self.label_status.textChanged.connect(self._on_status_text_changed)
 
         # ✅ ボタンイベント
                 
@@ -762,8 +774,8 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
 
 
-        self.btn_undo.clicked.connect(self.undo_last_path)
-        self.btn_redo.clicked.connect(self.redo_last_path)
+        self.btn_undo.clicked.connect(self.smart_undo)
+        self.btn_redo.clicked.connect(self.smart_redo)
         self.btn_clear_current_path.clicked.connect(self.clear_current_path)
         self.btn_clear_all_paths.clicked.connect(self.clear_all_paths)   
         
@@ -793,6 +805,9 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         
         # self.btn_remove_small_parts.clicked.connect(self.delete_small_parts_in_selected_object)
         self.btn_remove_small_parts.clicked.connect(self.on_remove_small_parts)
+        self.btn_remove_small_parts_current.clicked.connect(
+            self.on_remove_small_parts_current
+        )
         self.btn_mask_cleanup.clicked.connect(self.show_mask_postprocessing_dialog)
         self.btn_delete_current_only.clicked.connect(self.delete_selected_object_from_current_image)
         self.btn_delete_object.clicked.connect(self.delete_selected_object)
@@ -896,6 +911,10 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
     
         undo_shortcut = QShortcut(QKeySequence("Ctrl+Z"), self)
         undo_shortcut.activated.connect(self.smart_undo)
+        redo_shortcut = QShortcut(QKeySequence("Ctrl+Y"), self)
+        redo_shortcut.activated.connect(self.smart_redo)
+        redo_alt_shortcut = QShortcut(QKeySequence("Ctrl+Shift+Z"), self)
+        redo_alt_shortcut.activated.connect(self.smart_redo)
     
         self.sam2_interface = None
         self.sam2_enabled = False
@@ -955,6 +974,9 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         self.btn_export_segonweb.clicked.connect(self.export_for_segonweb)
         self.btn_import_segonweb_result.clicked.connect(self.import_segonweb_result)
         self.initialize_sam2()
+        self._sync_object_target_ui(self.combo_target_object.currentIndex())
+        self._sync_slice_navigation()
+        self._show_empty_canvas_message()
         
         #オーバーラップの検出
         self.btn_extract_overlap.clicked.connect(self.on_extract_overlap_clicked)
@@ -1630,7 +1652,6 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
                 pass
             btn.setEnabled(False)
             btn.setToolTip(message)
-            btn.setStyleSheet("color: gray; background-color: lightgray;")
             btn.clicked.connect(lambda _, m=message: self.label_status.setText(f"⚠ {m}"))
 
         # Job preparation and ZIP exchange do not require local PyTorch/SAM2.
@@ -1644,6 +1665,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             btn.setToolTip("")
 
         self.label_status.setText(f"⚠ {message}")
+        self._update_sam2_panel_visibility()
         print(f"[INFO] Local SAM2 disabled: {message}")
 
 
@@ -1678,10 +1700,18 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         if self.sam2_enabled:
             self.sam2_disabled_reason = None
             self.label_status.setText(self.sam2_interface.status_message)
+            self._update_sam2_panel_visibility()
         else:
             self.disable_sam2_ui(
                 getattr(self.sam2_interface, "status_message", "Local SAM2 is unavailable.")
             )
+
+
+    def _update_sam2_panel_visibility(self):
+        if not hasattr(self, "local_sam2_widget"):
+            return
+        self.local_sam2_widget.setVisible(bool(self.sam2_enabled))
+        self.lite_sam2_widget.setVisible(not self.sam2_enabled)
 
 
     def ensure_local_sam2_available(self) -> bool:
@@ -3091,7 +3121,16 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
     def _apply_object_names_to_checkboxes(self):
         for object_id, checkbox in enumerate(self.checkboxes, start=1):
             name = self.object_label_names.get(object_id)
-            checkbox.setText(f"Obj {object_id}: {name}" if name and name != f"Object {object_id}" else f"Obj {object_id}")
+            text = (
+                f"Obj {object_id}: {name}"
+                if name and name != f"Object {object_id}"
+                else f"Obj {object_id}"
+            )
+            checkbox.setText("")
+            checkbox.setToolTip(f"Show or hide {text}.")
+            if hasattr(self, "object_target_buttons"):
+                self.object_target_buttons[object_id - 1].setText(text)
+        self._sync_object_target_ui(self.combo_target_object.currentIndex())
 
 
     def _segonweb_image_records(self):
@@ -3857,6 +3896,119 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         # ④ 何もなければ
         self.label_status.setText("Nothing to undo.")
         print("[INFO] Ctrl+Z -> nothing to undo")
+
+
+    def smart_redo(self):
+        key = self.get_current_image_key()
+        pending = self.redo_stack.get(key, []) if key else []
+        if pending:
+            candidate = pending[-1]
+            if (
+                isinstance(candidate, tuple)
+                and len(candidate) == 2
+                and isinstance(candidate[0], QPainterPath)
+            ):
+                self.redo_last_path()
+                self.label_status.setText("Redo drawing completed.")
+                return
+
+        if self.redo_stack.get("__global__"):
+            self.redo_edit()
+            return
+        if pending:
+            self.redo_edit()
+            return
+        self.label_status.setText("Nothing to redo.")
+
+
+    def set_target_object(self, object_index):
+        object_index = max(0, min(19, int(object_index)))
+        if self.combo_target_object.currentIndex() != object_index:
+            self.combo_target_object.setCurrentIndex(object_index)
+        else:
+            self._sync_object_target_ui(object_index)
+
+
+    def _sync_object_target_ui(self, object_index):
+        object_index = max(0, min(19, int(object_index)))
+        object_id = object_index + 1
+        if hasattr(self, "object_target_buttons"):
+            self.object_target_buttons[object_index].setChecked(True)
+        if hasattr(self, "label_active_target"):
+            name = self.object_label_names.get(object_id)
+            target_text = f"Obj {object_id}"
+            if name and name != f"Object {object_id}":
+                target_text += f": {name}"
+            self.label_active_target.setText(f"Target: {target_text}")
+            self.label_cleanup_target.setText(f"Target: {target_text}")
+        if hasattr(self, "combo_delete_object"):
+            with QSignalBlocker(self.combo_delete_object):
+                self.combo_delete_object.setCurrentIndex(object_index)
+
+
+    def jump_to_slice(self, slice_number):
+        if not self.image_paths:
+            return False
+        target_index = int(slice_number) - 1
+        if target_index == self.current_index:
+            return False
+        return self.switch_image(target_index - self.current_index)
+
+
+    def _sync_slice_navigation(self):
+        if not hasattr(self, "slice_slider"):
+            return
+        frame_count = len(self.image_paths)
+        enabled = frame_count > 0
+        upper = max(1, frame_count)
+        value = min(upper, self.current_index + 1) if enabled else 1
+        for control in (self.slice_slider, self.spin_slice):
+            with QSignalBlocker(control):
+                control.setRange(1, upper)
+                control.setValue(value)
+                control.setEnabled(enabled)
+        self.btn_previous_slice.setEnabled(enabled and value > 1)
+        self.btn_next_slice.setEnabled(enabled and value < frame_count)
+        self.label_slice_count.setText(f"/ {frame_count}")
+        self._update_spatial_info()
+
+
+    def _update_spatial_info(self):
+        if not hasattr(self, "label_voxel_info"):
+            return
+        sx = sy = self.mm_per_px
+        sz = self.z_spacing_mm
+        if hasattr(self, "volinf") and isinstance(self.volinf, dict):
+            sx = self.volinf.get("x_spacing", sx)
+            sy = self.volinf.get("y_spacing", sy if sy is not None else sx)
+            sz = self.volinf.get("z_spacing", sz)
+        if sx is None or sy is None or sz is None:
+            self.label_voxel_info.setText("Voxel: not set")
+            return
+        self.label_voxel_info.setText(
+            f"Voxel: {float(sx):.3f} x {float(sy):.3f} x {float(sz):.3f} mm"
+        )
+
+
+    def _on_status_text_changed(self, text):
+        if not hasattr(self, "status_progress"):
+            return
+        match = re.search(r"(?<!\d)(\d{1,3})%", text or "")
+        if match:
+            self.status_progress.setValue(max(0, min(100, int(match.group(1)))))
+            self.status_progress.show()
+        else:
+            self.status_progress.hide()
+
+
+    def _show_empty_canvas_message(self):
+        if self.image_paths:
+            return
+        self.scene.clear()
+        text_item = self.scene.addText("Open Images to begin")
+        text_item.setDefaultTextColor(QColor("#666666"))
+        text_item.setPos(20, 20)
+        self.scene.setSceneRect(0, 0, 360, 180)
 
     def start_calibration(self):
         self.display_current_image()
@@ -5812,6 +5964,8 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         # 画像リストが空なら安全に戻る
         if not self.image_paths:
             self.label_status.setText("No images to display.")
+            self._sync_slice_navigation()
+            self._show_empty_canvas_message()
             return
     
         key = f"{self.current_index + 1:04}"
@@ -5892,15 +6046,13 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         # ========= OpenCV グレースケールをスナップ用にセット =========
         gray = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
         self.graphicsView.gray_image = gray
+        self._sync_slice_navigation()
 
         
 
         
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        if hasattr(self, "scene") and self.scene and not self.scene.itemsBoundingRect().isNull():
-            self.graphicsView.resetTransform()
-            self.graphicsView.fitInView(self.scene.itemsBoundingRect(), Qt.AspectRatioMode.KeepAspectRatio)
                 
 
     def closeEvent(self, event):
@@ -6947,35 +7099,77 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
     #     self.drawn_paths_per_image[key] = []
 
     
+    def _pending_paths_for_manual_apply(self):
+        if self.radio_apply_all_pending.isChecked():
+            return [
+                (key, self.drawn_paths_per_image.get(key, []))
+                for key in self.image_paths.keys()
+                if self.drawn_paths_per_image.get(key)
+            ]
+        key = self.get_current_image_key()
+        if key and self.drawn_paths_per_image.get(key):
+            return [(key, self.drawn_paths_per_image[key])]
+        return []
+
+
+    def _apply_pending_paths_to_masks(self, operation):
+        pending = self._pending_paths_for_manual_apply()
+        if not pending:
+            self.label_status.setText("No pending drawing in the selected apply scope.")
+            return False
+
+        source_id = self.combo_target_object.currentIndex() + 1
+        destination_id = self.combo_transfer_target.currentIndex() + 1
+        if operation == "transfer" and source_id == destination_id:
+            self.label_status.setText("⚠ Source and destination are the same.")
+            return False
+
+        self.checkboxes[source_id - 1].setChecked(True)
+        if operation == "transfer":
+            self.checkboxes[destination_id - 1].setChecked(True)
+
+        before = {}
+        after = {}
+        for key, paths in pending:
+            source = self.ensure_label_mask_exists(key).copy()
+            result = source.copy()
+            height, width = result.shape
+            if operation == "add":
+                for path, _ in paths:
+                    binary = self.rasterize_path_to_binary(path, width, height)
+                    result[binary] = source_id
+            else:
+                path_union = QPainterPath()
+                for path, _ in paths:
+                    closed_path = QPainterPath(path)
+                    closed_path.closeSubpath()
+                    path_union.addPath(closed_path)
+                path_union.setFillRule(Qt.FillRule.OddEvenFill)
+                drawn_mask = self.rasterize_path_to_binary(path_union, width, height)
+                selected_region = drawn_mask & (result == source_id)
+                result[selected_region] = 0 if operation == "erase" else destination_id
+            before[key] = source
+            after[key] = result
+
+        changes = build_mask_volume_changes(before, after)
+        verb = {"add": "Added", "erase": "Erased", "transfer": "Transferred"}[operation]
+        if operation == "transfer":
+            status = (
+                f"✅ {verb} Obj {source_id} → Obj {destination_id} "
+                f"on {len(changes)} image(s)."
+            )
+        else:
+            status = f"✅ {verb} {'to' if operation == 'add' else 'from'} Obj {source_id} on {len(changes)} image(s)."
+        committed = self._commit_mask_transaction(changes, status)
+        if committed:
+            for key, _ in pending:
+                self.drawn_paths_per_image[key] = []
+            self.display_current_image()
+        return committed
+
+
     def add_drawn_path_to_mask(self):
-        # 対象オブジェクトID（1〜20）
-        obj_id = self.combo_target_object.currentIndex() + 1
-    
-        # 対象オブジェクトを自動で表示ON
-        self.checkboxes[obj_id - 1].setChecked(True)
-    
-        processed_count = 0
-    
-        # 線がある全画像に対して実行
-        for key, paths in self.drawn_paths_per_image.items():
-            if not paths:
-                continue
-    
-            label_mask = self.ensure_label_mask_exists(key)
-            h, w = label_mask.shape
-    
-            for path, _ in paths:
-                binary = self.rasterize_path_to_binary(path, w, h)
-                label_mask[binary] = obj_id
-    
-            self.save_label_mask_png(key)
-    
-            # この画像の描画線をクリア
-            self.drawn_paths_per_image[key] = []
-            processed_count += 1
-    
-        self.display_current_image()
-        self.label_status.setText(f"✅ Added to Obj {obj_id} on {processed_count} image(s).")
+        self._apply_pending_paths_to_masks("add")
 
 
     def qpath_to_svg_path(self, path: QPainterPath) -> str:
@@ -7513,48 +7707,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         
             
     def cut_drawn_path_from_mask(self):
-        key_current = self.get_current_image_key()
-        if not key_current:
-            return
-    
-        # 対象オブジェクトID（1〜20）
-        obj_id = self.combo_target_object.currentIndex() + 1
-    
-        processed_count = 0
-    
-        # 線がある全画像に対して実行
-        for key, paths in self.drawn_paths_per_image.items():
-            if not paths:
-                continue
-    
-            label_mask = self.ensure_label_mask_exists(key)
-            h, w = label_mask.shape
-    
-            # 描画パスを1つにまとめる
-            drawn_union = QPainterPath()
-            for path, _ in paths:
-                path.closeSubpath()
-                drawn_union.addPath(path)
-    
-            drawn_union.setFillRule(Qt.FillRule.OddEvenFill)
-    
-            # ラスター化
-            binary = self.rasterize_path_to_binary(drawn_union, w, h)
-    
-            # 対象オブジェクト部分だけ消す
-            erase_region = binary & (label_mask == obj_id)
-            label_mask[erase_region] = 0
-    
-            # 保存
-            self.save_label_mask_png(key)
-    
-            # この画像の描画をクリア
-            self.drawn_paths_per_image[key] = []
-            processed_count += 1
-    
-        self.display_current_image()
-        self.scene.update()
-        self.label_status.setText(f"✅ Erased from Obj {obj_id} on {processed_count} image(s).")        
+        self._apply_pending_paths_to_masks("erase")
         
         
         
@@ -7685,53 +7838,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
     
     def transfer_drawn_path_to_mask(self):
-        key_current = self.get_current_image_key()
-        if not key_current:
-            return
-    
-        # 元オブジェクトID / 転送先オブジェクトID（1〜20）
-        src_id = self.combo_target_object.currentIndex() + 1
-        dst_id = self.combo_transfer_target.currentIndex() + 1
-    
-        # 転送先オブジェクトを自動で表示ON
-        self.checkboxes[dst_id - 1].setChecked(True)
-    
-        processed_count = 0
-    
-        # 線がある全画像に対して実行
-        for key, paths in self.drawn_paths_per_image.items():
-            if not paths:
-                continue
-    
-            label_mask = self.ensure_label_mask_exists(key)
-            h, w = label_mask.shape
-    
-            # 描画パスを1つにまとめる
-            path_union = QPainterPath()
-            for path, _ in paths:
-                path.closeSubpath()
-                path_union.addPath(path)
-            path_union.setFillRule(Qt.FillRule.OddEvenFill)
-    
-            # ラスター化
-            drawn_mask = self.rasterize_path_to_binary(path_union, w, h)
-    
-            # 元オブジェクトのうち、描画領域に入っている部分だけ転送
-            move_region = drawn_mask & (label_mask == src_id)
-            label_mask[move_region] = dst_id
-    
-            # 保存
-            self.save_label_mask_png(key)
-    
-            # この画像の描画をクリア
-            self.drawn_paths_per_image[key] = []
-            processed_count += 1
-    
-        self.display_current_image()
-        self.scene.update()
-        self.label_status.setText(
-            f"✅ Transferred Obj {src_id} → Obj {dst_id} on {processed_count} image(s)."
-        )
+        self._apply_pending_paths_to_masks("transfer")
     
 
         
@@ -8938,12 +9045,26 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
     def on_remove_small_parts(self):
         self.apply_mask_cleanup({
-            "object_id": self.combo_delete_object.currentIndex() + 1,
+            "object_id": self.combo_target_object.currentIndex() + 1,
             "operation": "remove-islands",
             "operation_name": "Remove Small Islands",
             "scope": "all",
             "start_frame": 1,
             "end_frame": max(1, len(self.image_paths)),
+            "minimum_size": self.spinbox_threshold.value(),
+            "radius": 1,
+            "iterations": 1,
+        })
+
+
+    def on_remove_small_parts_current(self):
+        self.apply_mask_cleanup({
+            "object_id": self.combo_target_object.currentIndex() + 1,
+            "operation": "remove-islands",
+            "operation_name": "Remove Small Islands",
+            "scope": "current",
+            "start_frame": self.current_index + 1,
+            "end_frame": self.current_index + 1,
             "minimum_size": self.spinbox_threshold.value(),
             "radius": 1,
             "iterations": 1,

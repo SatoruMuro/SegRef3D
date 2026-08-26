@@ -2,10 +2,19 @@ from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QPushButton, QLabel, QGraphicsView,
     QCheckBox, QScrollArea, QFrame, QComboBox,  # ← ここに QComboBox を追加
-    QDoubleSpinBox, QSpinBox  # ✅ ← これを追加
+    QDoubleSpinBox, QSpinBox, QToolBox, QSplitter, QGroupBox,
+    QRadioButton, QButtonGroup, QSlider, QProgressBar, QSizePolicy
 )
 from PyQt6.QtGui import QColor, QPixmap, QFont
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, pyqtSignal
+
+
+class StatusLabel(QLabel):
+    textChanged = pyqtSignal(str)
+
+    def setText(self, text):
+        super().setText(text)
+        self.textChanged.emit(str(text))
 
 
 class Ui_MainWindow:
@@ -394,7 +403,7 @@ class Ui_MainWindow:
 
 
         # 🔹 ステータスラベル（画像ファイル名など）
-        self.label_status = QLabel("Ready")
+        self.label_status = StatusLabel("Ready")
         self.label_status.setAlignment(Qt.AlignmentFlag.AlignHCenter)
 
         status_font = QFont()
@@ -946,5 +955,447 @@ class Ui_MainWindow:
         ]:
             prev_style = btn.styleSheet()
             btn.setStyleSheet(prev_style + basic_frame_style)
+
+        self._rebuild_desktop_layout(MainWindow, outer_layout)
+
+    def _clear_layout(self, layout):
+        while layout.count():
+            item = layout.takeAt(0)
+            child_layout = item.layout()
+            widget = item.widget()
+            if child_layout is not None:
+                self._clear_layout(child_layout)
+            elif widget is not None:
+                if widget.layout() is not None:
+                    self._clear_layout(widget.layout())
+                widget.setParent(None)
+
+    def _rebuild_desktop_layout(self, MainWindow, outer_layout):
+        """Rehome the existing controls into the desktop three-column workspace."""
+        self._clear_layout(outer_layout)
+        outer_layout.setContentsMargins(8, 8, 8, 6)
+        outer_layout.setSpacing(6)
+
+        MainWindow.setMinimumSize(960, 680)
+        MainWindow.resize(1440, 900)
+
+        def row(*widgets, stretch=False):
+            container = QWidget()
+            layout = QHBoxLayout(container)
+            layout.setContentsMargins(0, 0, 0, 0)
+            layout.setSpacing(6)
+            for widget in widgets:
+                layout.addWidget(widget)
+            if stretch:
+                layout.addStretch(1)
+            return container
+
+        def group(title, widgets):
+            box = QGroupBox(title)
+            layout = QVBoxLayout(box)
+            layout.setContentsMargins(8, 12, 8, 8)
+            layout.setSpacing(6)
+            for widget in widgets:
+                layout.addWidget(widget)
+                widget.show()
+            return box
+
+        def tool_page(title):
+            scroll = QScrollArea()
+            scroll.setWidgetResizable(True)
+            scroll.setFrameShape(QFrame.Shape.NoFrame)
+            scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            content = QWidget()
+            content.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+            layout = QVBoxLayout(content)
+            layout.setContentsMargins(6, 8, 6, 8)
+            layout.setSpacing(8)
+            layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+            scroll.setWidget(content)
+            self.tool_box.addItem(scroll, title)
+            return layout
+
+        # Top toolbar: only high-frequency project and history actions.
+        top_bar = QFrame()
+        top_bar.setObjectName("topToolbar")
+        top_layout = QHBoxLayout(top_bar)
+        top_layout.setContentsMargins(6, 4, 6, 4)
+        top_layout.setSpacing(6)
+        self.btn_load_images.setText("Open Images")
+        self.btn_fit_to_window.setText("Fit")
+        self.btn_undo.setText("Undo")
+        self.btn_redo.setText("Redo")
+        self.btn_show_version_info.setText("Version")
+        for button in (
+            self.btn_load_images,
+            self.btn_load_masks,
+            self.btn_save_svg_as,
+            self.btn_fit_to_window,
+            self.btn_undo,
+            self.btn_redo,
+        ):
+            button.show()
+            top_layout.addWidget(button)
+        self.btn_load_images.setProperty("primary", True)
+        top_layout.addStretch(1)
+        self.btn_show_version_info.show()
+        top_layout.addWidget(self.btn_show_version_info)
+        outer_layout.addWidget(top_bar)
+
+        self.workspace_splitter = QSplitter(Qt.Orientation.Horizontal)
+        self.workspace_splitter.setChildrenCollapsible(False)
+
+        # Left: vertical object visibility and target selection.
+        self.object_panel = QFrame()
+        self.object_panel.setObjectName("objectPanel")
+        self.object_panel.setMinimumWidth(160)
+        self.object_panel.setMaximumWidth(240)
+        object_layout = QVBoxLayout(self.object_panel)
+        object_layout.setContentsMargins(6, 8, 6, 6)
+        object_layout.setSpacing(5)
+        object_title = QLabel("OBJECTS")
+        object_title.setObjectName("panelTitle")
+        object_layout.addWidget(object_title)
+
+        object_scroll = QScrollArea()
+        object_scroll.setWidgetResizable(True)
+        object_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        object_content = QWidget()
+        object_rows_layout = QVBoxLayout(object_content)
+        object_rows_layout.setContentsMargins(0, 0, 0, 0)
+        object_rows_layout.setSpacing(2)
+        self.object_target_group = QButtonGroup(MainWindow)
+        self.object_target_group.setExclusive(True)
+        self.object_target_buttons = []
+        self.object_color_swatches = []
+        for index, (checkbox, rgb) in enumerate(zip(self.checkboxes, self.color_labels)):
+            object_row = QFrame()
+            object_row.setObjectName("objectRow")
+            object_row_layout = QHBoxLayout(object_row)
+            object_row_layout.setContentsMargins(3, 2, 3, 2)
+            object_row_layout.setSpacing(5)
+            checkbox.setText("")
+            checkbox.setToolTip(f"Show or hide Obj {index + 1}.")
+            swatch = QLabel()
+            swatch.setFixedSize(14, 14)
+            swatch.setStyleSheet(
+                f"background-color: rgb({rgb[0]}, {rgb[1]}, {rgb[2]});"
+                "border: 1px solid #666;"
+            )
+            target_button = QPushButton(f"Obj {index + 1}")
+            target_button.setCheckable(True)
+            target_button.setProperty("objectTarget", True)
+            target_button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+            target_button.setToolTip(f"Select Obj {index + 1} as the editing target.")
+            self.object_target_group.addButton(target_button, index)
+            self.object_target_buttons.append(target_button)
+            self.object_color_swatches.append(swatch)
+            object_row_layout.addWidget(checkbox)
+            object_row_layout.addWidget(swatch)
+            object_row_layout.addWidget(target_button, 1)
+            object_rows_layout.addWidget(object_row)
+        object_rows_layout.addStretch(1)
+        self.object_target_buttons[0].setChecked(True)
+        object_scroll.setWidget(object_content)
+        object_layout.addWidget(object_scroll, 1)
+        self.btn_rescan_used_colors.setText("Rescan Objects")
+        self.btn_rescan_used_colors.show()
+        object_layout.addWidget(self.btn_rescan_used_colors)
+
+        # Center: the image canvas remains the dominant workspace.
+        self.image_panel = QWidget()
+        image_layout = QVBoxLayout(self.image_panel)
+        image_layout.setContentsMargins(0, 0, 0, 0)
+        image_layout.setSpacing(5)
+        self.graphicsView.setMinimumSize(320, 240)
+        self.graphicsView.show()
+        image_layout.addWidget(self.graphicsView, 1)
+
+        self.slice_bar = QFrame()
+        self.slice_bar.setObjectName("sliceBar")
+        slice_layout = QHBoxLayout(self.slice_bar)
+        slice_layout.setContentsMargins(6, 3, 6, 3)
+        slice_layout.setSpacing(6)
+        self.btn_previous_slice = QPushButton("<")
+        self.btn_previous_slice.setFixedWidth(34)
+        self.btn_previous_slice.setToolTip("Previous slice.")
+        self.spin_slice = QSpinBox()
+        self.spin_slice.setRange(1, 1)
+        self.spin_slice.setFixedWidth(70)
+        self.spin_slice.setToolTip("Jump directly to a slice number.")
+        self.label_slice_count = QLabel("/ 0")
+        self.slice_slider = QSlider(Qt.Orientation.Horizontal)
+        self.slice_slider.setRange(1, 1)
+        self.slice_slider.setToolTip("Move through the loaded image sequence.")
+        self.btn_next_slice = QPushButton(">")
+        self.btn_next_slice.setFixedWidth(34)
+        self.btn_next_slice.setToolTip("Next slice.")
+        slice_layout.addWidget(self.btn_previous_slice)
+        slice_layout.addWidget(QLabel("Slice"))
+        slice_layout.addWidget(self.spin_slice)
+        slice_layout.addWidget(self.label_slice_count)
+        slice_layout.addWidget(self.slice_slider, 1)
+        slice_layout.addWidget(self.btn_next_slice)
+        image_layout.addWidget(self.slice_bar)
+
+        # Right: categorized tool panel with independently scrollable pages.
+        self.tool_panel = QFrame()
+        self.tool_panel.setObjectName("toolPanel")
+        self.tool_panel.setMinimumWidth(270)
+        self.tool_panel.setMaximumWidth(360)
+        tool_panel_layout = QVBoxLayout(self.tool_panel)
+        tool_panel_layout.setContentsMargins(5, 6, 5, 5)
+        tool_panel_layout.setSpacing(4)
+        tools_title = QLabel("TOOLS")
+        tools_title.setObjectName("panelTitle")
+        tool_panel_layout.addWidget(tools_title)
+        self.tool_box = QToolBox()
+        tool_panel_layout.addWidget(self.tool_box, 1)
+
+        draw_layout = tool_page("Draw & Refine")
+        self.label_active_target = QLabel("Target: Obj 1")
+        self.label_active_target.setObjectName("activeTarget")
+        draw_layout.addWidget(group("Drawing", [
+            self.label_active_target,
+            row(self.label_draw_mode, self.combo_draw_mode),
+            row(self.label_color, self.combo_color),
+            row(self.label_auto_apply, self.combo_auto_apply_mode),
+        ]))
+        self.radio_apply_current = QRadioButton("Current Slice")
+        self.radio_apply_all_pending = QRadioButton("All Pending Slices")
+        self.radio_apply_current.setChecked(True)
+        self.radio_apply_current.setToolTip("Apply the drawing only on the displayed slice.")
+        self.radio_apply_all_pending.setToolTip(
+            "Apply drawings on every slice that currently has a pending path."
+        )
+        self.apply_scope_group = QButtonGroup(MainWindow)
+        self.apply_scope_group.addButton(self.radio_apply_current)
+        self.apply_scope_group.addButton(self.radio_apply_all_pending)
+        draw_layout.addWidget(group("Apply to", [
+            self.radio_apply_current,
+            self.radio_apply_all_pending,
+        ]))
+        self.btn_add_to_mask.setText("Add")
+        self.btn_cut_from_mask.setText("Erase")
+        self.btn_transfer_to_mask.setText("Transfer")
+        draw_layout.addWidget(group("Manual Actions", [
+            row(self.btn_add_to_mask, self.btn_cut_from_mask, self.btn_transfer_to_mask),
+            row(QLabel("Transfer to"), self.combo_transfer_target),
+        ]))
+        self.btn_add_to_mask.setProperty("primary", True)
+        self.btn_clear_current_path.setText("Clear Current Drawing")
+        self.btn_clear_all_paths.setText("Clear All Pending Drawings")
+        draw_layout.addWidget(group("Pending Drawing", [
+            self.btn_clear_current_path,
+            self.btn_clear_all_paths,
+        ]))
+
+        ai_layout = tool_page("AI Segmentation")
+        self.local_sam2_widget = group("Local SAM2", [
+            row(self.btn_set_box_prompt, self.btn_clear_box),
+            self.btn_run_sam2,
+            self.btn_prepare_tracking,
+            row(self.btn_set_tracking_start, self.btn_set_tracking_end),
+            self.btn_run_tracking,
+            row(self.btn_add_object_prompt, self.btn_batch_tracking),
+        ])
+        self.btn_run_sam2.setProperty("primary", True)
+        ai_layout.addWidget(self.local_sam2_widget)
+        self.lite_sam2_widget = group("Local SAM2", [
+            QLabel("Not available in this build.\nUse Seg on Web for AI segmentation."),
+        ])
+        ai_layout.addWidget(self.lite_sam2_widget)
+        self.segonweb_widget = group("Seg on Web Workflow", [
+            self.btn_manage_batch_jobs,
+            self.btn_export_segonweb,
+            self.btn_import_segonweb_result,
+            self.btn_seg_on_web,
+        ])
+        ai_layout.addWidget(self.segonweb_widget)
+
+        cleanup_layout = tool_page("Mask Cleanup")
+        self.label_cleanup_target = QLabel("Target: Obj 1")
+        self.btn_remove_small_parts_current = QPushButton("Apply Current")
+        self.btn_remove_small_parts.setText("Apply All")
+        cleanup_layout.addWidget(group("Remove Small Parts", [
+            self.label_cleanup_target,
+            row(QLabel("Smaller than"), self.spinbox_threshold, self.label_px2),
+            row(self.btn_remove_small_parts_current, self.btn_remove_small_parts),
+        ]))
+        self.btn_delete_current_only.setText("Delete Current Slice")
+        self.btn_delete_object.setText("Delete All Slices")
+        self.btn_delete_current_only.setProperty("destructive", True)
+        self.btn_delete_object.setProperty("destructive", True)
+        cleanup_layout.addWidget(group("Delete Target Object", [
+            self.btn_delete_current_only,
+            self.btn_delete_object,
+        ]))
+        self.btn_mask_cleanup.setText("Open Mask Post-processing")
+        cleanup_layout.addWidget(self.btn_mask_cleanup)
+
+        measurement_layout = tool_page("Measurement")
+        self.label_voxel_info = QLabel("Voxel: not set")
+        self.label_voxel_info.setWordWrap(True)
+        measurement_layout.addWidget(group("Spatial Information", [self.label_voxel_info]))
+        measurement_layout.addWidget(group("Measurements", [
+            self.btn_load_volinf,
+            self.btn_show_volinf,
+            self.btn_draw_measurement_line,
+            self.btn_export_volume_csv,
+        ]))
+        manual_calibration = group("Manual Calibration", [
+            row(self.label_mm_input, self.spin_mm_input),
+            row(self.label_z_spacing, self.spin_z_interval),
+            self.btn_draw_calibration_line,
+        ])
+        manual_calibration.setCheckable(True)
+        manual_calibration.setChecked(False)
+        measurement_layout.addWidget(manual_calibration)
+
+        export_layout = tool_page("3D & Export")
+        export_layout.addWidget(group("3D Reconstruction", [
+            row(self.label_smooth_mode, self.combo_smooth_mode),
+            row(self.label_smooth, self.combo_smooth_level),
+            row(self.label_stack_order, self.combo_stack_order),
+            self.btn_export_stl_colorwise,
+            self.btn_instant3dweb,
+        ]))
+        self.btn_export_stl_colorwise.setProperty("primary", True)
+        export_layout.addWidget(group("Data Export", [
+            self.btn_export_nifti,
+            self.btn_export_tiff,
+            self.btn_export_overlay_png,
+        ]))
+        advanced_export = group("Advanced Export", [
+            self.btn_export_nifti_reversed,
+            self.btn_export_tiff_reversed,
+        ])
+        advanced_export.setCheckable(True)
+        advanced_export.setChecked(False)
+        export_layout.addWidget(advanced_export)
+
+        advanced_layout = tool_page("Advanced")
+        advanced_layout.addWidget(group("Image Thinning", [
+            row(self.label_thin_factor, self.spin_thin_factor),
+            self.btn_thin_images,
+        ]))
+        advanced_layout.addWidget(group("Threshold", [
+            row(self.label_threshold_preset, self.combo_threshold_preset),
+            row(self.label_threshold_range, self.spin_threshold_min, self.spin_threshold_max),
+            self.btn_extract_threshold,
+            row(self.btn_extract_inside_object, self.btn_extract_inside_object_all),
+            self.btn_show_fraction,
+        ]))
+        advanced_layout.addWidget(group("RGB Extraction", [
+            row(self.spin_r, self.spin_g, self.spin_b),
+            row(self.label_rgb_tol, self.spin_rgb_tol),
+            row(self.btn_rgb_pick, self.btn_rgb_extract),
+        ]))
+        advanced_layout.addWidget(group("Convert Object", [
+            row(self.label_convert_from, self.combo_convert_from),
+            row(self.label_convert_to, self.combo_convert_to),
+            self.btn_convert_color,
+        ]))
+
+        for widget in (
+            self.label_target_object,
+            self.combo_target_object,
+            self.label_delete_object,
+            self.combo_delete_object,
+            self.btn_undo_edit,
+            self.btn_redo_edit,
+            self.btn_undo_delete,
+            self.label_advanced_group,
+            self.combo_advanced_group,
+            self.advanced_container,
+        ):
+            widget.hide()
+
+        # Legacy inline colors made every action compete for attention. Let the
+        # workspace palette handle visible buttons, with only primary and
+        # destructive actions receiving semantic emphasis.
+        for button in self.central_widget.findChildren(QPushButton):
+            button.setStyleSheet("")
+            button.setMinimumWidth(0)
+            button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        for combo in self.tool_panel.findChildren(QComboBox):
+            combo.setMinimumWidth(0)
+            combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+            combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+            combo.setMinimumContentsLength(6)
+
+        self.workspace_splitter.addWidget(self.object_panel)
+        self.workspace_splitter.addWidget(self.image_panel)
+        self.workspace_splitter.addWidget(self.tool_panel)
+        self.workspace_splitter.setStretchFactor(0, 0)
+        self.workspace_splitter.setStretchFactor(1, 1)
+        self.workspace_splitter.setStretchFactor(2, 0)
+        self.workspace_splitter.setSizes([190, 900, 320])
+        outer_layout.addWidget(self.workspace_splitter, 1)
+
+        # Compact status bar with an automatically managed progress indicator.
+        status_bar = QFrame()
+        status_bar.setObjectName("statusBar")
+        status_layout = QHBoxLayout(status_bar)
+        status_layout.setContentsMargins(7, 3, 7, 3)
+        self.label_status.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        status_font = self.label_status.font()
+        status_font.setPointSize(9)
+        status_font.setBold(False)
+        self.label_status.setFont(status_font)
+        self.label_status.setWordWrap(False)
+        self.status_progress = QProgressBar()
+        self.status_progress.setRange(0, 100)
+        self.status_progress.setFixedWidth(180)
+        self.status_progress.hide()
+        status_layout.addWidget(self.label_status, 1)
+        status_layout.addWidget(self.status_progress)
+        outer_layout.addWidget(status_bar)
+
+        # A restrained application palette leaves object colors as the main color signal.
+        self.central_widget.setStyleSheet("""
+            QFrame#topToolbar, QFrame#sliceBar, QFrame#statusBar {
+                background: #f2f4f6;
+                border: 1px solid #c9ced3;
+            }
+            QFrame#objectPanel, QFrame#toolPanel {
+                background: #eef0f2;
+                border: 1px solid #c9ced3;
+            }
+            QLabel#panelTitle { font-weight: 700; color: #343a40; }
+            QLabel#activeTarget { font-weight: 700; color: #174f7a; }
+            QPushButton { min-height: 24px; padding: 2px 7px; }
+            QPushButton[primary="true"] {
+                background: #2476a8; color: white; border: 1px solid #1d628c;
+            }
+            QPushButton[primary="true"]:disabled {
+                background: palette(button); color: palette(mid); border-color: palette(mid);
+            }
+            QPushButton[objectTarget="true"] {
+                text-align: left; border: 0; background: transparent; padding: 4px;
+            }
+            QPushButton[objectTarget="true"]:checked {
+                background: #d8e8f5; border-left: 3px solid #2476a8; font-weight: 700;
+            }
+            QPushButton[destructive="true"] { color: #a61b1b; }
+            QToolBox::tab { font-weight: 600; padding: 7px; }
+            QGroupBox { font-weight: 600; margin-top: 6px; }
+            QGroupBox QLabel, QGroupBox QCheckBox, QGroupBox QRadioButton {
+                font-weight: 400;
+            }
+        """)
+
+        self.combo_draw_mode.setToolTip(
+            "Free draws continuously; Click joins points; Click (Snap) follows nearby edges."
+        )
+        self.combo_auto_apply_mode.setToolTip(
+            "Automatically apply each completed drawing as Add, Erase, or Transfer."
+        )
+        self.btn_seg_on_web.setToolTip("Open the Google Colab SAM2 workflow.")
+        self.btn_run_tracking.setToolTip("Propagate the box-prompt mask through the selected range.")
+        self.combo_smooth_mode.setToolTip("Choose Z interpolation, mesh smoothing, both, or neither.")
+        self.combo_smooth_level.setToolTip("Set the mesh smoothing strength for 3D export.")
+        self.btn_export_nifti_reversed.setToolTip("Export the label volume with reversed slice order.")
+        self.btn_export_tiff_reversed.setToolTip("Export the TIFF stack with reversed slice order.")
 
 

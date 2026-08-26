@@ -282,6 +282,10 @@ https://github.com/SatoruMuro/SegRef3DViewer
 # Update  
 **2026.8.26**
 
+SegRef3D source versionを**1.2.6**へ更新。Windows GPU版／Lite CPU版のデスクトップGUIを、基本操作だけのTop Toolbar、縦型Object Panel、中央Image View、カテゴリ別Tool Panel、Slice Navigation、コンパクトなStatus Barからなる3カラム構成へ再設計。Object row選択とTarget Objectを同期し、wheel・PageUp/PageDown・F/R・J/Uを含む全画像切替をslice slider／番号表示へ反映。Lite版ではローカルSAM2 controlsを非表示にし、Seg on Web導線のみを表示。
+
+手描き編集に**Current Slice／All Pending Slices**を追加し、Add／Erase／Transferの対象範囲を明示。複数sliceへの一括適用は1回のUndo/Redo transactionとして保持し、Transferは描画範囲内の選択objectだけを変更。Top ToolbarのUndo／Redoを線編集とmask編集に統合し、`Ctrl+Y`／`Ctrl+Shift+Z`によるRedo、window resize時のzoom保持、主要controlのtooltip、処理中だけ表示されるprogress barを追加。
+
 SegRef3D source versionを**1.2.5**へ更新。Windows GPU版／Lite CPU版の共通機能として、Lite Web互換の**Mask Cleanup**（Fill Holes、Remove Small Islands、Keep Largest Component、Smooth Boundary、Dilate、Erode）と、signed-distance fieldによる**Interpolate Between Frames**を追加。
 
 対象object以外のlabelを保持し、Current Frame／Frame Range／All Framesを選択可能。複数frameへの処理も1回のUndo/Redo transactionとして扱い、変更maskは既存のlabel PNG autosave・NIfTI／TIFF／STL出力へそのまま反映。処理はSciPy／NumPyによるCPU共通実装で、Lite版へTorch／CUDA依存を追加しない構成を維持。
