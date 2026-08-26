@@ -11,12 +11,12 @@ mask-editing, calibration, and export pipeline as user data.
 
 1. Open the automatically displayed **Calibration** tab.
 2. Draw a reference line across the widest apple diameter using the assumed learning value
-   **75 mm**.
+   **100 mm**.
 3. Keep the preset slice spacing at **approx. 4.0 mm**.
 4. Segment and refine the apple's outer contour.
 5. Open **Volume & 3D**, preview the reconstruction, and export STL or another existing format.
 
-The 75 mm reference is an assumed typical apple diameter for learning the calibration workflow;
+The 100 mm reference is an assumed apple diameter for learning the calibration workflow;
 it is not a measurement of this specimen. The source dataset describes the slice spacing as
 roughly 4 mm.
 

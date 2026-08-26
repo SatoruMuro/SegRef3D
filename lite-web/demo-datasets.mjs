@@ -6,17 +6,17 @@ const appleImages = Array.from(
 export const DEMO_DATASETS = Object.freeze([
   Object.freeze({
     id: "apple-kanzi-84",
-    revision: 1,
+    revision: 2,
     displayName: "Apple Demo",
     projectName: "Apple Demo - Kanzi 84",
     sourceFormat: "demo",
     imagePaths: Object.freeze(appleImages),
     calibration: Object.freeze({
-      referenceLengthMm: 75,
+      referenceLengthMm: 100,
       sliceSpacingMm: 4,
       instruction: "Draw a calibration line across the widest diameter of the apple.",
       referenceNote:
-        "75 mm is an assumed typical apple diameter for demonstration purposes, not a measurement of this specimen.",
+        "100 mm is an assumed apple diameter for demonstration purposes, not a measurement of this specimen.",
       spacingNote: "The source dataset describes the slice spacing as roughly 4 mm.",
     }),
     nextStep: "Next: segment the outer contour of the apple.",

@@ -9,7 +9,8 @@ test("Apple demo declares ordered images, calibration guidance, and attribution"
   assert.equal(dataset.imagePaths.length, 20);
   assert.equal(dataset.imagePaths[0], "./demo/apple-kanzi-84/apple_0001.jpg");
   assert.equal(dataset.imagePaths.at(-1), "./demo/apple-kanzi-84/apple_0020.jpg");
-  assert.equal(dataset.calibration.referenceLengthMm, 75);
+  assert.equal(dataset.revision, 2);
+  assert.equal(dataset.calibration.referenceLengthMm, 100);
   assert.equal(dataset.calibration.sliceSpacingMm, 4);
   assert.match(dataset.calibration.referenceNote, /not a measurement/i);
   assert.match(dataset.attribution.doiUrl, /zenodo\.8167285/);
@@ -36,7 +37,9 @@ test("Apple demo UI uses the normal sequence pipeline and offline cache", async 
   ]);
   assert.match(html, /Load Apple Demo/);
   assert.match(html, /id="demo-calibration-guide"/);
+  assert.match(html, /id="demo-reference-value">100 mm/);
+  assert.ok(html.indexOf('id="reference-length"') < html.indexOf('id="spacing-z"'));
   assert.match(app, /prepareImageSequence\([\s\S]*preserveDimensions: true, demoDataset: dataset/);
-  assert.match(worker, /demo-datasets\.mjs\?v=1/);
+  assert.match(worker, /demo-datasets\.mjs\?v=2/);
   assert.match(worker, /APPLE_DEMO_FILES/);
 });

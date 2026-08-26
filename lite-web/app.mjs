@@ -31,7 +31,7 @@ import {
   parseNiftiVolume,
   parseTiffStack,
 } from "./medical-io.mjs?v=17";
-import { demoDatasetById } from "./demo-datasets.mjs?v=1";
+import { demoDatasetById } from "./demo-datasets.mjs?v=2";
 import { clearProjectMasks, loadMask, saveMask } from "./storage.mjs";
 import { createZip, parseZip } from "./zip.mjs";
 import {
@@ -3655,7 +3655,7 @@ async function loadDemo() {
     if (!loaded) return;
     setSaveState("Apple Demo autosave active", "saved");
     setStatus(
-      `Apple Demo loaded: ${sources.length} slices. Calibrate the widest apple diameter using the 75 mm learning reference.`,
+      `Apple Demo loaded: ${sources.length} slices. Calibrate the widest apple diameter using the ${dataset.calibration.referenceLengthMm} mm learning reference.`,
     );
     showToast("Apple Demo ready · Start with Calibration");
     requestAnimationFrame(() => {

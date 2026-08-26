@@ -11,7 +11,7 @@
     <title>SegRef3D Lite Web</title>
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
     <link rel="manifest" href="./manifest.webmanifest" />
-    <link rel="stylesheet" href="./styles.css?v=20" />
+    <link rel="stylesheet" href="./styles.css?v=21" />
   </head>
   <body>
     <svg class="svg-defs" aria-hidden="true">
@@ -825,7 +825,7 @@
             </div>
             <p id="demo-calibration-instruction">Draw a calibration line across the widest diameter of the apple.</p>
             <div class="demo-calibration-values">
-              <span>Reference length <strong id="demo-reference-value">75 mm</strong></span>
+              <span>Reference length <strong id="demo-reference-value">100 mm</strong></span>
               <span>Slice spacing <strong id="demo-spacing-value">4.0 mm (approx.)</strong></span>
             </div>
             <p id="demo-reference-note" class="demo-calibration-note"></p>
@@ -840,8 +840,8 @@
           <div class="tool-grid calibration-grid">
             <label class="number-field"><span>X spacing (mm/px)</span><input id="spacing-x" type="number" min="0.000001" step="0.001" value="1" /></label>
             <label class="number-field"><span>Y spacing (mm/px)</span><input id="spacing-y" type="number" min="0.000001" step="0.001" value="1" /></label>
-            <label class="number-field"><span>Z spacing (mm)</span><input id="spacing-z" type="number" min="0.000001" step="0.001" value="1" /></label>
             <label class="number-field"><span>Reference length (mm)</span><input id="reference-length" type="number" min="0.000001" step="0.1" value="10" /></label>
+            <label class="number-field"><span>Z spacing (mm)</span><input id="spacing-z" type="number" min="0.000001" step="0.001" value="1" /></label>
           </div>
           <div class="tool-actions">
             <button id="draw-calibration" class="command-button accent" type="button">
@@ -1009,6 +1009,6 @@
         if (status) status.textContent = `Application operation failed: ${message}`;
       });
     </script>
-    <script type="module" src="./app.mjs?v=20"></script>
+    <script type="module" src="./app.mjs?v=21"></script>
   </body>
 </html>
