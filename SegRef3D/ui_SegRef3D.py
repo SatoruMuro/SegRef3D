@@ -507,6 +507,7 @@ class Ui_MainWindow:
         
         
         self.btn_remove_small_parts = QPushButton("Remove Small Parts")
+        self.btn_mask_cleanup = QPushButton("Open Mask Cleanup")
         self.btn_delete_current_only = QPushButton("Delete Object CurrentImg")
         self.btn_delete_object = QPushButton("Delete Object AllImg")
         self.btn_undo_delete = QPushButton("Undo Delete")
@@ -662,6 +663,7 @@ class Ui_MainWindow:
             "Batch Tracking",
             "Convert",
             "Delete / Cleanup",
+            "Mask Cleanup",
             "Stacking Direction",
             "Version Info",
         ])
@@ -830,6 +832,9 @@ class Ui_MainWindow:
                 self.btn_delete_object,
                 self.btn_undo_delete,
                 # self.btn_rescan_used_colors,
+            ],
+            "Mask Cleanup": [
+                self.btn_mask_cleanup,
             ],
             "Stacking Direction": [
                 self.label_stack_order,

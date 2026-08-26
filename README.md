@@ -280,6 +280,12 @@ https://github.com/SatoruMuro/SegRef3DViewer
 ---
 
 # Update  
+**2026.8.26**
+
+SegRef3D source versionを**1.2.5**へ更新。Windows GPU版／Lite CPU版の共通機能として、Lite Web互換の**Mask Cleanup**（Fill Holes、Remove Small Islands、Keep Largest Component、Smooth Boundary、Dilate、Erode）と、signed-distance fieldによる**Interpolate Between Frames**を追加。
+
+対象object以外のlabelを保持し、Current Frame／Frame Range／All Framesを選択可能。複数frameへの処理も1回のUndo/Redo transactionとして扱い、変更maskは既存のlabel PNG autosave・NIfTI／TIFF／STL出力へそのまま反映。処理はSciPy／NumPyによるCPU共通実装で、Lite版へTorch／CUDA依存を追加しない構成を維持。
+
 **2026.8.25**
 
 Lite Webの研究workflowを再構成し、**Volume Statistics、Mask Cleanup、Label Manager、slice mask interpolation、TIFF stack import、Three.js 3D preview、Project Check**を追加。Objects panelをtarget選択の中心にし、Seg on Web操作を`Setup → ZIP → Colab → Result`の1つのpanel、各種出力をExport menuへ統合。

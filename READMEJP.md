@@ -199,6 +199,8 @@ SegRef3D を動かすのに必要なものはすべてアプリケーション�
 * **Convert Color**：色ラベルを全画像にわたって変換
 * **Overlap Detection**：2つのオブジェクトの重なり領域を抽出・可視化
 * **Undo/Redo Edit**：編集の取り消しとやり直し
+* **Mask Cleanup**：`Extensions > Mask Cleanup`から、穴埋め、小領域除去、最大領域保持、境界平滑化、膨張、収縮を現在frame・範囲・全frameへ適用
+* **Interpolate Between Frames**：2つのkeyframe間へsigned-distance field補間による編集可能なmaskを生成。複数frame処理も1回のUndo/Redoで復元
 
 ---
 

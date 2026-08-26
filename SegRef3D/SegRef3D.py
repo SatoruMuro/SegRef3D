@@ -1,4 +1,4 @@
-__version__ = "1.2.4"
+__version__ = "1.2.5"
 
 
 import sys
@@ -36,7 +36,7 @@ from PyQt6.QtGui import (
 from PyQt6.QtCore import Qt, QPointF
 from PyQt6.QtSvg import QSvgRenderer
 
-from PyQt6.QtWidgets import QFileDialog, QDialogButtonBox, QPushButton
+from PyQt6.QtWidgets import QFileDialog, QDialogButtonBox, QPushButton, QProgressDialog
 
 import nrrd  # pip install pynrrd
 import numpy as np
@@ -47,6 +47,14 @@ from segmentation_job import (
     SegmentationJobError,
     create_job_zip,
     validate_result_zip,
+)
+from mask_cleanup_dialog import MaskPostProcessingDialog
+from mask_postprocessing import (
+    build_mask_volume_changes,
+    cleanup_label_mask,
+    frame_indices_for_scope,
+    interpolate_label_masks,
+    merge_label_binary,
 )
 
 from svgpathtools import parse_path
@@ -785,6 +793,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         
         # self.btn_remove_small_parts.clicked.connect(self.delete_small_parts_in_selected_object)
         self.btn_remove_small_parts.clicked.connect(self.on_remove_small_parts)
+        self.btn_mask_cleanup.clicked.connect(self.show_mask_postprocessing_dialog)
         self.btn_delete_current_only.clicked.connect(self.delete_selected_object_from_current_image)
         self.btn_delete_object.clicked.connect(self.delete_selected_object)
         self.btn_undo_delete.clicked.connect(self.smart_undo)
@@ -817,6 +826,8 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         #Undo Redoのための変数
         self.undo_stack = {}  # 例: {'0001': [svg_text_before_edit, ...]}
         self.redo_stack = {}
+        self._bulk_mask_undo_pending = False
+        self.mask_postprocessing_dialog = None
 
 
 
@@ -3819,6 +3830,17 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             self.undo_last_path()
             print("[INFO] Ctrl+Z -> undo_last_drawn_path done")
             return
+
+        # A newly applied multi-frame operation is one transaction and must
+        # be the next mask edit that Undo restores.
+        if (
+            self._bulk_mask_undo_pending
+            and "__global__" in self.undo_stack
+            and self.undo_stack["__global__"]
+        ):
+            self.undo_edit("__global__")
+            print("[INFO] Ctrl+Z -> undo_bulk_label_edit done")
+            return
     
         # ② 通常の1画像Undo
         if key in self.undo_stack and self.undo_stack[key]:
@@ -6429,7 +6451,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         - key を指定: そのキーのみ保存
         - key を None: 全 label_masks 分の snapshot を保存
         """
-        if key is None:
+        if key is None or key == "__global__":
             snapshot = {}
     
             for k in self.image_paths.keys():
@@ -6442,8 +6464,10 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             if snapshot:
                 self.undo_stack.setdefault("__global__", []).append(snapshot)
                 self.redo_stack["__global__"] = []
+                self._bulk_mask_undo_pending = True
     
         else:
+            self._bulk_mask_undo_pending = False
             try:
                 label_mask = self.ensure_label_mask_exists(key)
             except Exception as e:
@@ -6530,6 +6554,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
                     print(f"[WARN] Failed to save restored label mask for {k}: {e}")
     
             self.display_current_image()
+            self._bulk_mask_undo_pending = False
             self.label_status.setText("Undo (all images) completed.")
             return
     
@@ -6618,6 +6643,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
                     print(f"[WARN] Failed to save restored label mask for {k}: {e}")
     
             self.display_current_image()
+            self._bulk_mask_undo_pending = True
             self.label_status.setText("Redo (all images) completed.")
             return
     
@@ -8732,9 +8758,196 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
 
 
+    def show_mask_postprocessing_dialog(self):
+        if not self.image_paths:
+            self.label_status.setText("⚠ No images loaded.")
+            QMessageBox.information(self, "Mask Post-processing", "No images are loaded.")
+            return
+
+        if self.mask_postprocessing_dialog is None:
+            dialog = MaskPostProcessingDialog(self)
+            dialog.cleanup_requested.connect(self.apply_mask_cleanup)
+            dialog.interpolation_requested.connect(self.interpolate_masks_between_frames)
+            self.mask_postprocessing_dialog = dialog
+
+        self.mask_postprocessing_dialog.refresh(
+            len(self.image_paths),
+            self.current_index + 1,
+            self.combo_target_object.currentIndex() + 1,
+        )
+        self.mask_postprocessing_dialog.show()
+        self.mask_postprocessing_dialog.raise_()
+        self.mask_postprocessing_dialog.activateWindow()
+
+    def _commit_mask_transaction(self, changes, status_text):
+        if not changes:
+            self.label_status.setText("No mask pixels changed.")
+            return False
+
+        before_snapshot = {key: states[0].copy() for key, states in changes.items()}
+        self.undo_stack.setdefault("__global__", []).append(before_snapshot)
+        self.redo_stack["__global__"] = []
+        self._bulk_mask_undo_pending = True
+
+        for key, (_, next_mask) in changes.items():
+            self.label_masks[key] = next_mask.copy()
+            try:
+                self.save_label_mask_png(key)
+            except Exception as exc:
+                print(f"[WARN] Failed to autosave post-processed mask {key}: {exc}")
+
+        self.display_current_image()
+        self.scene.update()
+        self.update_checkboxes_based_on_used_colors()
+        self.label_status.setText(status_text)
+        return True
+
+    def _mask_copy_for_processing(self, key):
+        existing = self.label_masks.get(key)
+        if existing is not None:
+            return existing.copy()
+        return self.create_empty_label_mask(key)
+
+    def apply_mask_cleanup(self, settings):
+        if not self.image_paths:
+            self.label_status.setText("⚠ No images loaded.")
+            return
+
+        try:
+            keys = list(self.image_paths.keys())
+            indices = frame_indices_for_scope(
+                settings["scope"],
+                self.current_index,
+                int(settings["start_frame"]) - 1,
+                int(settings["end_frame"]) - 1,
+                len(keys),
+            )
+            object_id = int(settings["object_id"])
+            progress = QProgressDialog(
+                "Applying mask cleanup...", "Cancel", 0, len(indices), self
+            )
+            progress.setWindowTitle("Mask Cleanup")
+            progress.setWindowModality(Qt.WindowModality.WindowModal)
+            progress.setMinimumDuration(0)
+
+            before = {}
+            after = {}
+            for position, index in enumerate(indices, start=1):
+                if progress.wasCanceled():
+                    self.label_status.setText("Mask cleanup canceled. No masks were changed.")
+                    return
+                key = keys[index]
+                progress.setLabelText(
+                    f"{settings['operation_name']} · Obj {object_id} · "
+                    f"frame {index + 1}/{len(keys)}"
+                )
+                QApplication.processEvents()
+                source = self._mask_copy_for_processing(key)
+                before[key] = source
+                after[key] = cleanup_label_mask(
+                    source,
+                    object_id,
+                    settings["operation"],
+                    minimum_size=settings["minimum_size"],
+                    radius=settings["radius"],
+                    iterations=settings["iterations"],
+                )
+                progress.setValue(position)
+                QApplication.processEvents()
+
+            if progress.wasCanceled():
+                self.label_status.setText("Mask cleanup canceled. No masks were changed.")
+                return
+            changes = build_mask_volume_changes(before, after)
+            self._commit_mask_transaction(
+                changes,
+                f"✅ {settings['operation_name']} applied to Obj {object_id} "
+                f"on {len(changes)} frame(s).",
+            )
+        except Exception as exc:
+            self.label_status.setText(f"⚠ Mask cleanup failed: {exc}")
+            QMessageBox.warning(self, "Mask Cleanup", f"Mask cleanup failed.\n\n{exc}")
+
+    def interpolate_masks_between_frames(self, settings):
+        if not self.image_paths:
+            self.label_status.setText("⚠ No images loaded.")
+            return
+
+        try:
+            keys = list(self.image_paths.keys())
+            start = int(settings["start_frame"]) - 1
+            end = int(settings["end_frame"]) - 1
+            if not (0 <= start < end < len(keys)):
+                raise ValueError("Choose valid Start and End frames with Start before End.")
+            if end - start < 2:
+                raise ValueError("Start and End must leave at least one intermediate frame.")
+
+            object_id = int(settings["object_id"])
+            start_mask = self._mask_copy_for_processing(keys[start])
+            end_mask = self._mask_copy_for_processing(keys[end])
+            progress = QProgressDialog(
+                "Computing signed-distance interpolation...",
+                "Cancel",
+                0,
+                end - start - 1,
+                self,
+            )
+            progress.setWindowTitle("Interpolate Between Frames")
+            progress.setWindowModality(Qt.WindowModality.WindowModal)
+            progress.setMinimumDuration(0)
+            progress.show()
+            QApplication.processEvents()
+
+            generated = interpolate_label_masks(
+                start_mask, end_mask, object_id, end - start - 1
+            )
+            if progress.wasCanceled():
+                self.label_status.setText("Mask interpolation canceled. No masks were changed.")
+                return
+
+            before = {}
+            after = {}
+            for offset, binary in enumerate(generated, start=1):
+                if progress.wasCanceled():
+                    self.label_status.setText("Mask interpolation canceled. No masks were changed.")
+                    return
+                frame_index = start + offset
+                key = keys[frame_index]
+                progress.setLabelText(
+                    f"Interpolating Obj {object_id} · frame {frame_index + 1}/{len(keys)}"
+                )
+                source = self._mask_copy_for_processing(key)
+                before[key] = source
+                after[key] = merge_label_binary(source, binary, object_id)
+                progress.setValue(offset)
+                QApplication.processEvents()
+
+            changes = build_mask_volume_changes(before, after)
+            self._commit_mask_transaction(
+                changes,
+                f"✅ Interpolated Obj {object_id} between frames {start + 1} and {end + 1} "
+                f"({len(changes)} frame(s) updated).",
+            )
+        except Exception as exc:
+            self.label_status.setText(f"⚠ Mask interpolation failed: {exc}")
+            QMessageBox.warning(
+                self,
+                "Interpolate Between Frames",
+                f"Mask interpolation failed.\n\n{exc}",
+            )
+
     def on_remove_small_parts(self):
-        threshold = self.spinbox_threshold.value()
-        self.delete_small_parts_in_selected_object(min_area_threshold=threshold)
+        self.apply_mask_cleanup({
+            "object_id": self.combo_delete_object.currentIndex() + 1,
+            "operation": "remove-islands",
+            "operation_name": "Remove Small Islands",
+            "scope": "all",
+            "start_frame": 1,
+            "end_frame": max(1, len(self.image_paths)),
+            "minimum_size": self.spinbox_threshold.value(),
+            "radius": 1,
+            "iterations": 1,
+        })
 
 
     
@@ -8878,51 +9091,17 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
     def delete_small_parts_in_selected_object(self, min_area_threshold=None):
         if min_area_threshold is None:
             min_area_threshold = self.spinbox_threshold.value()
-    
-        obj_id = self.combo_delete_object.currentIndex() + 1
-    
-        deleted_images = 0
-        deleted_components_total = 0
-    
-        for key in sorted(self.image_paths.keys()):
-            try:
-                label_mask = self.ensure_label_mask_exists(key)
-    
-                # 対象オブジェクトだけのバイナリ
-                binary = (label_mask == obj_id).astype(np.uint8)
-    
-                if np.count_nonzero(binary) == 0:
-                    continue
-    
-                # 連結成分解析
-                num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(binary, connectivity=8)
-    
-                removed_any = False
-                removed_count_this_image = 0
-    
-                # 0は背景なので1から
-                for comp_id in range(1, num_labels):
-                    area = stats[comp_id, cv2.CC_STAT_AREA]
-    
-                    if area < min_area_threshold:
-                        label_mask[labels == comp_id] = 0
-                        removed_any = True
-                        removed_count_this_image += 1
-    
-                if removed_any:
-                    self.save_label_mask_png(key)
-                    deleted_images += 1
-                    deleted_components_total += removed_count_this_image
-                    print(f"[INFO] Removed small parts of Obj {obj_id} in mask {key} ({removed_count_this_image} components)")
-    
-            except Exception as e:
-                print(f"[WARN] Failed to remove small parts for {key}: {e}")
-    
-        self.display_current_image()
-        self.scene.update()
-        self.label_status.setText(
-            f"✅ Removed small parts of Obj {obj_id} in {deleted_images} image(s)"
-        )
+        self.apply_mask_cleanup({
+            "object_id": self.combo_delete_object.currentIndex() + 1,
+            "operation": "remove-islands",
+            "operation_name": "Remove Small Islands",
+            "scope": "all",
+            "start_frame": 1,
+            "end_frame": max(1, len(self.image_paths)),
+            "minimum_size": min_area_threshold,
+            "radius": 1,
+            "iterations": 1,
+        })
 
 
 
