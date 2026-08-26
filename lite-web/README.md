@@ -6,8 +6,14 @@ Public beta: <https://satorumuro.github.io/SegRef3D/lite-web/>
 
 ## Try SegRef3D without preparing your own data
 
-Open Lite Web and choose **Load Apple Demo**. The bundled 20-slice stack follows the same image,
-mask-editing, calibration, and export pipeline as user data.
+Lite Web includes two demos that use the same loading, mask-editing, and export pipelines as user data:
+
+- **Apple Demo**: serial slice photographs and a calibration tutorial.
+- **RabbitCT Demo**: a volumetric CT tutorial with 1.0 mm isotropic voxel spacing.
+
+### Apple Demo
+
+Choose **Load Apple Demo** to open the bundled 20-slice photograph stack.
 
 1. Open the automatically displayed **Calibration** tab.
 2. Draw a reference line across the widest apple diameter using the assumed learning value
@@ -25,6 +31,20 @@ photographs, and visual browning scores of 120 'Kanzi' apples*,
 [Zenodo DOI 10.5281/zenodo.8167285](https://doi.org/10.5281/zenodo.8167285), licensed under
 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Images were selected, cropped, and
 resized for this demo; the original data providers do not endorse SegRef3D.
+
+### RabbitCT Demo
+
+Choose **Load RabbitCT Demo** to download and open the bundled 256 x 256 x 256 NIfTI volume on
+demand. X, Y, and Z spacing are preset to **1.0 mm**, so a calibration line is not required.
+Try Threshold or drawing tools on the skull or body contour, refine the mask, then open
+**Volume & 3D** to preview and export the reconstruction.
+
+The RabbitCT demo is adapted from the
+[RabbitCT benchmark dataset](https://zenodo.org/records/21267885), licensed under
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). The original `reference_256.vol`
+was converted to NIfTI and reoriented for SegRef3D Lite Web demo use; the original data providers
+do not endorse SegRef3D. The approximately 20 MB demo volume is fetched only when
+**Load RabbitCT Demo** is selected.
 
 ## Current features
 

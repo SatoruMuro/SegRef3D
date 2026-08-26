@@ -11,7 +11,7 @@
     <title>SegRef3D Lite Web</title>
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
     <link rel="manifest" href="./manifest.webmanifest" />
-    <link rel="stylesheet" href="./styles.css?v=21" />
+    <link rel="stylesheet" href="./styles.css?v=22" />
   </head>
   <body>
     <svg class="svg-defs" aria-hidden="true">
@@ -267,13 +267,17 @@
               <button id="load-demo" class="command-button demo-button" type="button">
                 <svg><use href="#i-image"></use></svg><span>Load Apple Demo</span>
               </button>
+              <button id="load-rabbit-demo" class="command-button demo-button" type="button">
+                <svg><use href="#i-box"></use></svg><span>Load RabbitCT Demo</span>
+              </button>
             </div>
             <div class="demo-intro">
               <strong>Try SegRef3D without preparing your own data</strong>
-              <span>20 consecutive apple slice photographs · about 5.6 MB</span>
+              <span><b>Apple:</b> 20 serial photographs and calibration · about 5.6 MB</span>
+              <span><b>RabbitCT:</b> 256³ reconstructed CT volume · about 20 MB</span>
               <small>
-                Adapted from
-                <a href="https://doi.org/10.5281/zenodo.8167285" target="_blank" rel="noopener noreferrer">Schut, Trull &amp; Couvée</a>
+                Apple: <a href="https://doi.org/10.5281/zenodo.8167285" target="_blank" rel="noopener noreferrer">Zenodo</a>
+                · RabbitCT: <a href="https://zenodo.org/records/21267885" target="_blank" rel="noopener noreferrer">Zenodo</a>
                 · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>
               </small>
             </div>
@@ -821,18 +825,18 @@
           <aside id="demo-calibration-guide" class="demo-calibration-guide" hidden>
             <div class="demo-calibration-heading">
               <span>DEMO DATASET</span>
-              <strong id="demo-calibration-title">Apple Demo Calibration</strong>
+              <strong id="demo-calibration-title">Demo guide</strong>
             </div>
-            <p id="demo-calibration-instruction">Draw a calibration line across the widest diameter of the apple.</p>
+            <p id="demo-calibration-instruction"></p>
             <div class="demo-calibration-values">
-              <span>Reference length <strong id="demo-reference-value">100 mm</strong></span>
-              <span>Slice spacing <strong id="demo-spacing-value">4.0 mm (approx.)</strong></span>
+              <span><i id="demo-primary-label">Reference length</i><strong id="demo-reference-value">100 mm</strong></span>
+              <span><i id="demo-secondary-label">Slice spacing</i><strong id="demo-spacing-value">4.0 mm (approx.)</strong></span>
             </div>
             <p id="demo-reference-note" class="demo-calibration-note"></p>
             <p id="demo-spacing-note" class="demo-calibration-note"></p>
             <p id="demo-next-step" class="demo-next-step" hidden>Next: segment the outer contour of the apple.</p>
             <small class="demo-calibration-attribution">
-              Images adapted from
+              <span id="demo-attribution-prefix">Demo adapted from</span>
               <a id="demo-source-link" href="https://doi.org/10.5281/zenodo.8167285" target="_blank" rel="noopener noreferrer">the cited Zenodo dataset</a>
               · <a id="demo-license-link" href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>
             </small>
@@ -1009,6 +1013,6 @@
         if (status) status.textContent = `Application operation failed: ${message}`;
       });
     </script>
-    <script type="module" src="./app.mjs?v=21"></script>
+    <script type="module" src="./app.mjs?v=22"></script>
   </body>
 </html>

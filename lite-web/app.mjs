@@ -31,7 +31,7 @@ import {
   parseNiftiVolume,
   parseTiffStack,
 } from "./medical-io.mjs?v=17";
-import { demoDatasetById } from "./demo-datasets.mjs?v=2";
+import { demoDatasetById } from "./demo-datasets.mjs?v=3";
 import { clearProjectMasks, loadMask, saveMask } from "./storage.mjs";
 import { createZip, parseZip } from "./zip.mjs";
 import {
@@ -86,6 +86,7 @@ const elements = {
   maskFolderInput: document.querySelector("#mask-folder-input"),
   maskZipInput: document.querySelector("#mask-zip-input"),
   loadDemo: document.querySelector("#load-demo"),
+  loadRabbitDemo: document.querySelector("#load-rabbit-demo"),
   fitView: document.querySelector("#fit-view"),
   previousImage: document.querySelector("#previous-image"),
   nextImage: document.querySelector("#next-image"),
@@ -236,11 +237,14 @@ const elements = {
   demoCalibrationGuide: document.querySelector("#demo-calibration-guide"),
   demoCalibrationTitle: document.querySelector("#demo-calibration-title"),
   demoCalibrationInstruction: document.querySelector("#demo-calibration-instruction"),
+  demoPrimaryLabel: document.querySelector("#demo-primary-label"),
   demoReferenceValue: document.querySelector("#demo-reference-value"),
+  demoSecondaryLabel: document.querySelector("#demo-secondary-label"),
   demoSpacingValue: document.querySelector("#demo-spacing-value"),
   demoReferenceNote: document.querySelector("#demo-reference-note"),
   demoSpacingNote: document.querySelector("#demo-spacing-note"),
   demoNextStep: document.querySelector("#demo-next-step"),
+  demoAttributionPrefix: document.querySelector("#demo-attribution-prefix"),
   demoSourceLink: document.querySelector("#demo-source-link"),
   demoLicenseLink: document.querySelector("#demo-license-link"),
   exportNifti: document.querySelector("#export-nifti"),
@@ -1284,15 +1288,25 @@ function syncDemoCalibrationGuide() {
   const dataset = activeDemoDataset();
   elements.demoCalibrationGuide.hidden = !dataset;
   if (!dataset) return;
-  const calibration = dataset.calibration;
-  elements.demoCalibrationTitle.textContent = `${dataset.displayName} Calibration`;
-  elements.demoCalibrationInstruction.textContent = calibration.instruction;
-  elements.demoReferenceValue.textContent = `${calibration.referenceLengthMm} mm`;
-  elements.demoSpacingValue.textContent = `${calibration.sliceSpacingMm.toFixed(1)} mm (approx.)`;
-  elements.demoReferenceNote.textContent = calibration.referenceNote;
-  elements.demoSpacingNote.textContent = calibration.spacingNote;
-  elements.demoNextStep.textContent = dataset.nextStep;
-  elements.demoNextStep.hidden = state.volumeInfoSource !== "Reference line calibration";
+  const guide = dataset.guide;
+  const targetPanel = elements.toolPanels.find(
+    (panel) => panel.dataset.toolPanel === guide.toolTab,
+  );
+  if (targetPanel && elements.demoCalibrationGuide.parentElement !== targetPanel) {
+    targetPanel.prepend(elements.demoCalibrationGuide);
+  }
+  elements.demoCalibrationTitle.textContent = guide.title;
+  elements.demoCalibrationInstruction.textContent = guide.instruction;
+  elements.demoPrimaryLabel.textContent = guide.primaryLabel;
+  elements.demoReferenceValue.textContent = guide.primaryValue;
+  elements.demoSecondaryLabel.textContent = guide.secondaryLabel;
+  elements.demoSpacingValue.textContent = guide.secondaryValue;
+  elements.demoReferenceNote.textContent = guide.note;
+  elements.demoSpacingNote.textContent = guide.detail;
+  elements.demoNextStep.textContent = guide.nextStep;
+  elements.demoNextStep.hidden =
+    guide.revealNextStepAfterCalibration && state.volumeInfoSource !== "Reference line calibration";
+  elements.demoAttributionPrefix.textContent = dataset.attribution.uiPrefix;
   elements.demoSourceLink.href = dataset.attribution.doiUrl;
   elements.demoSourceLink.textContent = "the cited Zenodo dataset";
   elements.demoLicenseLink.href = dataset.attribution.licenseUrl;
@@ -3299,16 +3313,24 @@ async function prepareImageSequence(
   state.segmentationBoxMode = null;
   setSegmentationObjectNames();
   state.projectId = projectId;
-  state.index = 0;
+  state.index = clamp(demoDataset?.initialFrameIndex ?? 0, 0, prepared.length - 1);
   state.projectName = projectName;
   state.activeDemoDatasetId = demoDataset?.id ?? null;
   state.visibleLabels = Array.from({ length: 21 }, (_, label) => label === 1);
   resetDisplaySettings({ announce: false });
   initializeCalibrationFromImages();
   if (demoDataset) {
-    state.calibration.referenceLength = demoDataset.calibration.referenceLengthMm;
-    state.calibration.zSpacing = demoDataset.calibration.sliceSpacingMm;
-    state.volumeInfoSource = "Default spacing";
+    if (demoDataset.calibration) {
+      state.calibration.referenceLength = demoDataset.calibration.referenceLengthMm;
+      state.calibration.zSpacing = demoDataset.calibration.sliceSpacingMm;
+    }
+    if (demoDataset.voxelSpacingMm) {
+      const [xSpacing, ySpacing, zSpacing] = demoDataset.voxelSpacingMm;
+      state.calibration.xSpacing = xSpacing;
+      state.calibration.ySpacing = ySpacing;
+      state.calibration.zSpacing = zSpacing;
+    }
+    state.volumeInfoSource = demoDataset.volumeInfoSource || "Default spacing";
     syncCalibrationControls();
     syncVolInfoSummary();
   }
@@ -3423,27 +3445,32 @@ async function decodeDicomSources(files) {
   };
 }
 
+async function decodeNiftiSources(file) {
+  const volume = parseNiftiVolume(await file.arrayBuffer(), file.name);
+  const sources = [];
+  for (let index = 0; index < volume.frames.length; index += 1) {
+    elements.loadingDetail.textContent = `Preparing slice ${index + 1} / ${volume.frames.length}`;
+    const frame = volume.frames[index];
+    sources.push({
+      name: frame.name,
+      width: frame.width,
+      height: frame.height,
+      sourceCanvas: await medicalFrameToCanvas(frame),
+      sourceFormat: "nifti",
+      pixelSpacing: volume.spacing.slice(0, 2),
+      sliceSpacing: volume.spacing[2],
+      volumeOrigin: volume.origin,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  return { volume, sources };
+}
+
 async function prepareNiftiFile(file) {
   if (!file || state.loading) return;
   setLoading(true, "Loading NIfTI volume", "Reading volume");
   try {
-    const volume = parseNiftiVolume(await file.arrayBuffer(), file.name);
-    const sources = [];
-    for (let index = 0; index < volume.frames.length; index += 1) {
-      elements.loadingDetail.textContent = `Preparing slice ${index + 1} / ${volume.frames.length}`;
-      const frame = volume.frames[index];
-      sources.push({
-        name: frame.name,
-        width: frame.width,
-        height: frame.height,
-        sourceCanvas: await medicalFrameToCanvas(frame),
-        sourceFormat: "nifti",
-        pixelSpacing: volume.spacing.slice(0, 2),
-        sliceSpacing: volume.spacing[2],
-        volumeOrigin: volume.origin,
-      });
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    }
+    const { sources } = await decodeNiftiSources(file);
     await prepareImageSequence(
       sources,
       [file],
@@ -3621,9 +3648,7 @@ function loadDemoImage(path) {
   });
 }
 
-async function loadDemo() {
-  const dataset = demoDatasetById("apple-kanzi-84");
-  if (!dataset || state.loading) return;
+async function loadImageSequenceDemo(dataset) {
   setLoading(true, `Loading ${dataset.displayName}`, `Reading 0 / ${dataset.imagePaths.length}`);
   try {
     const sources = [];
@@ -3653,22 +3678,93 @@ async function loadDemo() {
       { preserveDimensions: true, demoDataset: dataset },
     );
     if (!loaded) return;
-    setSaveState("Apple Demo autosave active", "saved");
+    setSaveState(`${dataset.displayName} autosave active`, "saved");
     setStatus(
-      `Apple Demo loaded: ${sources.length} slices. Calibrate the widest apple diameter using the ${dataset.calibration.referenceLengthMm} mm learning reference.`,
+      `${dataset.displayName} loaded: ${sources.length} slices. Calibrate the widest apple diameter using the ${dataset.calibration.referenceLengthMm} mm learning reference.`,
     );
-    showToast("Apple Demo ready · Start with Calibration");
+    showToast(`${dataset.displayName} ready · Start with Calibration`);
     requestAnimationFrame(() => {
       fitCurrentImage();
-      openImageTools("calibration");
+      openImageTools(dataset.guide.toolTab);
     });
   } catch (error) {
     console.error(error);
-    setStatus(`Apple Demo loading failed: ${error.message}`);
-    window.alert(`Apple Demo loading failed.\n\n${error.message}`);
+    setStatus(`${dataset.displayName} loading failed: ${error.message}`);
+    window.alert(`${dataset.displayName} loading failed.\n\n${error.message}`);
   } finally {
     setLoading(false);
   }
+}
+
+async function downloadDemoVolume(dataset) {
+  const url = new URL(dataset.volumePath, document.baseURI);
+  if (url.origin !== window.location.origin) {
+    throw new Error("Demo volumes must be loaded from the SegRef3D Lite Web origin.");
+  }
+  const response = await fetch(url, { credentials: "same-origin" });
+  if (!response.ok) throw new Error(`Volume download failed with HTTP ${response.status}.`);
+  const totalBytes = Number(response.headers.get("Content-Length")) || dataset.volumeBytes;
+  if (!response.body) {
+    return new File([await response.blob()], dataset.volumeFilename, {
+      type: "application/gzip",
+      lastModified: dataset.revision,
+    });
+  }
+  const reader = response.body.getReader();
+  const chunks = [];
+  let receivedBytes = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    receivedBytes += value.byteLength;
+    elements.loadingDetail.textContent =
+      `Downloading ${(receivedBytes / 1024 / 1024).toFixed(1)} / ${(totalBytes / 1024 / 1024).toFixed(1)} MB`;
+  }
+  return new File(chunks, dataset.volumeFilename, {
+    type: "application/gzip",
+    lastModified: dataset.revision,
+  });
+}
+
+async function loadNiftiDemo(dataset) {
+  setLoading(true, `Loading ${dataset.displayName}`, "Downloading volume");
+  try {
+    const file = await downloadDemoVolume(dataset);
+    elements.loadingDetail.textContent = "Reading NIfTI volume";
+    const { sources } = await decodeNiftiSources(file);
+    const loaded = await prepareImageSequence(
+      sources,
+      [file],
+      dataset.projectName,
+      `${dataset.displayName} slice(s)`,
+      { preserveDimensions: true, demoDataset: dataset },
+    );
+    if (!loaded) return;
+    setSaveState(`${dataset.displayName} autosave active`, "saved");
+    setStatus(
+      `${dataset.displayName} loaded: ${sources.length} slices · 1.0 mm isotropic. Suggested target: skull or body contour.`,
+    );
+    showToast(`${dataset.displayName} ready · Try Threshold or drawing tools`);
+    requestAnimationFrame(() => {
+      fitCurrentImage();
+      openImageTools(dataset.guide.toolTab);
+    });
+  } catch (error) {
+    console.error(error);
+    setStatus(`${dataset.displayName} loading failed: ${error.message}`);
+    window.alert(`${dataset.displayName} loading failed.\n\n${error.message}`);
+  } finally {
+    setLoading(false);
+  }
+}
+
+async function loadDemo(datasetId) {
+  const dataset = demoDatasetById(datasetId);
+  if (!dataset || state.loading) return;
+  if (dataset.kind === "image-sequence") await loadImageSequenceDemo(dataset);
+  else if (dataset.kind === "nifti-volume") await loadNiftiDemo(dataset);
+  else throw new Error(`Unsupported demo dataset kind: ${dataset.kind}`);
 }
 
 function handlePointerDown(event) {
@@ -4174,7 +4270,8 @@ function bindEvents() {
     importMaskFolder([...elements.maskFolderInput.files]),
   );
   elements.maskZipInput.addEventListener("change", () => importMaskZip(elements.maskZipInput.files[0]));
-  elements.loadDemo.addEventListener("click", loadDemo);
+  elements.loadDemo.addEventListener("click", () => loadDemo("apple-kanzi-84"));
+  elements.loadRabbitDemo.addEventListener("click", () => loadDemo("rabbitct-reference-256"));
   elements.fitView.addEventListener("click", fitCurrentImage);
   elements.previousImage.addEventListener("click", () => switchImage(-1));
   elements.nextImage.addEventListener("click", () => switchImage(1));

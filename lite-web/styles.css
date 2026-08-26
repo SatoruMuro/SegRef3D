@@ -1112,6 +1112,11 @@ svg {
   font-size: 12px;
 }
 
+.demo-intro b {
+  color: var(--ink);
+  font-weight: 750;
+}
+
 .demo-intro small,
 .demo-calibration-attribution {
   color: var(--muted);
@@ -1185,6 +1190,10 @@ svg {
   color: var(--ink);
   font-size: 12px;
   white-space: nowrap;
+}
+
+.demo-calibration-values i {
+  font-style: normal;
 }
 
 .demo-calibration-guide .demo-calibration-note {

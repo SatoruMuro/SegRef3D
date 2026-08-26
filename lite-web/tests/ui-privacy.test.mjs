@@ -28,17 +28,16 @@ test("offline cache uses the current UI asset generation", async () => {
     readLiteWebFile("service-worker.js"),
   ]);
 
-  assert.match(html, /styles\.css\?v=21/);
-  assert.match(html, /app\.mjs\?v=21/);
-  assert.match(worker, /segref3d-lite-web-v21/);
-  assert.match(worker, /styles\.css\?v=21/);
-  assert.match(worker, /app\.mjs\?v=21/);
+  assert.match(html, /styles\.css\?v=22/);
+  assert.match(html, /app\.mjs\?v=22/);
+  assert.match(worker, /segref3d-lite-web-v22/);
+  assert.match(worker, /styles\.css\?v=22/);
+  assert.match(worker, /app\.mjs\?v=22/);
 });
 
 test("Lite Web runtime has no image-upload or telemetry transport", async () => {
   const names = (await readdir(liteWebRoot)).filter((name) => name.endsWith(".mjs"));
   const forbiddenTransports = [
-    ["fetch", /\bfetch\s*\(/],
     ["XMLHttpRequest", /\bXMLHttpRequest\b/],
     ["WebSocket", /\bWebSocket\b/],
     ["Beacon API", /\bsendBeacon\s*\(/],
@@ -53,4 +52,9 @@ test("Lite Web runtime has no image-upload or telemetry transport", async () => 
       assert.doesNotMatch(source, pattern, `${name} unexpectedly contains ${label}`);
     }
   }
+
+  const app = await readLiteWebFile("app.mjs");
+  assert.match(app, /url\.origin !== window\.location\.origin/);
+  assert.match(app, /fetch\(url, \{ credentials: "same-origin" \}\)/);
+  assert.doesNotMatch(app, /method\s*:\s*["'](?:POST|PUT|PATCH|DELETE)["']/i);
 });
