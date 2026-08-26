@@ -73,6 +73,7 @@ pyinstaller SegRef3D.py ^
     --paths "sam2pkg" ^
     --paths "sam2pkg\sam2" ^
     --add-data "ffmpeg_bin\ffmpeg.exe;ffmpeg_bin" ^
+    --add-data "..\resources;resources" ^
     --add-data "configs;configs" ^
     --add-data "checkpoints;checkpoints" ^
     --add-data "sam2pkg;sam2pkg" ^

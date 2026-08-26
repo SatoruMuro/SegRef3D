@@ -52,6 +52,25 @@ Lite版のマスク編集の主要ワークフローを、Windows、macOS、Linu
 
 SAM2本体はブラウザ内では動作しません。Lite WebでBox Prompt、Prompt Frame、Tracking Rangeを設定し、明示的にGoogle Colabへjob ZIPをuploadした場合だけ画像が外部へ送信されます。その他の編集・抽出・出力処理はブラウザ内で完結します。
 
+## Instant3DWeb2 / TotalSegmentator
+
+Desktop版とLite Webは、CT NIfTIから解剖学的構造を抽出する共通のZIPワークフローに対応しています。
+
+1. CTの`.nii`または`.nii.gz`を読み込む
+2. Desktopでは**Instant3DWeb2**、Lite Webでは**AI Segmentation > Instant3DWeb2**を開く
+3. open-license ROI catalogを検索し、各構造をObj 1-20へ割り当てる
+4. `instant3d_request.zip`を出力する
+5. [Google Colab版Instant3DWeb2](https://satorumuro.github.io/SegRef3D/ColabNotebooks/instant3dweb2.html)を開く
+6. 自分のColab runtimeへZIPを明示的にuploadしてTotalSegmentatorを実行する
+7. `instant3d_result.zip`をdownloadし、同じ元volumeを開いたSegRef3Dへ読み込む
+8. 返されたmaskを修正し、計測・3D出力へ進む
+
+request ZIPには元NIfTIそのもの、選択構造、Obj割当、geometry fingerprintが含まれます。
+結果読込時には寸法、voxel spacing、affine／orientation、元volumeのchecksumを照合し、異なる
+volumeへの誤読込を拒否します。選択できるのは同梱のopen-license catalogに含まれる構造のみで、
+license制限のあるTotalSegmentator taskは拒否されます。研究画像・医用画像をGoogle Colabへ
+uploadできるかは、所属機関の規定を事前に確認してください。
+
 ---
 
 ## 🌉 SliceBridge — NIfTI基準スライス作成ツール

@@ -48,6 +48,15 @@ from segmentation_job import (
     create_job_zip,
     validate_result_zip,
 )
+from instant3d_bridge import (
+    Instant3DBridgeError,
+    create_request_zip as create_instant3d_request_zip,
+    labelmap_from_bytes as instant3d_labelmap_from_bytes,
+    load_roi_catalog as load_instant3d_roi_catalog,
+    nifti_fingerprint,
+    validate_result_zip as validate_instant3d_result_zip,
+)
+from instant3d_dialog import Instant3DWorkflowDialog
 from mask_cleanup_dialog import MaskPostProcessingDialog
 from mask_postprocessing import (
     build_mask_volume_changes,
@@ -689,6 +698,10 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         self.box_per_frame = {}  # 例: {0: ((x1,y1), (x2,y2)), 1: ((x1,y1), (x2,y2)), ...}
         self.object_label_names = {}
         self.original_image_filenames = {}
+        self.source_nifti_path = None
+        self.source_nifti_fingerprint = None
+        self.instant3d_mappings = []
+        self.instant3d_dialog = None
 
 
         
@@ -960,6 +973,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         self.btn_run_sam2.clicked.connect(self.run_sam2_segmentation)
         self.btn_seg_on_web.clicked.connect(self.open_seg_on_web)
         self.btn_instant3dweb.clicked.connect(self.open_instant3dweb)
+        self.btn_instant3d_workflow.clicked.connect(self.show_instant3d_workflow)
         self.btn_clear_box.clicked.connect(self.clear_box)
                         
         self.tracking_start_index = None
@@ -1750,7 +1764,165 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         webbrowser.open(
             "https://satorumuro.github.io/SegRef3D/ColabNotebooks/instant3dweb.html"
         )
-        self.label_status.setText("Opening Instant3DWeb...")        
+        self.label_status.setText("Opening Instant3DWeb...")
+
+    def open_instant3dweb2(self):
+        import webbrowser
+        webbrowser.open(
+            "https://satorumuro.github.io/SegRef3D/ColabNotebooks/instant3dweb2.html"
+        )
+        self.label_status.setText("Opening Instant3DWeb2 in Google Colab...")
+
+    def show_instant3d_workflow(self):
+        try:
+            catalog = load_instant3d_roi_catalog()
+        except Instant3DBridgeError as exc:
+            QMessageBox.warning(self, "Instant3DWeb2", str(exc))
+            return
+        dialog = Instant3DWorkflowDialog(
+            catalog,
+            self.instant3d_mappings,
+            bool(self.source_nifti_path and os.path.isfile(self.source_nifti_path)),
+            self,
+        )
+        dialog.exportRequested.connect(self.export_for_instant3dweb2)
+        dialog.importRequested.connect(self.import_instant3dweb2_result)
+        dialog.openColabRequested.connect(self.open_instant3dweb2)
+        dialog.finished.connect(lambda _result, current=dialog: self._remember_instant3d_dialog(current))
+        self.instant3d_dialog = dialog
+        dialog.show()
+
+    def _remember_instant3d_dialog(self, dialog):
+        self.instant3d_mappings = [dict(item) for item in dialog.mappings]
+        if self.instant3d_dialog is dialog:
+            self.instant3d_dialog = None
+
+    def export_for_instant3dweb2(self, mappings, fast=False):
+        if not self.source_nifti_path or not os.path.isfile(self.source_nifti_path):
+            QMessageBox.information(
+                self,
+                "Instant3DWeb2",
+                "Instant3DWeb2 requires a compatible CT NIfTI (.nii or .nii.gz) volume.",
+            )
+            return
+        suggested = os.path.join(os.path.dirname(self.source_nifti_path), "instant3d_request.zip")
+        output_path, _ = QFileDialog.getSaveFileName(
+            self, "Export Instant3DWeb2 Request", suggested, "ZIP Files (*.zip)"
+        )
+        if not output_path:
+            self.label_status.setText("Instant3DWeb2 request export canceled.")
+            return
+        if not output_path.lower().endswith(".zip"):
+            output_path += ".zip"
+        try:
+            manifest = create_instant3d_request_zip(
+                output_path, self.source_nifti_path, mappings, fast=bool(fast)
+            )
+            self.instant3d_mappings = [dict(item) for item in manifest["objects"]]
+        except Exception as exc:
+            message = str(exc) if isinstance(exc, Instant3DBridgeError) else f"Request export failed: {exc}"
+            self.label_status.setText(message)
+            QMessageBox.warning(self, "Instant3DWeb2 Export", message)
+            return
+        self.label_status.setText(
+            f"Instant3DWeb2 request created: {len(manifest['objects'])} object(s)."
+        )
+        box = QMessageBox(self)
+        box.setWindowTitle("Instant3DWeb2 Request Created")
+        box.setText(
+            "Request ZIP created.\n\nNext:\n1. Open Instant3DWeb2\n2. Upload the ZIP\n"
+            "3. Download instant3d_result.zip\n4. Import it here"
+        )
+        open_button = box.addButton("Open Instant3DWeb2", QMessageBox.ButtonRole.AcceptRole)
+        box.addButton("Close", QMessageBox.ButtonRole.RejectRole)
+        box.exec()
+        if box.clickedButton() is open_button:
+            self.open_instant3dweb2()
+
+    def import_instant3dweb2_result(self):
+        if not self.source_nifti_path or not os.path.isfile(self.source_nifti_path):
+            QMessageBox.information(
+                self, "Instant3DWeb2", "Load the original NIfTI volume before importing its result ZIP."
+            )
+            return
+        zip_path, _ = QFileDialog.getOpenFileName(
+            self, "Import Instant3DWeb2 Result", "", "ZIP Files (*.zip)"
+        )
+        if not zip_path:
+            self.label_status.setText("Instant3DWeb2 result import canceled.")
+            return
+        try:
+            manifest, labelmap_bytes = validate_instant3d_result_zip(zip_path, self.source_nifti_path)
+            label_volume = instant3d_labelmap_from_bytes(labelmap_bytes, manifest["source"])
+        except Exception as exc:
+            message = str(exc) if isinstance(exc, Instant3DBridgeError) else f"Result import failed: {exc}"
+            self.label_status.setText(message)
+            QMessageBox.warning(self, "Instant3DWeb2 Import", message)
+            return
+
+        keys = list(self.image_paths.keys())
+        if label_volume.shape[2] != len(keys):
+            message = "Result labelmap depth does not match the loaded image sequence."
+            self.label_status.setText(message)
+            QMessageBox.warning(self, "Instant3DWeb2 Import", message)
+            return
+        object_ids = {int(item["object_id"]) for item in manifest["objects"]}
+        conflicts = any(
+            np.any(np.isin(self.ensure_label_mask_exists(key), list(object_ids))) for key in keys
+        )
+        mode = "replace"
+        if conflicts:
+            box = QMessageBox(self)
+            box.setWindowTitle("Existing Mask Data")
+            box.setText(
+                "One or more target objects already contain mask data.\n"
+                "Replace clears those objects first. Merge preserves existing labeled pixels."
+            )
+            replace_button = box.addButton("Replace", QMessageBox.ButtonRole.AcceptRole)
+            merge_button = box.addButton("Merge", QMessageBox.ButtonRole.ActionRole)
+            box.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
+            box.exec()
+            if box.clickedButton() is replace_button:
+                mode = "replace"
+            elif box.clickedButton() is merge_button:
+                mode = "merge"
+            else:
+                self.label_status.setText("Instant3DWeb2 result import canceled; masks were not changed.")
+                return
+
+        changes = {}
+        for slice_index, key in enumerate(keys):
+            before = self.ensure_label_mask_exists(key).copy()
+            incoming = label_volume[:, :, slice_index].T
+            next_mask = before.copy()
+            if mode == "replace":
+                next_mask[np.isin(next_mask, list(object_ids))] = 0
+                for object_id in sorted(object_ids, reverse=True):
+                    next_mask[incoming == object_id] = object_id
+            else:
+                available = next_mask == 0
+                next_mask[available] = incoming[available]
+            if not np.array_equal(before, next_mask):
+                changes[key] = (before, next_mask)
+
+        for item in manifest["objects"]:
+            object_id = int(item["object_id"])
+            self.object_label_names[object_id] = item["display_name"]
+        self.instant3d_mappings = [dict(item) for item in manifest["objects"]]
+        self._apply_object_names_to_checkboxes()
+        imported = self._commit_mask_transaction(
+            changes,
+            f"Imported Instant3DWeb2 result: {len(manifest['objects'])} object(s), {mode} mode.",
+        )
+        if not imported:
+            self.label_status.setText("Instant3DWeb2 result contained no mask changes.")
+        if manifest.get("overlaps"):
+            QMessageBox.warning(
+                self,
+                "Instant3DWeb2 Overlap",
+                "Overlapping ROI voxels were detected. The merged labelmap uses lower object IDs first; "
+                "individual binary NIfTI masks remain in the result ZIP.",
+            )
         
     
     def extract_by_rgb(self):
@@ -4496,6 +4668,73 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         arr /= (arr.max() + 1e-8)
         arr *= 255.0
         return arr.astype(np.uint8)
+
+    def _load_nifti_volume(self, source_path):
+        """Load a 3D NIfTI as editable axial slices while retaining its exact source geometry."""
+        source_path = os.path.abspath(source_path)
+        try:
+            image = nib.load(source_path)
+            if len(image.shape) != 3 or any(int(value) < 1 for value in image.shape):
+                raise ValueError("Expected one 3D NIfTI volume.")
+            fingerprint = nifti_fingerprint(source_path)
+            volume = np.asarray(image.dataobj, dtype=np.float32)
+            finite = volume[np.isfinite(volume)]
+            if finite.size == 0:
+                raise ValueError("The NIfTI volume contains no finite voxel values.")
+            low, high = np.percentile(finite, [1.0, 99.0])
+            if not np.isfinite(low) or not np.isfinite(high) or high <= low:
+                low, high = float(finite.min()), float(finite.max())
+            if high <= low:
+                high = low + 1.0
+        except Exception as exc:
+            QMessageBox.warning(self, "Load NIfTI", f"NIfTI loading failed:\n{exc}")
+            self.label_status.setText(f"NIfTI loading failed: {exc}")
+            return False
+
+        name = Path(source_path).name
+        base = name[:-7] if name.lower().endswith(".nii.gz") else Path(name).stem
+        jpg_folder = Path(os.getcwd()) / f"{base}jpg"
+        jpg_folder.mkdir(exist_ok=True)
+        self.image_paths = {}
+        self.image_sizes = {}
+        self.original_image_filenames = {}
+        width, height, depth = (int(value) for value in image.shape)
+        for slice_index in range(depth):
+            key = f"{slice_index + 1:04d}"
+            display = np.asarray(volume[:, :, slice_index].T, dtype=np.float32)
+            display = np.clip((display - low) * (255.0 / (high - low)), 0, 255).astype(np.uint8)
+            output_path = jpg_folder / f"image{key}.jpg"
+            Image.fromarray(display, mode="L").convert("RGB").save(output_path, "JPEG", quality=95)
+            self.image_paths[key] = str(output_path)
+            self.image_sizes[key] = (width, height)
+            self.original_image_filenames[key] = f"{name}#slice={slice_index + 1}"
+
+        spacing = fingerprint["voxel_spacing_mm"]
+        affine = np.asarray(fingerprint["affine"], dtype=float)
+        self.source_nifti_path = source_path
+        self.source_nifti_fingerprint = fingerprint
+        self.mm_per_px = float(spacing[0])
+        self.z_spacing_mm = float(spacing[2])
+        self.volinf = {
+            "width": width,
+            "height": height,
+            "depth": depth,
+            "x_spacing": float(spacing[0]),
+            "y_spacing": float(spacing[1]),
+            "z_spacing": float(spacing[2]),
+            "x_origin": float(affine[0, 3]),
+            "y_origin": float(affine[1, 3]),
+            "z_origin": float(affine[2, 3]),
+        }
+        self.current_index = 0
+        self.image_pristine = True
+        self.display_current_image()
+        self.fit_view_to_window()
+        self._sync_slice_navigation()
+        self.label_status.setText(
+            f"NIfTI loaded: {width} × {height} × {depth}, {fingerprint['orientation']} orientation."
+        )
+        return True
     
 
 
@@ -4522,6 +4761,9 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         self.batch_object_data.clear()
         self.object_label_names.clear()
         self.original_image_filenames.clear()
+        self.source_nifti_path = None
+        self.source_nifti_fingerprint = None
+        self.instant3d_mappings = []
         self._apply_object_names_to_checkboxes()
         
         self.current_index = 0
@@ -4646,7 +4888,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
                 self,
                 "Select Image Files",
                 "",
-                "Images / Volumes (*.png *.jpg *.jpeg *.tif *.tiff *.bmp *.dcm *.nrrd *.nhdr);;All Files (*)"
+                "Images / Volumes (*.png *.jpg *.jpeg *.tif *.tiff *.bmp *.dcm *.nrrd *.nhdr *.nii *.nii.gz);;All Files (*)"
             )
             if not files:
                 return  # ここでもキャンセルなら終了
@@ -4654,6 +4896,22 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             folder = os.path.dirname(files[0])
             # selected_files = [os.path.basename(p) for p in files]
             selected_files = sorted((os.path.basename(p) for p in files), key=_natural_key)
+
+        selected_paths = [os.path.join(folder, filename) for filename in selected_files]
+        nifti_paths = [
+            path for path in selected_paths
+            if path.lower().endswith(".nii") or path.lower().endswith(".nii.gz")
+        ]
+        if nifti_paths:
+            if len(nifti_paths) != 1 or len(selected_files) != 1:
+                QMessageBox.information(
+                    self,
+                    "Load NIfTI",
+                    "Select one 3D NIfTI (.nii or .nii.gz) volume at a time.",
+                )
+                return
+            self._load_nifti_volume(nifti_paths[0])
+            return
 
         
         input_folder = pathlib.Path(folder)
@@ -8585,12 +8843,18 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         # ], dtype=float)
                 
         # affine
-        affine = np.array([
-            [ sx,  0.0, 0.0,              ox ],
-            [ 0.0, -sy, 0.0,  oy + (H - 1) * sy ],
-            [ 0.0,  0.0, sz,              oz ],
-            [ 0.0,  0.0, 0.0,             1.0 ],
-        ], dtype=float)        
+        if (
+            self.source_nifti_fingerprint
+            and list(self.source_nifti_fingerprint.get("shape", [])) == list(vol.shape)
+        ):
+            affine = np.asarray(self.source_nifti_fingerprint["affine"], dtype=float)
+        else:
+            affine = np.array([
+                [ sx,  0.0, 0.0,              ox ],
+                [ 0.0, -sy, 0.0,  oy + (H - 1) * sy ],
+                [ 0.0,  0.0, sz,              oz ],
+                [ 0.0,  0.0, 0.0,             1.0 ],
+            ], dtype=float)
     
         img_nii = nib.Nifti1Image(vol, affine)
         img_nii.set_sform(affine, code=1)

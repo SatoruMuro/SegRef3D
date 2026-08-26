@@ -11,7 +11,7 @@
     <title>SegRef3D Lite Web</title>
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
     <link rel="manifest" href="./manifest.webmanifest" />
-    <link rel="stylesheet" href="./styles.css?v=29" />
+    <link rel="stylesheet" href="./styles.css?v=30" />
   </head>
   <body>
     <svg class="svg-defs" aria-hidden="true">
@@ -562,7 +562,58 @@
             <button id="import-segonweb" class="command-button" type="button">Import AI Result</button>
           </li>
         </ol>
+        <section class="instant3d-workflow" aria-labelledby="instant3d-title">
+          <div class="tool-section-heading">
+            <strong id="instant3d-title">Instant3DWeb2 / TotalSegmentator</strong>
+            <span>Choose anatomy here, run TotalSegmentator in Colab, then refine the returned masks.</span>
+          </div>
+          <div id="instant3d-source-status" class="workflow-summary">Load a compatible CT NIfTI volume to begin.</div>
+          <label class="field-stack">
+            <span>Search structures</span>
+            <input id="instant3d-search" type="search" placeholder="Kidney, liver, psoas..." />
+          </label>
+          <label class="field-stack">
+            <span>Available structures</span>
+            <select id="instant3d-available" size="7" aria-label="Available TotalSegmentator structures"></select>
+          </label>
+          <div class="instant3d-add-row">
+            <label><span>Assign to</span><select id="instant3d-object-id"></select></label>
+            <button id="instant3d-add" class="command-button" type="button">Add Structure</button>
+          </div>
+          <div class="field-stack">
+            <span>Selected structures</span>
+            <div id="instant3d-selected" class="instant3d-selected" aria-live="polite"></div>
+          </div>
+          <label class="checkbox-row"><input id="instant3d-fast" type="checkbox" />Fast mode (lower-resolution model)</label>
+          <div class="instant3d-actions">
+            <button id="instant3d-export" class="command-button accent" type="button" disabled>Create Request ZIP</button>
+            <a id="instant3d-open" class="command-button" href="https://satorumuro.github.io/SegRef3D/ColabNotebooks/instant3dweb2.html" target="_blank" rel="noopener noreferrer">Open Instant3DWeb2</a>
+            <button id="instant3d-import" class="command-button" type="button" disabled>Import Result ZIP</button>
+          </div>
+          <p class="instant3d-privacy"><code>instant3d_request.zip</code> contains the source NIfTI volume and job settings. It stays in your browser until you explicitly upload it to your own Google Colab runtime.</p>
+          <input id="instant3d-result-input" class="visually-hidden" type="file" accept="application/zip,.zip" />
+        </section>
         <input id="segonweb-result-input" class="visually-hidden" type="file" accept="application/zip,.zip" />
+      </div>
+    </dialog>
+
+    <dialog id="instant3d-warning-dialog" class="local-file-dialog information-dialog" aria-labelledby="instant3d-warning-title">
+      <div class="local-file-dialog-content">
+        <div class="local-file-dialog-heading"><span class="local-file-dialog-icon cloud-dialog-icon"><svg><use href="#i-external"></use></svg></span><div><span class="dialog-kicker cloud-dialog-kicker">PROCESSING LOCATION CHANGES</span><h2 id="instant3d-warning-title">Instant3DWeb2 uses Google Colab</h2></div></div>
+        <div class="local-file-dialog-copy">
+          <p>The exported request ZIP contains the source NIfTI volume and selected structure settings.</p>
+          <p>You must explicitly upload it to your own Google Colab runtime for TotalSegmentator processing. It is not uploaded to a SegRef3D-operated server.</p>
+          <p>Confirm that Google Colab use is permitted by your institution's research data and privacy policies.</p>
+        </div>
+        <div class="local-file-dialog-actions"><button id="instant3d-warning-cancel" class="command-button" type="button">Cancel</button><button id="instant3d-warning-continue" class="command-button accent" type="button">Continue</button></div>
+      </div>
+    </dialog>
+
+    <dialog id="instant3d-conflict-dialog" class="local-file-dialog information-dialog" aria-labelledby="instant3d-conflict-title">
+      <div class="local-file-dialog-content">
+        <div class="local-file-dialog-heading"><div><span class="dialog-kicker">EXISTING MASK DATA</span><h2 id="instant3d-conflict-title">Choose how to import</h2></div></div>
+        <div class="local-file-dialog-copy"><p>One or more destination objects already contain mask data.</p><p><strong>Replace</strong> clears those destination objects first. <strong>Merge</strong> preserves existing labeled pixels and fills only background pixels.</p></div>
+        <div class="local-file-dialog-actions"><button id="instant3d-conflict-cancel" class="command-button" type="button">Cancel</button><button id="instant3d-conflict-merge" class="command-button" type="button">Merge</button><button id="instant3d-conflict-replace" class="command-button accent" type="button">Replace</button></div>
       </div>
     </dialog>
 
@@ -1015,7 +1066,7 @@
       });
     </script>
     <script type="module">
-      import("./app.mjs?v=29").catch((error) => {
+      import("./app.mjs?v=30").catch((error) => {
         console.error("Application module failed to load", error);
         const status = document.querySelector("#status-text");
         if (status) status.textContent = `Application startup failed: ${error.message}`;

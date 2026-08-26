@@ -88,6 +88,8 @@ do not endorse SegRef3D. The approximately 20 MB demo volume is fetched only whe
   and object-only clear actions
 - Configure one tracking range and multiple box-prompt keyframes per Seg on Web object
 - Export `segonweb_input.zip` and import the complete `segref3d_result.zip` returned by Colab
+- Select open-license TotalSegmentator structures, map them to Obj 1-20, and exchange validated
+  `instant3d_request.zip` / `instant3d_result.zip` archives with Instant3DWeb2
 - Plain wheel image navigation, Ctrl/Command+wheel zoom, Shift+wheel horizontal pan
 - Middle-button drag and WASD/arrow-key canvas pan
 - Label visibility controls
@@ -176,6 +178,29 @@ objects overwrite earlier objects in the final single-label mask, preserving the
 The result ZIP can restore its working JPG sequence when no images are loaded. When the source
 sequence is already open, Lite Web verifies frame count, order, dimensions, and filenames before
 replacing masks.
+
+### Instant3DWeb2 workflow
+
+1. Load a CT NIfTI `.nii` or `.nii.gz` volume. Lite Web retains the original bytes and full affine.
+2. Open **AI Segmentation > Instant3DWeb2 / TotalSegmentator**.
+3. Search the shared open-license ROI catalog and map each selected structure to Obj 1-20.
+4. Choose **Create Request ZIP** and confirm the Google Colab data-flow notice.
+5. Open [Instant3DWeb2](https://satorumuro.github.io/SegRef3D/ColabNotebooks/instant3dweb2.html).
+6. Upload `instant3d_request.zip` to your own Colab runtime and run the notebook.
+7. Download `instant3d_result.zip`, then choose **Import Result ZIP** in Lite Web.
+8. Select Replace or Merge when target objects already contain labels, then refine the masks.
+
+The request contains the exact source NIfTI, selected structures, Obj mappings, and a geometry
+fingerprint. Import verifies dimensions, voxel spacing, affine/orientation, and SHA-256 before
+changing masks. The labelmap is converted back to the same editable slice order in one Undo-able
+transaction. Binary per-ROI NIfTI files remain the backend source of truth; where structures
+overlap in the combined single-label map, the lower Obj ID has priority and the overlap is reported.
+
+Instant3DWeb2 uses TotalSegmentator in Google Colab; it does not run in the browser and is not
+bundled with Lite Web. The selectable catalog contains only supported open-license tasks. Users
+must confirm that uploading research or medical data to Google Colab is permitted by their
+institution. Results are algorithmic segmentations intended for review and refinement, not an
+independent clinical diagnosis.
 
 ## Local development
 

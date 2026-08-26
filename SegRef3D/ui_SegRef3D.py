@@ -268,6 +268,7 @@ class Ui_MainWindow:
         self.btn_run_sam2 = QPushButton("Run Seg")
         self.btn_seg_on_web = QPushButton("Seg on Web")
         self.btn_instant3dweb = QPushButton("Instant3Dweb")
+        self.btn_instant3d_workflow = QPushButton("Instant3DWeb2")
 
         sam_layout.addWidget(self.btn_prepare_tracking)
         sam_layout.addWidget(self.btn_set_box_prompt)        
@@ -281,8 +282,9 @@ class Ui_MainWindow:
         sam_layout.addWidget(self.btn_import_segonweb_result)
         sam_layout.addWidget(self.btn_run_tracking)
         sam_layout.addWidget(self.btn_run_sam2)
-        sam_layout.addWidget(self.btn_seg_on_web)   
+        sam_layout.addWidget(self.btn_seg_on_web)
         sam_layout.addWidget(self.btn_instant3dweb)
+        sam_layout.addWidget(self.btn_instant3d_workflow)
         
         outer_layout.addLayout(sam_layout)
 
@@ -1212,6 +1214,11 @@ class Ui_MainWindow:
             self.btn_seg_on_web,
         ])
         ai_layout.addWidget(self.segonweb_widget)
+        self.instant3d_widget = group("Instant3DWeb2 / TotalSegmentator", [
+            QLabel("Choose structures in SegRef3D, process the request ZIP in Colab, then import the result."),
+            self.btn_instant3d_workflow,
+        ])
+        ai_layout.addWidget(self.instant3d_widget)
 
         cleanup_layout = tool_page("Mask Cleanup")
         self.label_cleanup_target = QLabel("Target: Obj 1")
@@ -1260,6 +1267,7 @@ class Ui_MainWindow:
             self.btn_export_stl_colorwise,
             self.btn_instant3dweb,
         ]))
+        self.btn_instant3dweb.setText("Legacy Instant3DWeb")
         self.btn_export_stl_colorwise.setProperty("primary", True)
         export_layout.addWidget(group("Data Export", [
             self.btn_export_nifti,

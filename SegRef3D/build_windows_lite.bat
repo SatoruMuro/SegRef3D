@@ -54,6 +54,7 @@ pyinstaller SegRef3D.py ^
     --icon "SegRef3D.ico" ^
     --runtime-hook "tools\pyi_disable_sam2.py" ^
     --add-data "ffmpeg_bin\ffmpeg.exe;ffmpeg_bin" ^
+    --add-data "..\resources;resources" ^
     --hidden-import pydicom.encoders.pylibjpeg ^
     --hidden-import pydicom.encoders.gdcm ^
     --hidden-import vtkmodules.all ^

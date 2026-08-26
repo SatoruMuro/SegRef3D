@@ -72,6 +72,27 @@ Colab backend, and restore `segref3d_result.zip` with **Import Result**. Display
 calibration, label-volume export, and STL generation run locally in the browser. Images are
 uploaded only when the user explicitly sends the job ZIP to Google Colab.
 
+## Instant3DWeb2 / TotalSegmentator
+
+SegRef3D Desktop and Lite Web share an optional, ZIP-based TotalSegmentator workflow for CT
+NIfTI volumes. The source volume remains unchanged while the request is prepared locally:
+
+1. Load a CT `.nii` or `.nii.gz` volume.
+2. Open **Instant3DWeb2** (Desktop) or **AI Segmentation > Instant3DWeb2** (Lite Web).
+3. Search the open-license ROI catalog and map each structure to Obj 1-20.
+4. Export `instant3d_request.zip`.
+5. Open [Instant3DWeb2 in Google Colab](https://satorumuro.github.io/SegRef3D/ColabNotebooks/instant3dweb2.html).
+6. Upload the request ZIP to your own Colab runtime and run TotalSegmentator.
+7. Download `instant3d_result.zip` and import it into the same source volume.
+8. Refine, measure, and export the returned masks in SegRef3D.
+
+The request ZIP contains the exact source NIfTI volume, selected structures, Obj mappings, and
+geometry fingerprint. Import rejects a result whose dimensions, spacing, affine/orientation, or
+source checksum differs. Only structures in the bundled open-license catalog can be requested;
+license-restricted TotalSegmentator tasks are rejected. TotalSegmentator is not bundled into the
+Desktop or Lite Web application and runs only after an explicit upload to Google Colab. Confirm
+that this use is permitted by your institution before uploading research or medical data.
+
 ---
 
 ## ⚙️ System Requirements

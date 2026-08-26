@@ -47,3 +47,24 @@ its release validation.
 The shared archive schema is documented in
 `SegRef3D/docs/SEGONWEB_JOB_FORMAT.md` and implemented by
 `SegRef3D/segmentation_job.py`.
+
+## Instant3DWeb2 TotalSegmentator Workflow
+
+Use `Instant3DWeb2.ipynb` for the Gradio-free CT structure workflow. The public launcher is
+`instant3dweb2.html`, and `instant3dweb2_backend.py` contains request validation, task grouping,
+TotalSegmentator invocation, geometry-aware output handling, and result ZIP generation.
+
+1. Create `instant3d_request.zip` in SegRef3D Desktop or Lite Web.
+2. Open the Instant3DWeb2 launcher and select a T4 GPU runtime when available.
+3. Upload the request ZIP in the first executable upload cell.
+4. Run validation before TotalSegmentator is installed or invoked.
+5. Run the grouped open-license tasks and create `instant3d_result.zip`.
+6. Use the separate final cell to start the browser download automatically.
+7. Import the result into the same source NIfTI volume in SegRef3D.
+
+The backend rejects unsafe ZIP paths, malformed manifests, unsupported ROI/task combinations,
+duplicate Obj mappings, and license-restricted tasks. It preserves binary ROI NIfTI outputs as
+the source of truth, resamples only when TotalSegmentator returns a different grid, and records
+overlap and runtime versions in the result manifest. The merged single-label map uses lower Obj ID
+priority on overlap. Real TotalSegmentator inference requires a Colab GPU smoke test and is not
+part of the CPU-only automated unit suite.

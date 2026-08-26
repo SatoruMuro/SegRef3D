@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://satorumuro.github.io/SegRef3D/schemas/instant3d_result.schema.json",
+  "title": "SegRef3D Instant3DWeb2 result",
+  "type": "object",
+  "required": ["schema", "schema_version", "request_id", "status", "source", "objects", "software", "warnings", "overlaps"],
+  "properties": {
+    "schema": {"const": "segref3d-instant3d-bridge"},
+    "schema_version": {"const": "1.0"},
+    "request_id": {"type": "string", "minLength": 8},
+    "status": {"const": "success"},
+    "source": {"type": "object"},
+    "objects": {"type": "array", "minItems": 1, "maxItems": 20},
+    "software": {"type": "object"},
+    "warnings": {"type": "array"},
+    "overlaps": {"type": "array"}
+  }
+}

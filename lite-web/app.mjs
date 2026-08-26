@@ -28,9 +28,10 @@ import {
   isNiftiFilename,
   isTiffFilename,
   parseDicomInstance,
+  parseNiftiLabelVolume,
   parseNiftiVolume,
   parseTiffStack,
-} from "./medical-io.mjs?v=17";
+} from "./medical-io.mjs?v=18";
 import { demoDatasetById } from "./demo-datasets.mjs?v=3";
 import { clearProjectMasks, loadMask, saveMask } from "./storage.mjs?v=25";
 import { createZip, parseZip } from "./zip.mjs?v=25";
@@ -39,6 +40,12 @@ import {
   createSegmentationJobManifest,
   validateSegmentationArchive,
 } from "./segmentation-job.mjs?v=17";
+import {
+  createInstant3DRequest,
+  geometryMismatches as instant3DGeometryMismatches,
+  sha256Hex,
+  validateInstant3DResult,
+} from "./instant3d-bridge.mjs?v=2";
 import {
   adjustedRgba,
   hexToRgb,
@@ -141,6 +148,24 @@ const elements = {
   segonwebWarningDialog: document.querySelector("#segonweb-warning-dialog"),
   segonwebWarningCancel: document.querySelector("#segonweb-warning-cancel"),
   segonwebWarningContinue: document.querySelector("#segonweb-warning-continue"),
+  instant3dSourceStatus: document.querySelector("#instant3d-source-status"),
+  instant3dSearch: document.querySelector("#instant3d-search"),
+  instant3dAvailable: document.querySelector("#instant3d-available"),
+  instant3dObjectId: document.querySelector("#instant3d-object-id"),
+  instant3dAdd: document.querySelector("#instant3d-add"),
+  instant3dSelected: document.querySelector("#instant3d-selected"),
+  instant3dFast: document.querySelector("#instant3d-fast"),
+  instant3dExport: document.querySelector("#instant3d-export"),
+  instant3dOpen: document.querySelector("#instant3d-open"),
+  instant3dImport: document.querySelector("#instant3d-import"),
+  instant3dResultInput: document.querySelector("#instant3d-result-input"),
+  instant3dWarningDialog: document.querySelector("#instant3d-warning-dialog"),
+  instant3dWarningCancel: document.querySelector("#instant3d-warning-cancel"),
+  instant3dWarningContinue: document.querySelector("#instant3d-warning-continue"),
+  instant3dConflictDialog: document.querySelector("#instant3d-conflict-dialog"),
+  instant3dConflictCancel: document.querySelector("#instant3d-conflict-cancel"),
+  instant3dConflictMerge: document.querySelector("#instant3d-conflict-merge"),
+  instant3dConflictReplace: document.querySelector("#instant3d-conflict-replace"),
   labelsPanel: document.querySelector("#labels-panel"),
   labelsToggle: document.querySelector("#labels-toggle"),
   labelsClose: document.querySelector("#labels-close"),
@@ -352,6 +377,11 @@ const state = {
   editSequence: 0,
   volumeStatisticsGeneration: 0,
   activeDemoDatasetId: null,
+  sourceVolume: null,
+  instant3dCatalog: null,
+  instant3dMappings: [],
+  instant3dPendingAction: null,
+  instant3dPendingImport: null,
 };
 
 const context = elements.canvas.getContext("2d", { alpha: false });
@@ -384,6 +414,190 @@ function setLoading(active, title = "Loading images", detail = "") {
 function setSaveState(text, className = "") {
   elements.autosaveIndicator.textContent = text;
   elements.autosaveIndicator.className = `save-state ${className}`.trim();
+}
+
+async function loadInstant3DCatalog() {
+  try {
+    const response = await fetch(new URL("../resources/totalsegmentator_roi_catalog.json", import.meta.url));
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const catalog = await response.json();
+    if (catalog.schema_version !== "1.0" || !Array.isArray(catalog.structures)) {
+      throw new Error("unsupported catalog schema");
+    }
+    state.instant3dCatalog = catalog;
+    renderInstant3DCatalog();
+    updateInstant3DControls();
+  } catch (error) {
+    console.error("Instant3D ROI catalog failed", error);
+    elements.instant3dSourceStatus.textContent = `ROI catalog unavailable: ${error.message}`;
+  }
+}
+
+function renderInstant3DCatalog() {
+  if (!state.instant3dCatalog) return;
+  const query = elements.instant3dSearch.value.trim().toLowerCase();
+  elements.instant3dAvailable.replaceChildren();
+  for (const structure of state.instant3dCatalog.structures) {
+    if (structure.license_required) continue;
+    const haystack = [structure.display_name, structure.roi, structure.category, ...(structure.synonyms || [])]
+      .join(" ").toLowerCase();
+    if (query && !haystack.includes(query)) continue;
+    const option = document.createElement("option");
+    option.value = `${structure.task}/${structure.roi}`;
+    option.textContent = `${structure.display_name} · ${structure.category || "Other"}`;
+    option.dataset.structure = JSON.stringify(structure);
+    elements.instant3dAvailable.append(option);
+  }
+}
+
+function nextInstant3DObjectId() {
+  const used = new Set(state.instant3dMappings.map((item) => Number(item.object_id)));
+  return Array.from({ length: 20 }, (_, index) => index + 1).find((value) => !used.has(value)) || 1;
+}
+
+function renderInstant3DMappings() {
+  elements.instant3dSelected.replaceChildren();
+  if (state.instant3dMappings.length === 0) {
+    const empty = document.createElement("span");
+    empty.className = "muted";
+    empty.textContent = "No structures selected.";
+    elements.instant3dSelected.append(empty);
+  }
+  for (const mapping of state.instant3dMappings) {
+    const row = document.createElement("div");
+    row.className = "instant3d-selected-row";
+    const object = document.createElement("strong");
+    object.textContent = `Obj ${mapping.object_id}`;
+    const name = document.createElement("span");
+    name.textContent = mapping.display_name;
+    name.title = `${mapping.task} / ${mapping.roi}`;
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "icon-button";
+    remove.title = `Remove ${mapping.display_name}`;
+    remove.textContent = "×";
+    remove.addEventListener("click", () => {
+      state.instant3dMappings = state.instant3dMappings.filter(
+        (item) => Number(item.object_id) !== Number(mapping.object_id),
+      );
+      renderInstant3DMappings();
+    });
+    row.append(object, name, remove);
+    elements.instant3dSelected.append(row);
+  }
+  elements.instant3dObjectId.value = String(nextInstant3DObjectId());
+  updateInstant3DControls();
+}
+
+function updateInstant3DControls() {
+  const ready = state.sourceVolume?.format === "nifti" && Boolean(state.instant3dCatalog);
+  elements.instant3dExport.disabled = !ready || state.instant3dMappings.length === 0;
+  elements.instant3dImport.disabled = !ready;
+  elements.instant3dAdd.disabled = !state.instant3dCatalog;
+  elements.instant3dSourceStatus.textContent = ready
+    ? `CT NIfTI · ${state.sourceVolume.shape.join(" × ")} · ${state.sourceVolume.spacing.map((value) => Number(value).toPrecision(4)).join(" × ")} mm · ${state.sourceVolume.orientation}`
+    : "Load a compatible CT NIfTI volume to enable Instant3DWeb2 export and import.";
+}
+
+function addInstant3DStructure() {
+  const option = elements.instant3dAvailable.selectedOptions[0];
+  if (!option) return;
+  const structure = JSON.parse(option.dataset.structure);
+  const objectId = Number(elements.instant3dObjectId.value);
+  state.instant3dMappings = state.instant3dMappings.filter((item) =>
+    Number(item.object_id) !== objectId && !(item.task === structure.task && item.roi === structure.roi));
+  state.instant3dMappings.push({
+    object_id: objectId,
+    display_name: structure.display_name,
+    task: structure.task,
+    roi: structure.roi,
+  });
+  state.instant3dMappings.sort((left, right) => left.object_id - right.object_id);
+  renderInstant3DMappings();
+}
+
+async function exportInstant3DRequest() {
+  try {
+    setLoading(true, "Exporting Instant3DWeb2 request", "Validating source geometry");
+    const { entries, manifest } = await createInstant3DRequest({
+      source: state.sourceVolume,
+      objects: state.instant3dMappings,
+      catalog: state.instant3dCatalog,
+      fast: elements.instant3dFast.checked,
+    });
+    downloadBlob(await createZip(entries), "instant3d_request.zip");
+    setStatus(`Instant3DWeb2 request created: ${manifest.objects.length} structure(s).`);
+    showToast("Downloaded instant3d_request.zip");
+  } catch (error) {
+    console.error(error);
+    setStatus(`Instant3DWeb2 export failed: ${error.message}`);
+    window.alert(`Instant3DWeb2 export failed.\n\n${error.message}`);
+  } finally {
+    setLoading(false);
+  }
+}
+
+async function applyInstant3DImport(mode) {
+  const pending = state.instant3dPendingImport;
+  if (!pending) return;
+  const { manifest, volume } = pending;
+  const objectIds = new Set(manifest.objects.map((item) => Number(item.object_id)));
+  const nextMasks = state.images.map((image, index) => {
+    const next = image.mask.slice();
+    const incoming = volume.frames[index];
+    if (mode === "replace") {
+      for (let pixel = 0; pixel < next.length; pixel += 1) {
+        if (objectIds.has(next[pixel])) next[pixel] = 0;
+        if (objectIds.has(incoming[pixel])) next[pixel] = incoming[pixel];
+      }
+    } else {
+      for (let pixel = 0; pixel < next.length; pixel += 1) {
+        if (next[pixel] === 0 && objectIds.has(incoming[pixel])) next[pixel] = incoming[pixel];
+      }
+    }
+    return next;
+  });
+  for (const item of manifest.objects) state.objectNames[Number(item.object_id)] = item.display_name;
+  state.instant3dMappings = manifest.objects.map((item) => ({ ...item }));
+  setSegmentationObjectNames();
+  updateLabelTargets();
+  await applyMaskVolumeTransaction(nextMasks,
+    `Imported Instant3DWeb2 result: ${manifest.objects.length} object(s), ${mode} mode.`);
+  enableLabelsUsedByMasks(nextMasks);
+  renderInstant3DMappings();
+  state.instant3dPendingImport = null;
+  if (elements.instant3dConflictDialog.open) elements.instant3dConflictDialog.close();
+  if (manifest.overlaps?.length) {
+    window.alert("Overlapping ROI voxels were detected. The merged labelmap gives lower object IDs priority; individual binary NIfTI masks remain in the result ZIP.");
+  }
+}
+
+async function importInstant3DResult(file) {
+  if (!file) return;
+  try {
+    setLoading(true, "Importing Instant3DWeb2 result", "Opening ZIP");
+    const entries = await parseZip(file);
+    const validated = validateInstant3DResult(entries, state.sourceVolume, state.instant3dCatalog);
+    const volume = parseNiftiLabelVolume(validated.labelmap.bytes, validated.labelmap.name);
+    const geometryErrors = instant3DGeometryMismatches(validated.manifest.source, volume, { includeChecksum: false });
+    if (geometryErrors.length) throw new Error(`Result labelmap geometry mismatch: ${geometryErrors.join(", ")}.`);
+    if (volume.width !== state.images[0].width || volume.height !== state.images[0].height || volume.depth !== state.images.length) {
+      throw new Error("Result labelmap dimensions do not match the editable image sequence.");
+    }
+    state.instant3dPendingImport = { manifest: validated.manifest, volume };
+    const objectIds = new Set(validated.manifest.objects.map((item) => Number(item.object_id)));
+    const conflicts = state.images.some((image) => image.mask.some((value) => objectIds.has(value)));
+    if (conflicts) elements.instant3dConflictDialog.showModal();
+    else await applyInstant3DImport("replace");
+  } catch (error) {
+    console.error(error);
+    state.instant3dPendingImport = null;
+    setStatus(`Instant3DWeb2 import failed: ${error.message}`);
+    window.alert(`Instant3DWeb2 import failed.\n\n${error.message}`);
+  } finally {
+    setLoading(false);
+    elements.instant3dResultInput.value = "";
+  }
 }
 
 function objectDisplayName(label) {
@@ -3441,6 +3655,9 @@ async function prepareImageSequence(
   }
 
   state.images = prepared;
+  state.sourceVolume = null;
+  state.instant3dMappings = [];
+  state.instant3dPendingImport = null;
   state.bulkUndo = [];
   state.bulkRedo = [];
   state.segmentationJobs = [];
@@ -3448,6 +3665,7 @@ async function prepareImageSequence(
   state.segmentationDraft = null;
   state.segmentationBoxMode = null;
   setSegmentationObjectNames();
+  renderInstant3DMappings();
   state.projectId = projectId;
   state.index = clamp(demoDataset?.initialFrameIndex ?? 0, 0, prepared.length - 1);
   state.projectName = projectName;
@@ -3582,7 +3800,8 @@ async function decodeDicomSources(files) {
 }
 
 async function decodeNiftiSources(file) {
-  const volume = parseNiftiVolume(await file.arrayBuffer(), file.name);
+  const input = await file.arrayBuffer();
+  const volume = parseNiftiVolume(input, file.name);
   const sources = [];
   for (let index = 0; index < volume.frames.length; index += 1) {
     elements.loadingDetail.textContent = `Preparing slice ${index + 1} / ${volume.frames.length}`;
@@ -3599,21 +3818,34 @@ async function decodeNiftiSources(file) {
     });
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
-  return { volume, sources };
+  return { volume, sources, bytes: new Uint8Array(input) };
 }
 
 async function prepareNiftiFile(file) {
   if (!file || state.loading) return;
   setLoading(true, "Loading NIfTI volume", "Reading volume");
   try {
-    const { sources } = await decodeNiftiSources(file);
-    await prepareImageSequence(
+    const { volume, sources, bytes } = await decodeNiftiSources(file);
+    const loaded = await prepareImageSequence(
       sources,
       [file],
       file.name.replace(/\.nii(?:\.gz)?$/i, "") || "NIfTI volume",
       "NIfTI slice(s)",
       { autoExportVolInfo: true },
     );
+    if (loaded) {
+      state.sourceVolume = {
+        format: "nifti",
+        filename: file.name,
+        bytes,
+        shape: [volume.width, volume.height, volume.depth],
+        spacing: [...volume.spacing],
+        affine: volume.affine.map((row) => [...row]),
+        orientation: volume.orientation,
+        sha256: await sha256Hex(bytes),
+      };
+      updateInstant3DControls();
+    }
   } catch (error) {
     console.error(error);
     setStatus(`NIfTI loading failed: ${error.message}`);
@@ -3868,7 +4100,7 @@ async function loadNiftiDemo(dataset) {
   try {
     const file = await downloadDemoVolume(dataset);
     elements.loadingDetail.textContent = "Reading NIfTI volume";
-    const { sources } = await decodeNiftiSources(file);
+    const { volume, sources, bytes } = await decodeNiftiSources(file);
     const loaded = await prepareImageSequence(
       sources,
       [file],
@@ -3877,6 +4109,17 @@ async function loadNiftiDemo(dataset) {
       { preserveDimensions: true, demoDataset: dataset },
     );
     if (!loaded) return;
+    state.sourceVolume = {
+      format: "nifti",
+      filename: file.name,
+      bytes,
+      shape: [volume.width, volume.height, volume.depth],
+      spacing: [...volume.spacing],
+      affine: volume.affine.map((row) => [...row]),
+      orientation: volume.orientation,
+      sha256: await sha256Hex(bytes),
+    };
+    updateInstant3DControls();
     setSaveState(`${dataset.displayName} autosave active`, "saved");
     setStatus(
       `${dataset.displayName} loaded: ${sources.length} slices · 1.0 mm isotropic. Suggested target: skull or body contour.`,
@@ -4174,6 +4417,8 @@ function handleKeyDown(event) {
     elements.clearMasksDialog.open ||
     elements.localProcessingDialog.open ||
     elements.segonwebWarningDialog.open ||
+    elements.instant3dWarningDialog.open ||
+    elements.instant3dConflictDialog.open ||
     editingJobField ||
     editingToolsField
   ) {
@@ -4557,6 +4802,45 @@ function bindEvents() {
       setStatus("Opening Seg on Web in Google Colab. Upload occurs only when you choose the input ZIP in Colab.");
     }, 0);
   });
+  elements.instant3dSearch.addEventListener("input", renderInstant3DCatalog);
+  elements.instant3dAvailable.addEventListener("dblclick", addInstant3DStructure);
+  elements.instant3dAdd.addEventListener("click", addInstant3DStructure);
+  elements.instant3dExport.addEventListener("click", () => {
+    state.instant3dPendingAction = "export";
+    elements.instant3dWarningDialog.showModal();
+  });
+  elements.instant3dOpen.addEventListener("click", (event) => {
+    event.preventDefault();
+    state.instant3dPendingAction = "open";
+    elements.instant3dWarningDialog.showModal();
+  });
+  elements.instant3dWarningCancel.addEventListener("click", () => {
+    state.instant3dPendingAction = null;
+    elements.instant3dWarningDialog.close();
+  });
+  elements.instant3dWarningDialog.addEventListener("cancel", () => {
+    state.instant3dPendingAction = null;
+  });
+  elements.instant3dWarningContinue.addEventListener("click", () => {
+    const action = state.instant3dPendingAction;
+    state.instant3dPendingAction = null;
+    elements.instant3dWarningDialog.close();
+    if (action === "export") exportInstant3DRequest();
+    if (action === "open") {
+      window.open(elements.instant3dOpen.href, "_blank", "noopener,noreferrer");
+      setStatus("Opening Instant3DWeb2 in Google Colab. Upload occurs only when you select the request ZIP there.");
+    }
+  });
+  elements.instant3dImport.addEventListener("click", () => elements.instant3dResultInput.click());
+  elements.instant3dResultInput.addEventListener("change", () =>
+    importInstant3DResult(elements.instant3dResultInput.files[0]));
+  elements.instant3dConflictCancel.addEventListener("click", () => {
+    state.instant3dPendingImport = null;
+    elements.instant3dConflictDialog.close();
+    setStatus("Instant3DWeb2 result import canceled; masks were not changed.");
+  });
+  elements.instant3dConflictMerge.addEventListener("click", () => applyInstant3DImport("merge"));
+  elements.instant3dConflictReplace.addEventListener("click", () => applyInstant3DImport("replace"));
   elements.segonwebJobs.addEventListener("click", () => {
     openSegmentationJobs(state.targetLabel);
   });
@@ -4599,6 +4883,14 @@ function bindEvents() {
 }
 
 initializeLabels();
+for (let objectId = 1; objectId <= 20; objectId += 1) {
+  const option = document.createElement("option");
+  option.value = String(objectId);
+  option.textContent = `Obj ${objectId}`;
+  elements.instant3dObjectId.append(option);
+}
+renderInstant3DMappings();
+loadInstant3DCatalog();
 elements.penColorSwatch.style.background = state.penColor;
 setAutoApplyMode("off", { announce: false });
 setMaskImportMode("replace");

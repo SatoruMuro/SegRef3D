@@ -28,12 +28,14 @@ test("offline cache uses the current UI asset generation", async () => {
     readLiteWebFile("service-worker.js"),
   ]);
 
-  assert.match(html, /styles\.css\?v=29/);
-  assert.match(html, /app\.mjs\?v=29/);
-  assert.match(worker, /segref3d-lite-web-v29/);
-  assert.match(worker, /styles\.css\?v=29/);
-  assert.match(worker, /app\.mjs\?v=29/);
+  assert.match(html, /styles\.css\?v=30/);
+  assert.match(html, /app\.mjs\?v=30/);
+  assert.match(worker, /segref3d-lite-web-v30/);
+  assert.match(worker, /styles\.css\?v=30/);
+  assert.match(worker, /app\.mjs\?v=30/);
   assert.match(worker, /workspace-ui\.mjs\?v=29/);
+  assert.match(worker, /instant3d-bridge\.mjs\?v=2/);
+  assert.match(worker, /totalsegmentator_roi_catalog\.json/);
 });
 
 test("Lite Web runtime has no image-upload or telemetry transport", async () => {

@@ -2716,6 +2716,46 @@ svg {
   min-height: 0;
 }
 
+.instant3d-workflow {
+  border-top: 1px solid #ccd6d5;
+  margin-top: 18px;
+  padding-top: 16px;
+}
+
+.instant3d-workflow .field-stack,
+.instant3d-workflow .field-stack > span {
+  display: grid;
+  gap: 6px;
+}
+
+.instant3d-workflow .field-stack { margin-top: 10px; }
+.instant3d-workflow input[type="search"],
+.instant3d-workflow select { width: 100%; min-width: 0; }
+.instant3d-workflow #instant3d-available { min-height: 146px; }
+
+.instant3d-add-row,
+.instant3d-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.instant3d-add-row label { display: grid; gap: 5px; }
+.instant3d-selected { display: grid; gap: 5px; min-height: 42px; }
+.instant3d-selected-row {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr) 30px;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #d5dddd;
+  padding: 6px 7px;
+  background: #f8fafa;
+}
+.instant3d-selected-row button { width: 28px; height: 28px; padding: 0; }
+.instant3d-privacy { color: #566; font-size: 11px; line-height: 1.45; }
+
 .labels-panel {
   grid-column: 1;
   border-right: 1px solid var(--line);

@@ -36,6 +36,33 @@ function ensureArrayBuffer(value) {
   throw new Error("Medical image data must be an ArrayBuffer.");
 }
 
+function niftiAffine(header, spacing, origin) {
+  const candidate = Array.from({ length: 4 }, (_, row) =>
+    Array.from({ length: 4 }, (_, column) => Number(header.affine?.[row]?.[column])),
+  );
+  if (candidate.every((row) => row.every(Number.isFinite))) return candidate;
+  return [
+    [spacing[0], 0, 0, origin[0]],
+    [0, spacing[1], 0, origin[1]],
+    [0, 0, spacing[2], origin[2]],
+    [0, 0, 0, 1],
+  ];
+}
+
+export function affineOrientation(affine) {
+  const positive = ["R", "A", "S"];
+  const negative = ["L", "P", "I"];
+  const used = new Set();
+  return [0, 1, 2].map((axis) => {
+    const candidates = [0, 1, 2]
+      .filter((world) => !used.has(world))
+      .sort((left, right) => Math.abs(affine[right][axis]) - Math.abs(affine[left][axis]));
+    const world = candidates[0];
+    used.add(world);
+    return affine[world][axis] >= 0 ? positive[world] : negative[world];
+  }).join("");
+}
+
 function numericList(dataSet, tag) {
   const value = dataSet.string(tag);
   if (!value) return [];
@@ -355,6 +382,8 @@ export function parseNiftiVolume(input, fileName = "volume.nii") {
     const offsetValue = Number(header[`qoffset_${["x", "y", "z"][index]}`]);
     return Number.isFinite(offsetValue) ? offsetValue : 0;
   });
+  const affine = niftiAffine(header, spacing, origin);
+  const orientation = affineOrientation(affine);
   const frames = [];
   const base = filenameBase(fileName);
   if (colorChannels > 0) {
@@ -430,8 +459,55 @@ export function parseNiftiVolume(input, fileName = "volume.nii") {
     depth,
     spacing,
     origin,
+    affine,
+    orientation,
     datatype,
     frames,
+  };
+}
+
+export function parseNiftiLabelVolume(input, fileName = "labels.nii.gz") {
+  let data = ensureArrayBuffer(input);
+  if (nifti.isCompressed(data)) data = nifti.decompress(data);
+  if (!nifti.isNIFTI(data)) throw new Error(`${fileName} is not a valid NIfTI label volume.`);
+  const header = nifti.readHeader(data);
+  const width = Number(header.dims[1]);
+  const height = Number(header.dims[2]);
+  const depth = Number(header.dims[3]);
+  if (Number(header.dims[0]) !== 3 || width < 1 || height < 1 || depth < 1) {
+    throw new Error(`${fileName} must be one 3D NIfTI label volume.`);
+  }
+  const datatype = Number(header.datatypeCode);
+  const scalarType = NIFTI_SCALAR_TYPES[datatype];
+  if (!scalarType) throw new Error(`${fileName} uses unsupported label datatype ${datatype}.`);
+  const image = nifti.readImage(header, data);
+  const voxelCount = width * height * depth;
+  if (image.byteLength < voxelCount * scalarType.bytes) throw new Error(`${fileName} has incomplete voxel data.`);
+  const view = new DataView(image);
+  const littleEndian = header.littleEndian !== false;
+  const slope = Number.isFinite(Number(header.scl_slope)) && Number(header.scl_slope) !== 0
+    ? Number(header.scl_slope) : 1;
+  const intercept = Number.isFinite(Number(header.scl_inter)) ? Number(header.scl_inter) : 0;
+  const pixels = new Uint8Array(voxelCount);
+  for (let index = 0; index < voxelCount; index += 1) {
+    const offset = index * scalarType.bytes;
+    const raw = scalarType.bytes === 1
+      ? view[scalarType.read](offset)
+      : view[scalarType.read](offset, littleEndian);
+    const value = raw * slope + intercept;
+    if (!Number.isInteger(value) || value < 0 || value > 20) {
+      throw new Error(`${fileName} contains a label outside the supported 0-20 range.`);
+    }
+    pixels[index] = value;
+  }
+  const spacing = [1, 2, 3].map((index) => Math.abs(Number(header.pixDims[index])) || 1);
+  const origin = [0, 1, 2].map((index) => Number(header.affine?.[index]?.[3]) || 0);
+  const affine = niftiAffine(header, spacing, origin);
+  return {
+    width, height, depth, shape: [width, height, depth], spacing, origin, affine,
+    orientation: affineOrientation(affine),
+    frames: Array.from({ length: depth }, (_, index) =>
+      pixels.slice(index * width * height, (index + 1) * width * height)),
   };
 }
 
