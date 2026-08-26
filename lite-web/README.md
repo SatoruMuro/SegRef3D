@@ -4,6 +4,23 @@ Browser-based, local-first image mask editor derived from the non-SAM2 workflow 
 
 Public beta: <https://satorumuro.github.io/SegRef3D/lite-web/>
 
+## Workspace
+
+The desktop layout follows the same mental model as the Windows application:
+
+```text
+Objects | Image View | Tools
+```
+
+- **Objects** is the only current-target selector. Visibility and object management remain in
+  each row.
+- **Image View** keeps the canvas central, with Previous/Next, direct slice number, slider, and
+  status synchronized with wheel and keyboard navigation.
+- **Tools** groups Draw & Refine, AI Segmentation, Display, Extract, Mask Cleanup, Calibration,
+  Volume & 3D, and Project Check in one dock.
+- The top command bar is limited to Open, Fit, unified Undo/Redo, and Export.
+- At narrow and mobile widths, the canvas remains primary while Objects and Tools become drawers.
+
 ## Try SegRef3D without preparing your own data
 
 Lite Web includes two demos that use the same loading, mask-editing, and export pipelines as user data:
@@ -55,9 +72,11 @@ do not endorse SegRef3D. The approximately 20 MB demo volume is fetched only whe
 - Optional shared white canvas for mixed image dimensions
 - Edit 20 single-label objects with Free, Click, and edge Snap drawing
 - Add, Erase, and Transfer label operations, with optional Auto Add/Erase/Transfer on path completion
-- Separate Undo/Redo histories for drawn lines and committed mask edits
+- Unified Undo/Redo controls that route to the newest pending drawing or committed mask edit while
+  preserving the separate internal histories
 - Post-load window/level, brightness, and contrast controls
-- Non-modal Image Tools with in-panel frame navigation so the source image remains visible
+- A fixed Tools dock that keeps the source image visible while using image, mask, calibration,
+  and volume tools
 - Threshold and clicked-color RGB extraction for the current image or full sequence
 - Pixel and slice-spacing calibration, including two-point reference-line calibration
 - Live crosshair, line, endpoint, and pixel-distance guides while placing a calibration line
@@ -103,7 +122,7 @@ research-data or privacy rules may restrict uploading research or medical data t
 so users should confirm that this use is permitted before continuing.
 
 Project ZIP files do not contain the source images. Load the original image folder first, then
-open the Project ZIP from **Load Masks** to restore its masks and editor settings.
+open the Project ZIP from **Open > Masks / Project ZIP** to restore its masks and editor settings.
 
 VolInfo CSV uses the same six-row `Width/Height/Depth`, `X/Y/Z Spacing`, and `X/Y/Z Origin`
 format as the Windows app. Imported spacing is used by NIfTI and STL export, and origin is written
@@ -131,13 +150,13 @@ currently rejected with a clear error instead of being rendered incorrectly.
 ### Seg on Web workflow
 
 1. Load an image sequence in SegRef3D Lite Web.
-2. Open **Seg on Web > AI Tracking Setup**.
+2. Open **AI Segmentation > Edit Setup** in the Tools dock.
 3. Define the tracking range for each object.
 4. Move to useful keyframes and add one or more box prompts with **Add Box Prompt Here**.
-5. Return to **Seg on Web** and choose **Create Input ZIP**.
+5. Return to **AI Segmentation** and choose **Create Input ZIP**.
 6. Choose **Open Seg on Web**, run all Colab cells, and upload the ZIP in the first upload cell.
 7. Download the generated `segref3d_result.zip`.
-8. Choose **Seg on Web > Import AI Result** in Lite Web.
+8. Choose **AI Segmentation > Import AI Result** in Lite Web.
 9. Refine the returned masks, run **Tools > Check Project**, and export measurements or 3D data.
 
 Opening Seg on Web displays a confirmation before leaving the browser-local workflow. Creating

@@ -11,7 +11,7 @@
     <title>SegRef3D Lite Web</title>
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
     <link rel="manifest" href="./manifest.webmanifest" />
-    <link rel="stylesheet" href="./styles.css?v=22" />
+    <link rel="stylesheet" href="./styles.css?v=29" />
   </head>
   <body>
     <svg class="svg-defs" aria-hidden="true">
@@ -257,8 +257,8 @@
           <canvas id="editor-canvas" tabindex="0"></canvas>
           <div id="empty-state" class="empty-state">
             <div class="empty-icon"><svg><use href="#i-image"></use></svg></div>
-            <h1>Open an image sequence</h1>
-            <p>JPG / PNG / TIFF / DICOM folder or NIfTI volume</p>
+            <h1>SegRef3D Lite Web</h1>
+            <p>Browser-based image segmentation, mask refinement &amp; 3D reconstruction</p>
             <div class="empty-actions">
               <button id="empty-load" class="command-button accent" type="button">
                 <svg><use href="#i-folder"></use></svg><span>Load Images</span>
@@ -273,14 +273,15 @@
             </div>
             <div class="demo-intro">
               <strong>Try SegRef3D without preparing your own data</strong>
-              <span><b>Apple:</b> 20 serial photographs and calibration · about 5.6 MB</span>
-              <span><b>RabbitCT:</b> 256³ reconstructed CT volume · about 20 MB</span>
+              <span><b>Apple:</b> Serial images → calibration → segmentation → 3D · about 5.6 MB</span>
+              <span><b>RabbitCT:</b> NIfTI → threshold → cleanup → 3D · about 20 MB</span>
               <small>
                 Apple: <a href="https://doi.org/10.5281/zenodo.8167285" target="_blank" rel="noopener noreferrer">Zenodo</a>
                 · RabbitCT: <a href="https://zenodo.org/records/21267885" target="_blank" rel="noopener noreferrer">Zenodo</a>
                 · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>
               </small>
             </div>
+            <small class="empty-privacy">Source images stay in your browser during normal Lite Web processing.</small>
           </div>
           <div id="zoom-readout" class="zoom-readout" hidden>100%</div>
           <div id="editing-state" class="editing-state" hidden>
@@ -1013,6 +1014,12 @@
         if (status) status.textContent = `Application operation failed: ${message}`;
       });
     </script>
-    <script type="module" src="./app.mjs?v=22"></script>
+    <script type="module">
+      import("./app.mjs?v=29").catch((error) => {
+        console.error("Application module failed to load", error);
+        const status = document.querySelector("#status-text");
+        if (status) status.textContent = `Application startup failed: ${error.message}`;
+      });
+    </script>
   </body>
 </html>

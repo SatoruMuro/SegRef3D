@@ -21,7 +21,7 @@ import {
   traceRegionPath,
   transferLabel,
   zoomAroundPoint,
-} from "./core.mjs";
+} from "./core.mjs?v=25";
 import {
   decodeDicomSeries,
   groupDicomSeries,
@@ -32,8 +32,8 @@ import {
   parseTiffStack,
 } from "./medical-io.mjs?v=17";
 import { demoDatasetById } from "./demo-datasets.mjs?v=3";
-import { clearProjectMasks, loadMask, saveMask } from "./storage.mjs";
-import { createZip, parseZip } from "./zip.mjs";
+import { clearProjectMasks, loadMask, saveMask } from "./storage.mjs?v=25";
+import { createZip, parseZip } from "./zip.mjs?v=25";
 import {
   SEGMENTATION_RESULT_KIND,
   createSegmentationJobManifest,
@@ -46,7 +46,7 @@ import {
   rgbRaster,
   rgbToHex,
   thresholdRaster,
-} from "./image-tools.mjs";
+} from "./image-tools.mjs?v=25";
 import {
   createBinaryStl,
   createNiftiLabelVolume,
@@ -71,6 +71,16 @@ import {
   volumeStatistics,
   volumeStatisticsAsync,
 } from "./mask-tools.mjs?v=18";
+import { upgradeWorkspaceLayout } from "./workspace-ui.mjs?v=29";
+
+try {
+  upgradeWorkspaceLayout();
+} catch (error) {
+  console.error("Workspace layout initialization failed", error);
+  const startupStatus = document.querySelector("#status-text");
+  if (startupStatus) startupStatus.textContent = `Workspace initialization failed: ${error.message}`;
+  throw error;
+}
 
 const elements = {
   canvas: document.querySelector("#editor-canvas"),
@@ -91,6 +101,8 @@ const elements = {
   previousImage: document.querySelector("#previous-image"),
   nextImage: document.querySelector("#next-image"),
   imageCounter: document.querySelector("#image-counter"),
+  sliceNumber: document.querySelector("#slice-number"),
+  sliceSlider: document.querySelector("#slice-slider"),
   targetLabel: document.querySelector("#target-label"),
   transferLabel: document.querySelector("#transfer-label"),
   penColor: document.querySelector("#pen-color"),
@@ -105,6 +117,8 @@ const elements = {
   clearLines: document.querySelector("#clear-lines"),
   undoEdit: document.querySelector("#undo-edit"),
   redoEdit: document.querySelector("#redo-edit"),
+  undoAction: document.querySelector("#undo-action"),
+  redoAction: document.querySelector("#redo-action"),
   clearMasks: document.querySelector("#clear-masks"),
   imageTools: document.querySelector("#image-tools"),
   exportMenu: document.querySelector("#export-menu"),
@@ -130,9 +144,14 @@ const elements = {
   labelsPanel: document.querySelector("#labels-panel"),
   labelsToggle: document.querySelector("#labels-toggle"),
   labelsClose: document.querySelector("#labels-close"),
+  toolsToggle: document.querySelector("#tools-toggle"),
   labelList: document.querySelector("#label-list"),
   maskSummary: document.querySelector("#mask-summary"),
   projectName: document.querySelector("#project-name"),
+  projectDetails: document.querySelector("#project-details"),
+  projectHealth: document.querySelector("#project-health"),
+  projectHealthDetail: document.querySelector("#project-health-detail"),
+  currentTargetDisplay: document.querySelector("#current-target-display"),
   autosaveIndicator: document.querySelector("#autosave-indicator"),
   statusText: document.querySelector("#status-text"),
   imageMeta: document.querySelector("#image-meta"),
@@ -236,6 +255,7 @@ const elements = {
   volInfoInput: document.querySelector("#vol-info-input"),
   demoCalibrationGuide: document.querySelector("#demo-calibration-guide"),
   demoCalibrationTitle: document.querySelector("#demo-calibration-title"),
+  demoGuideProgress: document.querySelector("#demo-guide-progress"),
   demoCalibrationInstruction: document.querySelector("#demo-calibration-instruction"),
   demoPrimaryLabel: document.querySelector("#demo-primary-label"),
   demoReferenceValue: document.querySelector("#demo-reference-value"),
@@ -276,6 +296,12 @@ const elements = {
   volumeStatisticsCalibration: document.querySelector("#volume-statistics-calibration"),
   exportVolumeStatistics: document.querySelector("#export-volume-statistics"),
   toast: document.querySelector("#toast"),
+  spatialInformationValue: document.querySelector("#spatial-information-value"),
+  spatialInformationSource: document.querySelector("#spatial-information-source"),
+  manualCalibration: document.querySelector("#manual-calibration"),
+  openMenu: document.querySelector("#open-menu"),
+  openAppleDemo: document.querySelector("#open-apple-demo"),
+  openRabbitDemo: document.querySelector("#open-rabbit-demo"),
 };
 
 const LOCAL_FILE_NOTICE_KEY = "segref3d-hide-local-file-notice";
@@ -439,6 +465,10 @@ function initializeLabels() {
 function selectTargetLabel(label) {
   state.targetLabel = label;
   elements.targetLabel.value = String(label);
+  elements.cleanupObject.value = String(label);
+  elements.interpolationObject.value = String(label);
+  elements.segonwebObjectId.value = String(label);
+  if (elements.currentTargetDisplay) elements.currentTargetDisplay.textContent = objectDisplayName(label);
   state.visibleLabels[label] = true;
   const item = elements.labelList.querySelector(`[data-label="${label}"]`);
   if (item) item.querySelector("input").checked = true;
@@ -508,6 +538,20 @@ function updateHistoryButtons() {
   elements.clearLines.disabled = !enabled || (image.paths.length === 0 && image.activePath.length === 0);
   elements.undoEdit.disabled = !enabled || (image.undo.length === 0 && state.bulkUndo.length === 0);
   elements.redoEdit.disabled = !enabled || (image.redo.length === 0 && state.bulkRedo.length === 0);
+  const lineUndoSequence = image?.activePath.length > 0
+    ? Number.POSITIVE_INFINITY
+    : image?.paths.at(-1)?.sequence ?? -1;
+  const editUndoSequence = Math.max(
+    image?.undo.at(-1)?.sequence ?? -1,
+    state.bulkUndo.at(-1)?.sequence ?? -1,
+  );
+  const lineRedoSequence = image?.pathRedo.at(-1)?.sequence ?? -1;
+  const editRedoSequence = Math.max(
+    image?.redo.at(-1)?.sequence ?? -1,
+    state.bulkRedo.at(-1)?.sequence ?? -1,
+  );
+  elements.undoAction.disabled = !enabled || Math.max(lineUndoSequence, editUndoSequence) < 0;
+  elements.redoAction.disabled = !enabled || Math.max(lineRedoSequence, editRedoSequence) < 0;
   elements.previousImage.disabled = !enabled || state.index <= 0;
   elements.nextImage.disabled = !enabled || state.index >= state.images.length - 1;
 }
@@ -517,12 +561,22 @@ function updateImageUi() {
   elements.emptyState.hidden = Boolean(image);
   elements.zoomReadout.hidden = !image;
   elements.imageCounter.textContent = image ? `${state.index + 1} / ${state.images.length}` : "0 / 0";
+  elements.sliceNumber.disabled = !image;
+  elements.sliceSlider.disabled = !image;
+  elements.sliceNumber.max = String(Math.max(1, state.images.length));
+  elements.sliceSlider.max = String(Math.max(1, state.images.length));
+  elements.sliceNumber.value = String(image ? state.index + 1 : 1);
+  elements.sliceSlider.value = String(image ? state.index + 1 : 1);
   elements.projectName.textContent = state.projectName;
   elements.imageMeta.textContent = image
     ? `${image.name} · ${image.width} × ${image.height}px${
         image.sourceFormat === "dicom" ? " · DICOM" : image.sourceFormat === "nifti" ? " · NIfTI" : image.sourceFormat === "tiff" ? " · TIFF" : ""
       }`
     : "No image loaded";
+  elements.projectDetails.textContent = image
+    ? `${state.images.length} slices · ${image.width} × ${image.height} · ${Number(state.calibration.xSpacing).toPrecision(4)} × ${Number(state.calibration.ySpacing).toPrecision(4)} × ${Number(state.calibration.zSpacing).toPrecision(4)} mm`
+    : "Open images or a volume to begin";
+  elements.projectHealth.disabled = !image;
   if (image) {
     setStatus(`Editing ${image.name}. Wheel: images · Ctrl+wheel: zoom · middle drag: pan.`);
   }
@@ -532,6 +586,7 @@ function updateImageUi() {
   syncToolsCurrentFrame();
   updateEditingState();
   updateSegonwebWorkflowSummary();
+  syncSpatialInformation();
 }
 
 function resizeCanvas({ refit = false } = {}) {
@@ -793,6 +848,7 @@ function finalizeActivePath() {
       points: image.activePath.map((point) => ({ ...point })),
       color: image.activePathColor ?? state.penColor,
       mode: image.activePathMode ?? state.drawMode,
+      sequence: ++state.editSequence,
     });
     image.pathRedo.length = 0;
     finalizedPath = true;
@@ -1093,6 +1149,41 @@ async function undoEdit() {
   render();
 }
 
+function latestMaskUndoSequence(image) {
+  return Math.max(
+    image?.undo.at(-1)?.sequence ?? -1,
+    state.bulkUndo.at(-1)?.sequence ?? -1,
+  );
+}
+
+function latestMaskRedoSequence(image) {
+  return Math.max(
+    image?.redo.at(-1)?.sequence ?? -1,
+    state.bulkRedo.at(-1)?.sequence ?? -1,
+  );
+}
+
+function smartUndo() {
+  const image = currentImage();
+  if (!image) return;
+  if (image.activePath.length > 0) {
+    finalizeActivePath();
+    undoLine();
+    return;
+  }
+  const lineSequence = image.paths.at(-1)?.sequence ?? -1;
+  if (lineSequence > latestMaskUndoSequence(image)) undoLine();
+  else void undoEdit();
+}
+
+function smartRedo() {
+  const image = currentImage();
+  if (!image) return;
+  const lineSequence = image.pathRedo.at(-1)?.sequence ?? -1;
+  if (lineSequence > latestMaskRedoSequence(image)) redoLine();
+  else void redoEdit();
+}
+
 async function redoEdit() {
   const image = currentImage();
   if (!image) return;
@@ -1144,6 +1235,15 @@ function switchImage(delta) {
   render();
 }
 
+function jumpToSlice(sliceNumber) {
+  if (state.images.length === 0) return;
+  const requested = Number.isFinite(sliceNumber) ? Math.round(sliceNumber) : state.index + 1;
+  const targetIndex = clamp(requested - 1, 0, state.images.length - 1);
+  switchImage(targetIndex - state.index);
+  elements.sliceNumber.value = String(state.index + 1);
+  elements.sliceSlider.value = String(state.index + 1);
+}
+
 function setDrawMode(mode) {
   finalizeActivePath();
   state.drawMode = mode;
@@ -1186,7 +1286,7 @@ async function applyPixelExtraction(kind) {
   const targetColor = isThreshold ? null : hexToRgb(elements.rgbTarget.value);
   let changedPixels = 0;
   let changedImages = 0;
-  elements.toolsDialog.close();
+  closeToolsDockOnNarrow();
   setLoading(true, isThreshold ? "Applying threshold" : "Applying RGB extraction", `0 / ${images.length}`);
   try {
     for (let index = 0; index < images.length; index += 1) {
@@ -1229,7 +1329,7 @@ function beginRgbPicker() {
   state.calibrationMode = false;
   state.calibrationPoints = [];
   state.calibrationHoverPoint = null;
-  elements.toolsDialog.close();
+  closeToolsDockOnNarrow();
   elements.canvas.focus();
   setStatus("Click the image to pick the RGB extraction color.");
 }
@@ -1242,7 +1342,7 @@ function beginCalibration() {
   state.calibrationHoverPoint = null;
   state.rgbPickMode = false;
   currentImage().calibrationLine = null;
-  elements.toolsDialog.close();
+  closeToolsDockOnNarrow();
   elements.canvas.focus();
   setStatus("Click two points for the calibration reference line.");
   render();
@@ -1296,6 +1396,7 @@ function syncDemoCalibrationGuide() {
     targetPanel.prepend(elements.demoCalibrationGuide);
   }
   elements.demoCalibrationTitle.textContent = guide.title;
+  if (elements.demoGuideProgress) elements.demoGuideProgress.textContent = "Step 2 of 5";
   elements.demoCalibrationInstruction.textContent = guide.instruction;
   elements.demoPrimaryLabel.textContent = guide.primaryLabel;
   elements.demoReferenceValue.textContent = guide.primaryValue;
@@ -1319,6 +1420,21 @@ function syncCalibrationControls() {
   elements.spacingZ.value = String(state.calibration.zSpacing);
   elements.referenceLength.value = String(state.calibration.referenceLength);
   syncDemoCalibrationGuide();
+  syncSpatialInformation();
+}
+
+function syncSpatialInformation() {
+  if (!elements.spatialInformationValue) return;
+  const values = [
+    state.calibration.xSpacing,
+    state.calibration.ySpacing,
+    state.calibration.zSpacing,
+  ].map((value) => Number(value).toPrecision(4));
+  elements.spatialInformationValue.textContent = `${values.join(" × ")} mm`;
+  elements.spatialInformationSource.textContent = state.volumeInfoSource;
+  if (elements.manualCalibration && activeDemoDataset()?.id === "apple-kanzi-84") {
+    elements.manualCalibration.open = true;
+  }
 }
 
 function syncExtractionControls() {
@@ -1482,6 +1598,17 @@ function selectToolTab(name) {
   if (name === "cleanup") syncCleanupControls();
 }
 
+function openToolsDock(name = "draw") {
+  selectToolTab(name);
+  elements.toolsDialog.classList.add("open");
+}
+
+function closeToolsDockOnNarrow() {
+  if (window.matchMedia("(max-width: 900px)").matches) {
+    elements.toolsDialog.classList.remove("open");
+  }
+}
+
 function openImageTools(name = "display") {
   if (!currentImage() || state.loading) return;
   selectToolTab(name);
@@ -1489,7 +1616,7 @@ function openImageTools(name = "display") {
   syncCalibrationControls();
   syncVolInfoSummary();
   syncToolsCurrentFrame();
-  if (!elements.toolsDialog.open) elements.toolsDialog.show();
+  openToolsDock(name);
 }
 
 function syncToolsCurrentFrame() {
@@ -1694,6 +1821,15 @@ function runProjectCheck() {
       ? `No errors · ${warnings} warning(s)`
       : "Project check passed.";
   elements.projectCheckSummary.className = `workflow-summary ${errors ? "error" : warnings ? "warning" : "success"}`;
+  const healthLabel = elements.projectHealth.querySelector("span");
+  const healthText = errors
+    ? `${errors} issue${errors === 1 ? "" : "s"}`
+    : warnings
+      ? `${warnings} warning${warnings === 1 ? "" : "s"}`
+      : "Project Check ✓";
+  if (healthLabel) healthLabel.textContent = healthText;
+  elements.projectHealth.className = `header-health-indicator ${errors ? "error" : warnings ? "warning" : "success"}`;
+  elements.projectHealthDetail.textContent = elements.projectCheckSummary.textContent;
   for (const finding of findings) {
     const item = document.createElement("div");
     item.className = `project-check-item ${finding.severity}`;
@@ -1702,7 +1838,7 @@ function runProjectCheck() {
     item.querySelector("p").textContent = finding.message;
     elements.projectCheckResults.append(item);
   }
-  elements.toolsDialog.close();
+  closeToolsDockOnNarrow();
   if (!elements.projectCheckDialog.open) elements.projectCheckDialog.showModal();
 }
 
@@ -1730,7 +1866,7 @@ async function applyMaskCleanup() {
     const label = Number(elements.cleanupObject.value);
     const indices = cleanupFrameIndices();
     const next = state.images.map((image) => image.mask.slice());
-    elements.toolsDialog.close();
+    closeToolsDockOnNarrow();
     setLoading(true, "Applying mask cleanup", `0 / ${indices.length}`);
     for (let position = 0; position < indices.length; position += 1) {
       const index = indices[position];
@@ -1765,7 +1901,7 @@ async function applySliceInterpolation() {
     const first = state.images[start];
     const last = state.images[end];
     if (first.width !== last.width || first.height !== last.height) throw new Error("Start and End frame dimensions do not match.");
-    elements.toolsDialog.close();
+    closeToolsDockOnNarrow();
     setLoading(true, "Interpolating masks", `Frames ${start + 1}-${end + 1}`);
     const generated = interpolateLabelMasks(first.mask, last.mask, first.width, first.height, label, end - start - 1);
     const next = state.images.map((image) => image.mask.slice());
@@ -1893,7 +2029,7 @@ function labelVolumeGeometry() {
 
 async function exportLabelVolume(format) {
   if (state.loading) return;
-  elements.toolsDialog.close();
+  closeToolsDockOnNarrow();
   setLoading(true, `Exporting ${format.toUpperCase()}`, "Preparing label volume");
   try {
     const { masks, width, height, spacing, origin } = labelVolumeGeometry();
@@ -2025,7 +2161,7 @@ function renderStlPreviewControls(meshes) {
 
 async function openStlPreview() {
   if (state.loading) return;
-  elements.toolsDialog.close();
+  closeToolsDockOnNarrow();
   closeStlPreview();
   elements.stlPreviewProgress.hidden = false;
   elements.stlPreviewProgress.textContent = "Preparing 3D preview…";
@@ -2056,7 +2192,7 @@ async function openStlPreview() {
 async function exportStlMeshes() {
   if (state.loading) return;
   const factor = Number(elements.stlFactor.value);
-  elements.toolsDialog.close();
+  closeToolsDockOnNarrow();
   setLoading(true, "Exporting STL", "Preparing label volume");
   try {
     const meshes = await buildStlMeshData((message) => {
@@ -4030,7 +4166,6 @@ function handleKeyDown(event) {
     elements.segonwebJobsDialog.contains(event.target) &&
     event.target.closest?.("input, select, button");
   const editingToolsField =
-    elements.toolsDialog.open &&
     elements.toolsDialog.contains(event.target) &&
     event.target.closest?.("input, select, button");
   if (
@@ -4067,7 +4202,12 @@ function handleKeyDown(event) {
   }
 
   if ((event.ctrlKey || event.metaKey) && (code === "KeyZ" || lowerKey === "z")) {
-    event.shiftKey ? redoEdit() : undoEdit();
+    event.shiftKey ? smartRedo() : smartUndo();
+    event.preventDefault();
+    return;
+  }
+  if ((event.ctrlKey || event.metaKey) && (code === "KeyY" || lowerKey === "y")) {
+    smartRedo();
     event.preventDefault();
     return;
   }
@@ -4226,7 +4366,7 @@ function bindEvents() {
   const returnToSegonwebWorkflow = () => {
     elements.segonwebWarningDialog.close();
     updateSegonwebWorkflowSummary();
-    if (!elements.segonwebWorkflowDialog.open) elements.segonwebWorkflowDialog.showModal();
+    openToolsDock("ai");
   };
 
   elements.loadFolder.addEventListener("click", requestLocalFolder);
@@ -4272,9 +4412,19 @@ function bindEvents() {
   elements.maskZipInput.addEventListener("change", () => importMaskZip(elements.maskZipInput.files[0]));
   elements.loadDemo.addEventListener("click", () => loadDemo("apple-kanzi-84"));
   elements.loadRabbitDemo.addEventListener("click", () => loadDemo("rabbitct-reference-256"));
+  elements.openAppleDemo.addEventListener("click", () => {
+    elements.openMenu.open = false;
+    elements.loadDemo.click();
+  });
+  elements.openRabbitDemo.addEventListener("click", () => {
+    elements.openMenu.open = false;
+    elements.loadRabbitDemo.click();
+  });
   elements.fitView.addEventListener("click", fitCurrentImage);
   elements.previousImage.addEventListener("click", () => switchImage(-1));
   elements.nextImage.addEventListener("click", () => switchImage(1));
+  elements.sliceSlider.addEventListener("input", () => jumpToSlice(Number(elements.sliceSlider.value)));
+  elements.sliceNumber.addEventListener("input", () => jumpToSlice(Number(elements.sliceNumber.value)));
   elements.targetLabel.addEventListener("change", () => selectTargetLabel(Number(elements.targetLabel.value)));
   elements.penColor.addEventListener("change", () => {
     state.penColor = elements.penColor.value;
@@ -4310,15 +4460,16 @@ function bindEvents() {
   elements.clearLines.addEventListener("click", clearLines);
   elements.undoEdit.addEventListener("click", undoEdit);
   elements.redoEdit.addEventListener("click", redoEdit);
+  elements.undoAction.addEventListener("click", smartUndo);
+  elements.redoAction.addEventListener("click", smartRedo);
   elements.clearMasks.addEventListener("click", requestClearAllMasks);
   elements.imageTools.addEventListener("click", () => openImageTools("display"));
-  elements.toolsClose.addEventListener("click", () => elements.toolsDialog.close());
-  elements.toolsDialog.addEventListener("close", () => {
-    state.volumeStatisticsGeneration += 1;
-  });
+  elements.toolsClose.addEventListener("click", () => elements.toolsDialog.classList.remove("open"));
+  elements.toolsToggle.addEventListener("click", () => elements.toolsDialog.classList.toggle("open"));
   elements.toolsPreviousFrame.addEventListener("click", () => switchImage(-1));
   elements.toolsNextFrame.addEventListener("click", () => switchImage(1));
   elements.checkProject.addEventListener("click", runProjectCheck);
+  elements.projectHealth.addEventListener("click", runProjectCheck);
   for (const tab of elements.toolTabs) {
     tab.addEventListener("click", () => selectToolTab(tab.dataset.toolTab));
   }
@@ -4351,7 +4502,7 @@ function bindEvents() {
   }
   elements.drawCalibration.addEventListener("click", beginCalibration);
   elements.importVolInfo.addEventListener("click", () => {
-    elements.toolsDialog.close();
+    closeToolsDockOnNarrow();
     elements.volInfoInput.click();
   });
   elements.exportVolInfo.addEventListener("click", () => exportVolInfoCsv());
@@ -4387,12 +4538,11 @@ function bindEvents() {
   }
   elements.segonwebWorkflow.addEventListener("click", () => {
     updateSegonwebWorkflowSummary();
-    if (!elements.segonwebWorkflowDialog.open) elements.segonwebWorkflowDialog.showModal();
+    openToolsDock("ai");
   });
-  elements.segonwebWorkflowClose.addEventListener("click", () => elements.segonwebWorkflowDialog.close());
+  elements.segonwebWorkflowClose.addEventListener("click", () => closeToolsDockOnNarrow());
   elements.segOnWeb.addEventListener("click", (event) => {
     event.preventDefault();
-    elements.segonwebWorkflowDialog.close();
     elements.segonwebWarningContinue.href = elements.segOnWeb.href;
     if (!elements.segonwebWarningDialog.open) elements.segonwebWarningDialog.showModal();
   });
@@ -4408,8 +4558,7 @@ function bindEvents() {
     }, 0);
   });
   elements.segonwebJobs.addEventListener("click", () => {
-    elements.segonwebWorkflowDialog.close();
-    openSegmentationJobs();
+    openSegmentationJobs(state.targetLabel);
   });
   elements.segonwebJobsClose.addEventListener("click", () => elements.segonwebJobsDialog.close());
   elements.segonwebNewObject.addEventListener("click", newSegmentationObject);
@@ -4421,17 +4570,16 @@ function bindEvents() {
   elements.segonwebSaveObject.addEventListener("click", saveSegmentationObject);
   elements.segonwebObjectId.addEventListener("change", () => {
     const objectId = Number(elements.segonwebObjectId.value);
+    selectTargetLabel(objectId);
     const existing = segmentationJobById(objectId);
     state.segmentationDraft = existing ? cloneSegmentationJob(existing) : blankSegmentationDraft(objectId);
     syncSegmentationJobDialog();
     render();
   });
   elements.exportSegonweb.addEventListener("click", () => {
-    elements.segonwebWorkflowDialog.close();
     exportSegmentationJob();
   });
   elements.importSegonweb.addEventListener("click", () => {
-    elements.segonwebWorkflowDialog.close();
     elements.segonwebResultInput.click();
   });
   elements.segonwebResultInput.addEventListener("change", () =>
@@ -4458,6 +4606,7 @@ syncDisplayControls();
 syncExtractionControls();
 syncCalibrationControls();
 syncVolInfoSummary();
+selectToolTab("draw");
 bindEvents();
 setControlsEnabled(false);
 resizeCanvas();

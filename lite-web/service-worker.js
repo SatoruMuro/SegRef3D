@@ -1,4 +1,4 @@
-const CACHE_NAME = "segref3d-lite-web-v22";
+const CACHE_NAME = "segref3d-lite-web-v29";
 const APPLE_DEMO_FILES = Array.from(
   { length: 20 },
   (_, index) => `./demo/apple-kanzi-84/apple_${String(index + 1).padStart(4, "0")}.jpg`,
@@ -6,18 +6,19 @@ const APPLE_DEMO_FILES = Array.from(
 const APP_FILES = [
   "./",
   "./index.html",
-  "./styles.css?v=22",
-  "./app.mjs?v=22",
-  "./core.mjs",
+  "./styles.css?v=29",
+  "./app.mjs?v=29",
+  "./workspace-ui.mjs?v=29",
+  "./core.mjs?v=25",
   "./demo-datasets.mjs?v=3",
-  "./image-tools.mjs",
+  "./image-tools.mjs?v=25",
   "./medical-io.mjs?v=17",
   "./segmentation-job.mjs?v=17",
   "./mask-tools.mjs?v=18",
-  "./storage.mjs",
+  "./storage.mjs?v=25",
   "./volume-tools.mjs?v=15",
   "./three-viewer.mjs?v=17",
-  "./zip.mjs",
+  "./zip.mjs?v=25",
   "./vendor/dicom-parser.min.js",
   "./vendor/fflate.mjs",
   "./vendor/nifti-reader.js",
