@@ -12,6 +12,7 @@ import {
   mergeLabelVolume,
   relabelVolume,
   volumeStatistics,
+  volumeStatisticsAsync,
 } from "../mask-tools.mjs";
 
 test("volume statistics calculate voxel and calibrated physical volumes", () => {
@@ -31,6 +32,37 @@ test("volume statistics calculate voxel and calibrated physical volumes", () => 
   assert.equal(result.rows[1].voxelCount, 1);
   assert.match(createVolumeStatisticsCsv(result), /1,Muscle,3,1\.5,0\.0015,1,2,2/);
   assert.equal(volumeStatistics(masks, 2, 2, null).rows[0].volumeMm3, null);
+});
+
+test("async volume statistics yield between slices and match synchronous results", async () => {
+  const masks = [
+    new Uint8Array([1, 1, 0, 2]),
+    new Uint8Array([0, 1, 2, 2]),
+    new Uint8Array([3, 0, 0, 0]),
+  ];
+  const progress = [];
+  const result = await volumeStatisticsAsync(
+    masks,
+    2,
+    2,
+    [1, 1, 0.5],
+    ["", "One", "Two", "Three"],
+    { onProgress: (completed, total) => progress.push([completed, total]) },
+  );
+  assert.deepEqual(result, volumeStatistics(masks, 2, 2, [1, 1, 0.5], ["", "One", "Two", "Three"]));
+  assert.deepEqual(progress, [[1, 3], [2, 3], [3, 3]]);
+});
+
+test("async volume statistics can stop after a tab change", async () => {
+  const masks = Array.from({ length: 4 }, () => new Uint8Array([1, 0, 0, 0]));
+  let canceled = false;
+  const result = await volumeStatisticsAsync(masks, 2, 2, null, [], {
+    onProgress: (completed) => {
+      if (completed === 1) canceled = true;
+    },
+    isCanceled: () => canceled,
+  });
+  assert.equal(result, null);
 });
 
 test("relabel, merge, and clear preserve unrelated labels and report conflicts", () => {

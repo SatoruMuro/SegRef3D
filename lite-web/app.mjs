@@ -68,7 +68,8 @@ import {
   mergeLabelVolume,
   relabelVolume,
   volumeStatistics,
-} from "./mask-tools.mjs?v=17";
+  volumeStatisticsAsync,
+} from "./mask-tools.mjs?v=18";
 
 const elements = {
   canvas: document.querySelector("#editor-canvas"),
@@ -308,6 +309,7 @@ const state = {
   bulkUndo: [],
   bulkRedo: [],
   editSequence: 0,
+  volumeStatisticsGeneration: 0,
 };
 
 const context = elements.canvas.getContext("2d", { alpha: false });
@@ -1425,7 +1427,8 @@ function selectToolTab(name) {
     tab.setAttribute("aria-selected", String(selected));
   }
   for (const panel of elements.toolPanels) panel.hidden = panel.dataset.toolPanel !== name;
-  if (name === "volume") renderVolumeStatistics();
+  if (name === "volume") void renderVolumeStatistics();
+  else state.volumeStatisticsGeneration += 1;
   if (name === "cleanup") syncCleanupControls();
 }
 
@@ -1460,40 +1463,80 @@ function statisticsForCurrentVolume() {
   return volumeStatistics(state.images.map((image) => image.mask), width, height, spacing, state.objectNames);
 }
 
-function renderVolumeStatistics() {
+function renderVolumeStatisticsRows(statistics) {
+  elements.volumeStatisticsRows.replaceChildren();
+  elements.volumeStatisticsCalibration.textContent = statistics.calibrated
+    ? `Spacing ${statistics.spacing.map((value) => Number(value).toPrecision(4)).join(" × ")} mm`
+    : "Volume calibration required";
+  for (const row of statistics.rows) {
+    const tableRow = document.createElement("tr");
+    const values = [
+      `Obj ${row.objectId}: ${row.objectName}`,
+      row.voxelCount.toLocaleString(),
+      row.volumeMm3 === null ? "—" : row.volumeMm3.toLocaleString(undefined, { maximumFractionDigits: 4 }),
+      row.volumeCm3 === null ? "—" : row.volumeCm3.toLocaleString(undefined, { maximumFractionDigits: 6 }),
+      `${row.firstFrame}-${row.lastFrame}`,
+      row.occupiedSlices,
+    ];
+    for (const value of values) {
+      const cell = document.createElement("td");
+      cell.textContent = String(value);
+      tableRow.append(cell);
+    }
+    elements.volumeStatisticsRows.append(tableRow);
+  }
+  if (statistics.rows.length === 0) {
+    const row = document.createElement("tr");
+    const cell = document.createElement("td");
+    cell.colSpan = 6;
+    cell.textContent = "No labeled voxels.";
+    row.append(cell);
+    elements.volumeStatisticsRows.append(row);
+  }
+}
+
+async function renderVolumeStatistics() {
+  const generation = ++state.volumeStatisticsGeneration;
   elements.volumeStatisticsRows.replaceChildren();
   if (state.images.length === 0) return;
+  const progressRow = document.createElement("tr");
+  const progressCell = document.createElement("td");
+  progressCell.colSpan = 6;
+  progressCell.textContent = `Calculating volume statistics… 0 / ${state.images.length}`;
+  progressRow.append(progressCell);
+  elements.volumeStatisticsRows.append(progressRow);
+  elements.volumeStatisticsCalibration.textContent = "Calculating…";
+  await new Promise((resolve) => requestAnimationFrame(resolve));
   try {
-    const statistics = statisticsForCurrentVolume();
-    elements.volumeStatisticsCalibration.textContent = statistics.calibrated
-      ? `Spacing ${statistics.spacing.map((value) => Number(value).toPrecision(4)).join(" × ")} mm`
-      : "Volume calibration required";
-    for (const row of statistics.rows) {
-      const tableRow = document.createElement("tr");
-      const values = [
-        `Obj ${row.objectId}: ${row.objectName}`,
-        row.voxelCount.toLocaleString(),
-        row.volumeMm3 === null ? "—" : row.volumeMm3.toLocaleString(undefined, { maximumFractionDigits: 4 }),
-        row.volumeCm3 === null ? "—" : row.volumeCm3.toLocaleString(undefined, { maximumFractionDigits: 6 }),
-        `${row.firstFrame}-${row.lastFrame}`,
-        row.occupiedSlices,
-      ];
-      for (const value of values) {
-        const cell = document.createElement("td");
-        cell.textContent = String(value);
-        tableRow.append(cell);
-      }
-      elements.volumeStatisticsRows.append(tableRow);
+    const width = state.images[0].width;
+    const height = state.images[0].height;
+    if (state.images.some((image) => image.width !== width || image.height !== height)) {
+      throw new Error("Volume statistics require equal frame dimensions.");
     }
-    if (statistics.rows.length === 0) {
-      const row = document.createElement("tr");
-      const cell = document.createElement("td");
-      cell.colSpan = 6;
-      cell.textContent = "No labeled voxels.";
-      row.append(cell);
-      elements.volumeStatisticsRows.append(row);
-    }
+    const spacing = state.volumeInfoSource === "Default spacing"
+      ? null
+      : [state.calibration.xSpacing, state.calibration.ySpacing, state.calibration.zSpacing];
+    const statistics = await volumeStatisticsAsync(
+      state.images.map((image) => image.mask),
+      width,
+      height,
+      spacing,
+      state.objectNames,
+      {
+        isCanceled: () => generation !== state.volumeStatisticsGeneration,
+        onProgress: (completed, total) => {
+          if (generation !== state.volumeStatisticsGeneration) return;
+          if (completed === total || completed === 1 || completed % 5 === 0) {
+            progressCell.textContent = `Calculating volume statistics… ${completed} / ${total}`;
+          }
+        },
+      },
+    );
+    if (!statistics || generation !== state.volumeStatisticsGeneration) return;
+    renderVolumeStatisticsRows(statistics);
   } catch (error) {
+    if (generation !== state.volumeStatisticsGeneration) return;
+    elements.volumeStatisticsRows.replaceChildren();
     elements.volumeStatisticsCalibration.textContent = error.message;
   }
 }
@@ -4158,6 +4201,9 @@ function bindEvents() {
   elements.clearMasks.addEventListener("click", requestClearAllMasks);
   elements.imageTools.addEventListener("click", () => openImageTools("display"));
   elements.toolsClose.addEventListener("click", () => elements.toolsDialog.close());
+  elements.toolsDialog.addEventListener("close", () => {
+    state.volumeStatisticsGeneration += 1;
+  });
   elements.toolsPreviousFrame.addEventListener("click", () => switchImage(-1));
   elements.toolsNextFrame.addEventListener("click", () => switchImage(1));
   elements.checkProject.addEventListener("click", runProjectCheck);

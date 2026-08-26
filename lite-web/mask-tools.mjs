@@ -24,29 +24,41 @@ function csvCell(value) {
   return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 }
 
-export function volumeStatistics(masks, width, height, spacing, objectNames = []) {
-  validateMasks(masks, width, height);
+function createVolumeStatisticsAccumulator() {
+  const firstFrames = new Int32Array(256);
+  const lastFrames = new Int32Array(256);
+  firstFrames.fill(-1);
+  lastFrames.fill(-1);
+  return {
+    voxelCounts: new Float64Array(256),
+    firstFrames,
+    lastFrames,
+    occupiedSlices: new Uint32Array(256),
+  };
+}
+
+function accumulateVolumeStatistics(mask, frame, accumulator) {
+  const labelsInSlice = new Uint8Array(256);
+  for (let index = 0; index < mask.length; index += 1) {
+    const label = mask[index];
+    if (label === 0) continue;
+    accumulator.voxelCounts[label] += 1;
+    labelsInSlice[label] = 1;
+  }
+  for (let label = 1; label <= 255; label += 1) {
+    if (!labelsInSlice[label]) continue;
+    if (accumulator.firstFrames[label] < 0) accumulator.firstFrames[label] = frame;
+    accumulator.lastFrames[label] = frame;
+    accumulator.occupiedSlices[label] += 1;
+  }
+}
+
+function finalizeVolumeStatistics(accumulator, spacing, objectNames) {
   const normalizedSpacing = validSpacing(spacing);
   const voxelVolume = normalizedSpacing ? normalizedSpacing.reduce((product, value) => product * value, 1) : null;
   const rows = [];
   for (let label = 1; label <= 255; label += 1) {
-    let voxelCount = 0;
-    let firstFrame = -1;
-    let lastFrame = -1;
-    let occupiedSlices = 0;
-    for (let frame = 0; frame < masks.length; frame += 1) {
-      let occupied = false;
-      for (const value of masks[frame]) {
-        if (value !== label) continue;
-        voxelCount += 1;
-        occupied = true;
-      }
-      if (occupied) {
-        if (firstFrame < 0) firstFrame = frame;
-        lastFrame = frame;
-        occupiedSlices += 1;
-      }
-    }
+    const voxelCount = accumulator.voxelCounts[label];
     if (voxelCount === 0) continue;
     const volumeMm3 = voxelVolume === null ? null : voxelCount * voxelVolume;
     rows.push({
@@ -55,12 +67,44 @@ export function volumeStatistics(masks, width, height, spacing, objectNames = []
       voxelCount,
       volumeMm3,
       volumeCm3: volumeMm3 === null ? null : volumeMm3 / 1000,
-      firstFrame: firstFrame + 1,
-      lastFrame: lastFrame + 1,
-      occupiedSlices,
+      firstFrame: accumulator.firstFrames[label] + 1,
+      lastFrame: accumulator.lastFrames[label] + 1,
+      occupiedSlices: accumulator.occupiedSlices[label],
     });
   }
   return { calibrated: normalizedSpacing !== null, spacing: normalizedSpacing, rows };
+}
+
+export function volumeStatistics(masks, width, height, spacing, objectNames = []) {
+  validateMasks(masks, width, height);
+  const accumulator = createVolumeStatisticsAccumulator();
+  for (let frame = 0; frame < masks.length; frame += 1) {
+    accumulateVolumeStatistics(masks[frame], frame, accumulator);
+  }
+  return finalizeVolumeStatistics(accumulator, spacing, objectNames);
+}
+
+export async function volumeStatisticsAsync(
+  masks,
+  width,
+  height,
+  spacing,
+  objectNames = [],
+  { onProgress, isCanceled, yieldEverySlices = 1 } = {},
+) {
+  validateMasks(masks, width, height);
+  const accumulator = createVolumeStatisticsAccumulator();
+  const yieldInterval = Math.max(1, Math.floor(Number(yieldEverySlices) || 1));
+  for (let frame = 0; frame < masks.length; frame += 1) {
+    if (isCanceled?.()) return null;
+    accumulateVolumeStatistics(masks[frame], frame, accumulator);
+    onProgress?.(frame + 1, masks.length);
+    if ((frame + 1) % yieldInterval === 0 && frame + 1 < masks.length) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+  }
+  if (isCanceled?.()) return null;
+  return finalizeVolumeStatistics(accumulator, spacing, objectNames);
 }
 
 export function createVolumeStatisticsCsv(statistics) {

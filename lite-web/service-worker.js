@@ -1,14 +1,14 @@
-const CACHE_NAME = "segref3d-lite-web-v18";
+const CACHE_NAME = "segref3d-lite-web-v19";
 const APP_FILES = [
   "./",
   "./index.html",
-  "./styles.css?v=18",
-  "./app.mjs?v=18",
+  "./styles.css?v=19",
+  "./app.mjs?v=19",
   "./core.mjs",
   "./image-tools.mjs",
   "./medical-io.mjs?v=17",
   "./segmentation-job.mjs?v=17",
-  "./mask-tools.mjs?v=17",
+  "./mask-tools.mjs?v=18",
   "./storage.mjs",
   "./volume-tools.mjs?v=15",
   "./three-viewer.mjs?v=17",
