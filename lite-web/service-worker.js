@@ -1,10 +1,15 @@
-const CACHE_NAME = "segref3d-lite-web-v19";
+const CACHE_NAME = "segref3d-lite-web-v20";
+const APPLE_DEMO_FILES = Array.from(
+  { length: 20 },
+  (_, index) => `./demo/apple-kanzi-84/apple_${String(index + 1).padStart(4, "0")}.jpg`,
+);
 const APP_FILES = [
   "./",
   "./index.html",
-  "./styles.css?v=19",
-  "./app.mjs?v=19",
+  "./styles.css?v=20",
+  "./app.mjs?v=20",
   "./core.mjs",
+  "./demo-datasets.mjs?v=1",
   "./image-tools.mjs",
   "./medical-io.mjs?v=17",
   "./segmentation-job.mjs?v=17",
@@ -27,6 +32,7 @@ const APP_FILES = [
   "./vendor/utilities.js",
   "./favicon.svg",
   "./manifest.webmanifest",
+  ...APPLE_DEMO_FILES,
 ];
 
 self.addEventListener("install", (event) => {

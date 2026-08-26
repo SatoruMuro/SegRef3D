@@ -31,6 +31,7 @@ import {
   parseNiftiVolume,
   parseTiffStack,
 } from "./medical-io.mjs?v=17";
+import { demoDatasetById } from "./demo-datasets.mjs?v=1";
 import { clearProjectMasks, loadMask, saveMask } from "./storage.mjs";
 import { createZip, parseZip } from "./zip.mjs";
 import {
@@ -232,6 +233,16 @@ const elements = {
   importVolInfo: document.querySelector("#import-vol-info"),
   exportVolInfo: document.querySelector("#export-vol-info"),
   volInfoInput: document.querySelector("#vol-info-input"),
+  demoCalibrationGuide: document.querySelector("#demo-calibration-guide"),
+  demoCalibrationTitle: document.querySelector("#demo-calibration-title"),
+  demoCalibrationInstruction: document.querySelector("#demo-calibration-instruction"),
+  demoReferenceValue: document.querySelector("#demo-reference-value"),
+  demoSpacingValue: document.querySelector("#demo-spacing-value"),
+  demoReferenceNote: document.querySelector("#demo-reference-note"),
+  demoSpacingNote: document.querySelector("#demo-spacing-note"),
+  demoNextStep: document.querySelector("#demo-next-step"),
+  demoSourceLink: document.querySelector("#demo-source-link"),
+  demoLicenseLink: document.querySelector("#demo-license-link"),
   exportNifti: document.querySelector("#export-nifti"),
   exportTiff: document.querySelector("#export-tiff"),
   stlFactor: document.querySelector("#stl-factor"),
@@ -310,6 +321,7 @@ const state = {
   bulkRedo: [],
   editSequence: 0,
   volumeStatisticsGeneration: 0,
+  activeDemoDatasetId: null,
 };
 
 const context = elements.canvas.getContext("2d", { alpha: false });
@@ -1264,11 +1276,35 @@ function resetDisplaySettings({ announce = true } = {}) {
   if (announce) setStatus("Display settings reset.");
 }
 
+function activeDemoDataset() {
+  return demoDatasetById(state.activeDemoDatasetId);
+}
+
+function syncDemoCalibrationGuide() {
+  const dataset = activeDemoDataset();
+  elements.demoCalibrationGuide.hidden = !dataset;
+  if (!dataset) return;
+  const calibration = dataset.calibration;
+  elements.demoCalibrationTitle.textContent = `${dataset.displayName} Calibration`;
+  elements.demoCalibrationInstruction.textContent = calibration.instruction;
+  elements.demoReferenceValue.textContent = `${calibration.referenceLengthMm} mm`;
+  elements.demoSpacingValue.textContent = `${calibration.sliceSpacingMm.toFixed(1)} mm (approx.)`;
+  elements.demoReferenceNote.textContent = calibration.referenceNote;
+  elements.demoSpacingNote.textContent = calibration.spacingNote;
+  elements.demoNextStep.textContent = dataset.nextStep;
+  elements.demoNextStep.hidden = state.volumeInfoSource !== "Reference line calibration";
+  elements.demoSourceLink.href = dataset.attribution.doiUrl;
+  elements.demoSourceLink.textContent = "the cited Zenodo dataset";
+  elements.demoLicenseLink.href = dataset.attribution.licenseUrl;
+  elements.demoLicenseLink.textContent = dataset.attribution.licenseName;
+}
+
 function syncCalibrationControls() {
   elements.spacingX.value = String(state.calibration.xSpacing);
   elements.spacingY.value = String(state.calibration.ySpacing);
   elements.spacingZ.value = String(state.calibration.zSpacing);
   elements.referenceLength.value = String(state.calibration.referenceLength);
+  syncDemoCalibrationGuide();
 }
 
 function syncExtractionControls() {
@@ -3156,7 +3192,7 @@ async function prepareImageSequence(
   projectFiles,
   projectName,
   sourceDescription,
-  { autoExportVolInfo = false, preserveDimensions = false } = {},
+  { autoExportVolInfo = false, preserveDimensions = false, demoDataset = null } = {},
 ) {
   if (sources.length === 0) throw new Error("No readable image slices were found.");
   const largeCount = sources.filter(
@@ -3265,9 +3301,17 @@ async function prepareImageSequence(
   state.projectId = projectId;
   state.index = 0;
   state.projectName = projectName;
+  state.activeDemoDatasetId = demoDataset?.id ?? null;
   state.visibleLabels = Array.from({ length: 21 }, (_, label) => label === 1);
   resetDisplaySettings({ announce: false });
   initializeCalibrationFromImages();
+  if (demoDataset) {
+    state.calibration.referenceLength = demoDataset.calibration.referenceLengthMm;
+    state.calibration.zSpacing = demoDataset.calibration.sliceSpacingMm;
+    state.volumeInfoSource = "Default spacing";
+    syncCalibrationControls();
+    syncVolInfoSummary();
+  }
   for (let label = 1; label <= 20; label += 1) {
     const checkbox = elements.labelList.querySelector(`[data-label="${label}"] input`);
     if (checkbox) checkbox.checked = label === 1;
@@ -3563,103 +3607,68 @@ async function prepareFiles(files) {
   }
 }
 
-function demoImage(index, width = 900, height = 650) {
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  const demoContext = canvas.getContext("2d");
-  demoContext.fillStyle = "#f9f8f4";
-  demoContext.fillRect(0, 0, width, height);
-  demoContext.strokeStyle = "#d6d0c8";
-  demoContext.lineWidth = 2;
-  for (let y = 28; y < height; y += 34) {
-    demoContext.beginPath();
-    demoContext.moveTo(0, y + Math.sin(index + y) * 5);
-    for (let x = 0; x <= width; x += 20) {
-      demoContext.lineTo(x, y + Math.sin(x / 55 + index * 0.5) * 5);
-    }
-    demoContext.stroke();
-  }
-  const offset = (index - 3.5) * 9;
-  demoContext.fillStyle = "#c9899e";
-  demoContext.beginPath();
-  demoContext.ellipse(360 + offset, 315, 155, 205, -0.12, 0, Math.PI * 2);
-  demoContext.fill();
-  demoContext.fillStyle = "#efd9d2";
-  demoContext.beginPath();
-  demoContext.ellipse(360 + offset, 315, 105, 155, -0.12, 0, Math.PI * 2);
-  demoContext.fill();
-  demoContext.fillStyle = "#7e486b";
-  demoContext.beginPath();
-  demoContext.ellipse(360 + offset, 315, 42 + index * 2, 88, -0.12, 0, Math.PI * 2);
-  demoContext.fill();
-  demoContext.fillStyle = "#89a7a1";
-  demoContext.beginPath();
-  demoContext.ellipse(590 - offset * 0.5, 330, 100, 150, 0.18, 0, Math.PI * 2);
-  demoContext.fill();
-  demoContext.fillStyle = "#d8e1dc";
-  demoContext.beginPath();
-  demoContext.ellipse(590 - offset * 0.5, 330, 56, 100, 0.18, 0, Math.PI * 2);
-  demoContext.fill();
-  return canvas;
+function loadDemoImage(path) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.decoding = "async";
+    image.addEventListener("load", () => resolve(image), { once: true });
+    image.addEventListener(
+      "error",
+      () => reject(new Error(`Could not load demo image: ${path}`)),
+      { once: true },
+    );
+    image.src = new URL(path, document.baseURI).href;
+  });
 }
 
 async function loadDemo() {
-  setLoading(true, "Loading demo", "Preparing image sequence");
-  const images = [];
-  for (let index = 0; index < 8; index += 1) {
-    const sourceCanvas = demoImage(index);
-    images.push({
-      name: `demo${String(index + 1).padStart(4, "0")}.png`,
-      width: sourceCanvas.width,
-      height: sourceCanvas.height,
-      originalWidth: sourceCanvas.width,
-      originalHeight: sourceCanvas.height,
-      contentWidth: sourceCanvas.width,
-      contentHeight: sourceCanvas.height,
-      contentX: 0,
-      contentY: 0,
-      sourceFormat: "demo",
-      pixelSpacing: null,
-      sliceSpacing: null,
-      volumeOrigin: null,
-      sourceCanvas,
-      basePixels: canvasRgba(sourceCanvas),
-      displayVersion: -1,
-      sourcePixels: null,
-      mask: new Uint8Array(sourceCanvas.width * sourceCanvas.height),
-      overlayCanvas: null,
-      overlayDirty: true,
-      paths: [],
-      activePath: [],
-      activePathColor: null,
-      activePathMode: null,
-      pathRedo: [],
-      undo: [],
-      redo: [],
+  const dataset = demoDatasetById("apple-kanzi-84");
+  if (!dataset || state.loading) return;
+  setLoading(true, `Loading ${dataset.displayName}`, `Reading 0 / ${dataset.imagePaths.length}`);
+  try {
+    const sources = [];
+    for (let index = 0; index < dataset.imagePaths.length; index += 1) {
+      elements.loadingDetail.textContent = `Reading ${index + 1} / ${dataset.imagePaths.length}`;
+      const image = await loadDemoImage(dataset.imagePaths[index]);
+      sources.push({
+        name: `apple_${String(index + 1).padStart(4, "0")}.jpg`,
+        width: image.naturalWidth,
+        height: image.naturalHeight,
+        sourceCanvas: imageElementToCanvas(image),
+        sourceFormat: dataset.sourceFormat,
+        sliceSpacing: dataset.calibration.sliceSpacingMm,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    const projectFiles = sources.map((source) => ({
+      name: source.name,
+      size: 0,
+      lastModified: dataset.revision,
+    }));
+    const loaded = await prepareImageSequence(
+      sources,
+      projectFiles,
+      dataset.projectName,
+      `${dataset.displayName} slice(s)`,
+      { preserveDimensions: true, demoDataset: dataset },
+    );
+    if (!loaded) return;
+    setSaveState("Apple Demo autosave active", "saved");
+    setStatus(
+      `Apple Demo loaded: ${sources.length} slices. Calibrate the widest apple diameter using the 75 mm learning reference.`,
+    );
+    showToast("Apple Demo ready · Start with Calibration");
+    requestAnimationFrame(() => {
+      fitCurrentImage();
+      openImageTools("calibration");
     });
-    await new Promise((resolve) => setTimeout(resolve, 0));
+  } catch (error) {
+    console.error(error);
+    setStatus(`Apple Demo loading failed: ${error.message}`);
+    window.alert(`Apple Demo loading failed.\n\n${error.message}`);
+  } finally {
+    setLoading(false);
   }
-  state.images = images;
-  state.bulkUndo = [];
-  state.bulkRedo = [];
-  state.segmentationJobs = [];
-  state.objectNames = Array.from({ length: 21 }, (_, label) => label === 0 ? "" : `Object ${label}`);
-  state.segmentationDraft = null;
-  state.segmentationBoxMode = null;
-  setSegmentationObjectNames();
-  state.projectId = "segref3d-lite-demo-v1";
-  state.projectName = "Demo sequence";
-  state.index = 0;
-  resetDisplaySettings({ announce: false });
-  initializeCalibrationFromImages();
-  setControlsEnabled(true);
-  updateImageUi();
-  setLoading(false);
-  requestAnimationFrame(() => fitCurrentImage());
-  setSaveState("Demo autosave active", "saved");
-  setStatus("Demo loaded. Draw a region and apply Add or Erase.");
-  elements.canvas.focus();
 }
 
 function handlePointerDown(event) {
@@ -3769,11 +3778,17 @@ function handlePointerDown(event) {
         image.calibrationLine = [start, end];
         syncCalibrationControls();
         syncVolInfoSummary();
-        setStatus(
+        const calibrationStatus =
           `Calibrated ${state.calibration.referenceLength.toLocaleString()} mm over ` +
-            `${pixelLength.toFixed(2)} px: ${spacing.toPrecision(6)} mm/px.`,
-        );
+          `${pixelLength.toFixed(2)} px: ${spacing.toPrecision(6)} mm/px.`;
+        setStatus(calibrationStatus);
+        syncDemoCalibrationGuide();
         exportVolInfoCsv({ automatic: true });
+        const dataset = activeDemoDataset();
+        if (dataset) {
+          setStatus(`${calibrationStatus} ${dataset.nextStep}`);
+          showToast(dataset.nextStep);
+        }
       } else {
         setStatus("Calibration points must be different.");
       }

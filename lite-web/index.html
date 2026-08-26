@@ -11,7 +11,7 @@
     <title>SegRef3D Lite Web</title>
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
     <link rel="manifest" href="./manifest.webmanifest" />
-    <link rel="stylesheet" href="./styles.css?v=19" />
+    <link rel="stylesheet" href="./styles.css?v=20" />
   </head>
   <body>
     <svg class="svg-defs" aria-hidden="true">
@@ -264,7 +264,18 @@
                 <svg><use href="#i-folder"></use></svg><span>Load Images</span>
               </button>
               <button id="empty-volume" class="command-button" type="button">Load Volume</button>
-              <button id="load-demo" class="command-button" type="button">Demo</button>
+              <button id="load-demo" class="command-button demo-button" type="button">
+                <svg><use href="#i-image"></use></svg><span>Load Apple Demo</span>
+              </button>
+            </div>
+            <div class="demo-intro">
+              <strong>Try SegRef3D without preparing your own data</strong>
+              <span>20 consecutive apple slice photographs · about 5.6 MB</span>
+              <small>
+                Adapted from
+                <a href="https://doi.org/10.5281/zenodo.8167285" target="_blank" rel="noopener noreferrer">Schut, Trull &amp; Couvée</a>
+                · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>
+              </small>
             </div>
           </div>
           <div id="zoom-readout" class="zoom-readout" hidden>100%</div>
@@ -807,6 +818,25 @@
         </section>
 
         <section class="tool-panel" data-tool-panel="calibration" hidden>
+          <aside id="demo-calibration-guide" class="demo-calibration-guide" hidden>
+            <div class="demo-calibration-heading">
+              <span>DEMO DATASET</span>
+              <strong id="demo-calibration-title">Apple Demo Calibration</strong>
+            </div>
+            <p id="demo-calibration-instruction">Draw a calibration line across the widest diameter of the apple.</p>
+            <div class="demo-calibration-values">
+              <span>Reference length <strong id="demo-reference-value">75 mm</strong></span>
+              <span>Slice spacing <strong id="demo-spacing-value">4.0 mm (approx.)</strong></span>
+            </div>
+            <p id="demo-reference-note" class="demo-calibration-note"></p>
+            <p id="demo-spacing-note" class="demo-calibration-note"></p>
+            <p id="demo-next-step" class="demo-next-step" hidden>Next: segment the outer contour of the apple.</p>
+            <small class="demo-calibration-attribution">
+              Images adapted from
+              <a id="demo-source-link" href="https://doi.org/10.5281/zenodo.8167285" target="_blank" rel="noopener noreferrer">the cited Zenodo dataset</a>
+              · <a id="demo-license-link" href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>
+            </small>
+          </aside>
           <div class="tool-grid calibration-grid">
             <label class="number-field"><span>X spacing (mm/px)</span><input id="spacing-x" type="number" min="0.000001" step="0.001" value="1" /></label>
             <label class="number-field"><span>Y spacing (mm/px)</span><input id="spacing-y" type="number" min="0.000001" step="0.001" value="1" /></label>
@@ -979,6 +1009,6 @@
         if (status) status.textContent = `Application operation failed: ${message}`;
       });
     </script>
-    <script type="module" src="./app.mjs?v=19"></script>
+    <script type="module" src="./app.mjs?v=20"></script>
   </body>
 </html>

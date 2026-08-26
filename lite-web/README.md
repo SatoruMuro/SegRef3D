@@ -4,6 +4,28 @@ Browser-based, local-first image mask editor derived from the non-SAM2 workflow 
 
 Public beta: <https://satorumuro.github.io/SegRef3D/lite-web/>
 
+## Try SegRef3D without preparing your own data
+
+Open Lite Web and choose **Load Apple Demo**. The bundled 20-slice stack follows the same image,
+mask-editing, calibration, and export pipeline as user data.
+
+1. Open the automatically displayed **Calibration** tab.
+2. Draw a reference line across the widest apple diameter using the assumed learning value
+   **75 mm**.
+3. Keep the preset slice spacing at **approx. 4.0 mm**.
+4. Segment and refine the apple's outer contour.
+5. Open **Volume & 3D**, preview the reconstruction, and export STL or another existing format.
+
+The 75 mm reference is an assumed typical apple diameter for learning the calibration workflow;
+it is not a measurement of this specimen. The source dataset describes the slice spacing as
+roughly 4 mm.
+
+Apple demo images are adapted from Schut DE, Trull AK, Couvée M., *Dataset of CT scans, slice
+photographs, and visual browning scores of 120 'Kanzi' apples*,
+[Zenodo DOI 10.5281/zenodo.8167285](https://doi.org/10.5281/zenodo.8167285), licensed under
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Images were selected, cropped, and
+resized for this demo; the original data providers do not endorse SegRef3D.
+
 ## Current features
 
 - Load naturally sorted JPG/PNG image folders
