@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://satorumuro.github.io/SegRef3D/schemas/instant3d_result.schema.json",
-  "title": "SegRef3D Instant3DWeb2 result",
+  "title": "SegRef3D Seg CT/MRI result",
   "type": "object",
   "required": ["schema", "schema_version", "request_id", "status", "source", "objects", "software", "warnings", "overlaps"],
   "properties": {

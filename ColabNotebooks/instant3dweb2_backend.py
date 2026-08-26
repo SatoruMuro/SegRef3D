@@ -1,4 +1,4 @@
-"""Gradio-free TotalSegmentator bridge backend for Instant3DWeb2."""
+"""Gradio-free TotalSegmentator backend for the Seg CT/MRI workflow."""
 
 from __future__ import annotations
 
@@ -77,7 +77,7 @@ def validate_installed_rois(objects: list[dict]) -> None:
     for item in objects:
         if item["task"] in LICENSED_TASKS:
             raise Instant3DProcessingError(
-                f"Task '{item['task']}' requires an Academic license and is not supported by Instant3DWeb2 v1."
+                "The requested structure requires an Academic license and is not supported by Seg CT/MRI v1."
             )
         grouped[item["task"]].append(item["roi"])
     for task, rois in grouped.items():
@@ -214,7 +214,7 @@ def process_request(request_zip: str | Path, output_zip: str | Path = "/content/
             if source_path is None:
                 raise Instant3DProcessingError("The request source was not extracted.")
             if manifest["source"].get("modality") != "CT":
-                raise Instant3DProcessingError("Instant3DWeb2 v1 currently supports CT NIfTI volumes only.")
+                raise Instant3DProcessingError("Seg CT/MRI v1 currently supports CT NIfTI volumes only.")
             validate_installed_rois(manifest["objects"])
             source = nib.load(str(source_path))
             task_groups = defaultdict(list)
@@ -287,7 +287,7 @@ def process_request(request_zip: str | Path, output_zip: str | Path = "/content/
                 for path in sorted(result_root.rglob("*")):
                     if path.is_file():
                         archive.write(path, path.relative_to(result_root).as_posix())
-            print(f"Instant3DWeb2 result created: {output_path}")
+            print(f"Seg CT/MRI result created: {output_path}")
             return output_path
     except (Instant3DBridgeError, Instant3DProcessingError):
         raise
@@ -296,6 +296,6 @@ def process_request(request_zip: str | Path, output_zip: str | Path = "/content/
     except OSError as exc:
         if "space" in str(exc).lower() or getattr(exc, "errno", None) == 28:
             raise Instant3DProcessingError("The Colab runtime ran out of disk space.") from exc
-        raise Instant3DProcessingError(f"Instant3DWeb2 file operation failed: {exc}") from exc
+        raise Instant3DProcessingError(f"Seg CT/MRI file operation failed: {exc}") from exc
     except Exception as exc:
-        raise Instant3DProcessingError(f"Instant3DWeb2 processing failed: {exc}") from exc
+        raise Instant3DProcessingError(f"Seg CT/MRI processing failed: {exc}") from exc

@@ -45,7 +45,7 @@ import {
   geometryMismatches as instant3DGeometryMismatches,
   sha256Hex,
   validateInstant3DResult,
-} from "./instant3d-bridge.mjs?v=2";
+} from "./instant3d-bridge.mjs?v=3";
 import {
   adjustedRgba,
   hexToRgb,
@@ -78,7 +78,7 @@ import {
   volumeStatistics,
   volumeStatisticsAsync,
 } from "./mask-tools.mjs?v=18";
-import { upgradeWorkspaceLayout } from "./workspace-ui.mjs?v=29";
+import { upgradeWorkspaceLayout } from "./workspace-ui.mjs?v=30";
 
 try {
   upgradeWorkspaceLayout();
@@ -436,9 +436,11 @@ async function loadInstant3DCatalog() {
 function renderInstant3DCatalog() {
   if (!state.instant3dCatalog) return;
   const query = elements.instant3dSearch.value.trim().toLowerCase();
+  const modality = state.sourceVolume?.modality || null;
   elements.instant3dAvailable.replaceChildren();
   for (const structure of state.instant3dCatalog.structures) {
     if (structure.license_required) continue;
+    if (!modality || !(structure.modality || []).includes(modality)) continue;
     const haystack = [structure.display_name, structure.roi, structure.category, ...(structure.synonyms || [])]
       .join(" ").toLowerCase();
     if (query && !haystack.includes(query)) continue;
@@ -470,7 +472,7 @@ function renderInstant3DMappings() {
     object.textContent = `Obj ${mapping.object_id}`;
     const name = document.createElement("span");
     name.textContent = mapping.display_name;
-    name.title = `${mapping.task} / ${mapping.roi}`;
+    name.title = mapping.display_name;
     const remove = document.createElement("button");
     remove.type = "button";
     remove.className = "icon-button";
@@ -493,10 +495,11 @@ function updateInstant3DControls() {
   const ready = state.sourceVolume?.format === "nifti" && Boolean(state.instant3dCatalog);
   elements.instant3dExport.disabled = !ready || state.instant3dMappings.length === 0;
   elements.instant3dImport.disabled = !ready;
-  elements.instant3dAdd.disabled = !state.instant3dCatalog;
+  elements.instant3dAdd.disabled = !ready;
   elements.instant3dSourceStatus.textContent = ready
-    ? `CT NIfTI · ${state.sourceVolume.shape.join(" × ")} · ${state.sourceVolume.spacing.map((value) => Number(value).toPrecision(4)).join(" × ")} mm · ${state.sourceVolume.orientation}`
-    : "Load a compatible CT NIfTI volume to enable Instant3DWeb2 export and import.";
+    ? `${state.sourceVolume.modality} NIfTI · ${state.sourceVolume.shape.join(" × ")} · ${state.sourceVolume.spacing.map((value) => Number(value).toPrecision(4)).join(" × ")} mm · ${state.sourceVolume.orientation}`
+    : "Load a compatible CT/MRI NIfTI volume to enable Seg CT/MRI export and import.";
+  renderInstant3DCatalog();
 }
 
 function addInstant3DStructure() {
@@ -518,7 +521,7 @@ function addInstant3DStructure() {
 
 async function exportInstant3DRequest() {
   try {
-    setLoading(true, "Exporting Instant3DWeb2 request", "Validating source geometry");
+    setLoading(true, "Exporting Seg CT/MRI request", "Validating source geometry");
     const { entries, manifest } = await createInstant3DRequest({
       source: state.sourceVolume,
       objects: state.instant3dMappings,
@@ -526,12 +529,12 @@ async function exportInstant3DRequest() {
       fast: elements.instant3dFast.checked,
     });
     downloadBlob(await createZip(entries), "instant3d_request.zip");
-    setStatus(`Instant3DWeb2 request created: ${manifest.objects.length} structure(s).`);
+    setStatus(`Seg CT/MRI request created: ${manifest.objects.length} structure(s).`);
     showToast("Downloaded instant3d_request.zip");
   } catch (error) {
     console.error(error);
-    setStatus(`Instant3DWeb2 export failed: ${error.message}`);
-    window.alert(`Instant3DWeb2 export failed.\n\n${error.message}`);
+    setStatus(`Seg CT/MRI export failed: ${error.message}`);
+    window.alert(`Seg CT/MRI export failed.\n\n${error.message}`);
   } finally {
     setLoading(false);
   }
@@ -562,7 +565,7 @@ async function applyInstant3DImport(mode) {
   setSegmentationObjectNames();
   updateLabelTargets();
   await applyMaskVolumeTransaction(nextMasks,
-    `Imported Instant3DWeb2 result: ${manifest.objects.length} object(s), ${mode} mode.`);
+    `Imported Seg CT/MRI result: ${manifest.objects.length} object(s), ${mode} mode.`);
   enableLabelsUsedByMasks(nextMasks);
   renderInstant3DMappings();
   state.instant3dPendingImport = null;
@@ -575,7 +578,7 @@ async function applyInstant3DImport(mode) {
 async function importInstant3DResult(file) {
   if (!file) return;
   try {
-    setLoading(true, "Importing Instant3DWeb2 result", "Opening ZIP");
+    setLoading(true, "Importing Seg CT/MRI result", "Opening ZIP");
     const entries = await parseZip(file);
     const validated = validateInstant3DResult(entries, state.sourceVolume, state.instant3dCatalog);
     const volume = parseNiftiLabelVolume(validated.labelmap.bytes, validated.labelmap.name);
@@ -592,8 +595,8 @@ async function importInstant3DResult(file) {
   } catch (error) {
     console.error(error);
     state.instant3dPendingImport = null;
-    setStatus(`Instant3DWeb2 import failed: ${error.message}`);
-    window.alert(`Instant3DWeb2 import failed.\n\n${error.message}`);
+    setStatus(`Seg CT/MRI import failed: ${error.message}`);
+    window.alert(`Seg CT/MRI import failed.\n\n${error.message}`);
   } finally {
     setLoading(false);
     elements.instant3dResultInput.value = "";
@@ -2781,7 +2784,7 @@ function validateProjectManifest(manifest) {
   const savedJobs = manifest.settings?.segmentationJobs;
   if (Array.isArray(savedJobs) && savedJobs.length > 0) {
     if (savedJobs.some((job) => Number(job.id) > 20)) {
-      throw new Error("A saved SegOnWeb object ID exceeds the Lite Web label limit of 20.");
+      throw new Error("A saved Seg Anything object ID exceeds the Lite Web label limit of 20.");
     }
     createSegmentationJobManifest({
       images: state.images.map((image, index) => ({
@@ -3176,7 +3179,7 @@ function captureSegmentationRangeBoundary(boundary) {
     setStatus(`Tracking ${boundary === "start" ? "Start" : "End"} set to frame ${currentFrame + 1}.`);
     elements.canvas.focus();
   } catch (error) {
-    setStatus(`SegOnWeb job: ${error.message}`);
+    setStatus(`Seg Anything job: ${error.message}`);
   }
 }
 
@@ -3222,7 +3225,7 @@ function readSegmentationDraft({ requireBox = true } = {}) {
 
 function openSegmentationJobs(objectId = null) {
   if (state.images.length === 0 || state.loading) {
-    setStatus("Load images before creating SegOnWeb jobs.");
+    setStatus("Load images before creating Seg Anything jobs.");
     return;
   }
   const requestedId = Number(objectId || state.segmentationDraft?.id || state.targetLabel);
@@ -3264,7 +3267,7 @@ function beginSegmentationBox(frame = state.index) {
     elements.canvas.focus();
     render();
   } catch (error) {
-    setStatus(`SegOnWeb job: ${error.message}`);
+    setStatus(`Seg Anything job: ${error.message}`);
   }
 }
 
@@ -3283,7 +3286,7 @@ function saveSegmentationObject() {
     );
     render();
   } catch (error) {
-    setStatus(`SegOnWeb job: ${error.message}`);
+    setStatus(`Seg Anything job: ${error.message}`);
   }
 }
 
@@ -3305,7 +3308,7 @@ async function exportSegmentationJob() {
     openSegmentationJobs();
     return;
   }
-  setLoading(true, "Exporting SegOnWeb job", "Validating manifest");
+  setLoading(true, "Exporting Seg Anything job", "Validating manifest");
   try {
     const manifest = createSegmentationJobManifest({
       images: state.images.map((image, index) => ({
@@ -3335,12 +3338,12 @@ async function exportSegmentationJob() {
     }
     elements.loadingDetail.textContent = "Creating ZIP";
     downloadBlob(await createZip(entries), "segonweb_input.zip");
-    setStatus(`Exported SegOnWeb job: ${state.images.length} images, ${state.segmentationJobs.length} object(s).`);
+    setStatus(`Exported Seg Anything job: ${state.images.length} images, ${state.segmentationJobs.length} object(s).`);
     showToast("Downloaded segonweb_input.zip");
   } catch (error) {
     console.error(error);
-    setStatus(`SegOnWeb export failed: ${error.message}`);
-    window.alert(`SegOnWeb export failed.\n\n${error.message}`);
+    setStatus(`Seg Anything export failed: ${error.message}`);
+    window.alert(`Seg Anything export failed.\n\n${error.message}`);
   } finally {
     setLoading(false);
   }
@@ -3380,7 +3383,7 @@ function validateCurrentImagesForSegmentationResult(manifest) {
   }
   const expectedOrder = state.images.map((_, index) => String(index + 1).padStart(4, "0"));
   if (!expectedOrder.every((key, index) => key === manifest.images.order[index])) {
-    throw new Error("Image order mismatch between the current project and SegOnWeb result.");
+    throw new Error("Image order mismatch between the current project and Seg Anything result.");
   }
   for (let index = 0; index < state.images.length; index += 1) {
     const image = state.images[index];
@@ -3414,7 +3417,7 @@ async function decodeSegmentationResultMasks(manifest, entriesByPath) {
 
 async function importSegmentationResult(file) {
   if (!file || state.loading) return;
-  setLoading(true, "Importing SegOnWeb result", "Opening ZIP");
+  setLoading(true, "Importing Seg Anything result", "Opening ZIP");
   try {
     const entries = await parseZip(file);
     const { manifest, entriesByPath } = validateSegmentationArchive(entries, SEGMENTATION_RESULT_KIND);
@@ -3428,9 +3431,9 @@ async function importSegmentationResult(file) {
     const hasExistingMasks = state.images.some((image) => image.mask.some((value) => value !== 0));
     if (
       hasExistingMasks &&
-      !window.confirm("Importing this SegOnWeb result will replace the current label masks. Continue?")
+      !window.confirm("Importing this Seg Anything result will replace the current label masks. Continue?")
     ) {
-      setStatus("SegOnWeb result import canceled. Current masks were not changed.");
+      setStatus("Seg Anything result import canceled. Current masks were not changed.");
       return;
     }
 
@@ -3438,8 +3441,8 @@ async function importSegmentationResult(file) {
       const loaded = await prepareImageSequence(
         resultImages.sources,
         resultImages.files,
-        manifest.source.project_name || "SegOnWeb result",
-        "SegOnWeb result image(s)",
+        manifest.source.project_name || "Seg Anything result",
+        "Seg Anything result image(s)",
         { preserveDimensions: true },
       );
       if (!loaded) return;
@@ -3466,12 +3469,12 @@ async function importSegmentationResult(file) {
     setSegmentationObjectNames();
     updateImageUi();
     render();
-    setStatus(`Imported SegOnWeb result: ${decodedMasks.length} masks, ${state.segmentationJobs.length} object(s).`);
-    showToast("SegOnWeb result imported.");
+    setStatus(`Imported Seg Anything result: ${decodedMasks.length} masks, ${state.segmentationJobs.length} object(s).`);
+    showToast("Seg Anything result imported.");
   } catch (error) {
     console.error(error);
-    setStatus(`SegOnWeb result import failed: ${error.message}`);
-    window.alert(`SegOnWeb result import failed.\n\n${error.message}`);
+    setStatus(`Seg Anything result import failed: ${error.message}`);
+    window.alert(`Seg Anything result import failed.\n\n${error.message}`);
   } finally {
     setLoading(false);
     elements.segonwebResultInput.value = "";
@@ -3836,6 +3839,7 @@ async function prepareNiftiFile(file) {
     if (loaded) {
       state.sourceVolume = {
         format: "nifti",
+        modality: "CT",
         filename: file.name,
         bytes,
         shape: [volume.width, volume.height, volume.depth],
@@ -4111,6 +4115,7 @@ async function loadNiftiDemo(dataset) {
     if (!loaded) return;
     state.sourceVolume = {
       format: "nifti",
+      modality: "CT",
       filename: file.name,
       bytes,
       shape: [volume.width, volume.height, volume.depth],
@@ -4799,7 +4804,7 @@ function bindEvents() {
   elements.segonwebWarningContinue.addEventListener("click", () => {
     setTimeout(() => {
       if (elements.segonwebWarningDialog.open) elements.segonwebWarningDialog.close();
-      setStatus("Opening Seg on Web in Google Colab. Upload occurs only when you choose the input ZIP in Colab.");
+      setStatus("Opening Seg Anything in Google Colab. Upload occurs only when you choose the input ZIP in Colab.");
     }, 0);
   });
   elements.instant3dSearch.addEventListener("input", renderInstant3DCatalog);
@@ -4828,7 +4833,7 @@ function bindEvents() {
     if (action === "export") exportInstant3DRequest();
     if (action === "open") {
       window.open(elements.instant3dOpen.href, "_blank", "noopener,noreferrer");
-      setStatus("Opening Instant3DWeb2 in Google Colab. Upload occurs only when you select the request ZIP there.");
+      setStatus("Opening Seg CT/MRI in Google Colab. Upload occurs only when you select the request ZIP there.");
     }
   });
   elements.instant3dImport.addEventListener("click", () => elements.instant3dResultInput.click());
@@ -4837,7 +4842,7 @@ function bindEvents() {
   elements.instant3dConflictCancel.addEventListener("click", () => {
     state.instant3dPendingImport = null;
     elements.instant3dConflictDialog.close();
-    setStatus("Instant3DWeb2 result import canceled; masks were not changed.");
+    setStatus("Seg CT/MRI result import canceled; masks were not changed.");
   });
   elements.instant3dConflictMerge.addEventListener("click", () => applyInstant3DImport("merge"));
   elements.instant3dConflictReplace.addEventListener("click", () => applyInstant3DImport("replace"));

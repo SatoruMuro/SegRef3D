@@ -2754,7 +2754,10 @@ svg {
   background: #f8fafa;
 }
 .instant3d-selected-row button { width: 28px; height: 28px; padding: 0; }
-.instant3d-privacy { color: #566; font-size: 11px; line-height: 1.45; }
+.instant3d-privacy,
+.instant3d-availability { color: #566; font-size: 11px; line-height: 1.45; }
+
+.instant3d-availability { margin: 0; }
 
 .labels-panel {
   grid-column: 1;

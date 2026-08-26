@@ -63,25 +63,37 @@ masks stay on the device and are not uploaded to a server.
 - Window/level, brightness/contrast, reference-line calibration, threshold extraction, and RGB extraction
 - Windows-compatible VolInfo CSV import/export, including automatic export after medical-volume loading and calibration
 - NIfTI/TIFF label-volume export and 1x/5x/10x signed-distance interpolation with STL export
-- Multi-object SegOnWeb job setup, job ZIP export, and complete result ZIP restoration
+- Multi-object Seg Anything job setup, job ZIP export, and complete result ZIP restoration
 - Mouse-wheel image switching, zoom, pan, and a responsive touch-friendly layout
 
 The Web Beta does not run SAM2 inside the browser. Configure Box Prompts, Prompt Frames,
-and Tracking Ranges in Lite Web, export `segonweb_input.zip`, process it in the SegOnWeb
+and Tracking Ranges in Lite Web, export `segonweb_input.zip`, process it in the Seg Anything
 Colab backend, and restore `segref3d_result.zip` with **Import Result**. Display, extraction,
 calibration, label-volume export, and STL generation run locally in the browser. Images are
 uploaded only when the user explicitly sends the job ZIP to Google Colab.
 
-## Instant3DWeb2 / TotalSegmentator
+## AI-assisted segmentation
 
-SegRef3D Desktop and Lite Web share an optional, ZIP-based TotalSegmentator workflow for CT
-NIfTI volumes. The source volume remains unchanged while the request is prepared locally:
+### Seg Anything
+
+SAM-based segmentation for structures specified by the user. Use it when the target is not in
+the anatomical catalog, is pathological or highly variable, or should be defined manually.
+
+```text
+SegRef3D → prompts and export → SAM / Colab → import → refinement → 3D
+```
+
+### Seg CT/MRI
+
+Automatic anatomical segmentation from CT/MRI using TotalSegmentator. Available structures
+depend on the modality and model. The v1 catalog currently exposes supported open-license CT
+structures. The source volume remains unchanged while the request is prepared locally:
 
 1. Load a CT `.nii` or `.nii.gz` volume.
-2. Open **Instant3DWeb2** (Desktop) or **AI Segmentation > Instant3DWeb2** (Lite Web).
+2. Open **Seg CT/MRI** under AI Segmentation.
 3. Search the open-license ROI catalog and map each structure to Obj 1-20.
 4. Export `instant3d_request.zip`.
-5. Open [Instant3DWeb2 in Google Colab](https://satorumuro.github.io/SegRef3D/ColabNotebooks/instant3dweb2.html).
+5. Open [Seg CT/MRI in Google Colab](https://satorumuro.github.io/SegRef3D/ColabNotebooks/segctmri.html).
 6. Upload the request ZIP to your own Colab runtime and run TotalSegmentator.
 7. Download `instant3d_result.zip` and import it into the same source volume.
 8. Refine, measure, and export the returned masks in SegRef3D.
@@ -92,6 +104,10 @@ source checksum differs. Only structures in the bundled open-license catalog can
 license-restricted TotalSegmentator tasks are rejected. TotalSegmentator is not bundled into the
 Desktop or Lite Web application and runs only after an explicit upload to Google Colab. Confirm
 that this use is permitted by your institution before uploading research or medical data.
+
+```text
+SegRef3D → select anatomy and export → TotalSegmentator / Colab → import → refinement → 3D
+```
 
 ---
 
@@ -233,16 +249,16 @@ If you do not have a CUDA-compatible GPU, you can still use SegRef3D through a h
 * Download the generated **standard PNG label masks**
 * Load the masks into the local SegRef3D application for manual refinement, STL export, NIfTI export, and measurement CSV output
 
-### SegOnWeb Job Workflow
+### Seg Anything Job Workflow
 
 The GPU desktop, Lite desktop, and Lite Web workflows move every prompt operation into
 SegRef3D and use Google Colab only as a SAM2 computation backend:
 
 1. Configure each object's Box Prompt, Prompt Frame, and Tracking Range in SegRef3D.
-2. Choose **Extensions > Batch Tracking > Export for SegOnWeb**.
-3. Open SegOnWeb, select a T4 GPU, run all cells, and upload `segonweb_input.zip`.
+2. Choose **AI Segmentation > Seg Anything > Create Input ZIP**.
+3. Open Seg Anything, select a T4 GPU, run all cells, and upload `segonweb_input.zip`.
 4. The final Colab cell automatically downloads `segref3d_result.zip` after segmentation completes.
-5. Choose **Import SegOnWeb Result** in SegRef3D, then refine the masks and build 3D output normally.
+5. Choose **Import Result ZIP** in SegRef3D, then refine the masks and build 3D output normally.
 
 The Colab notebook does not use Gradio. It validates the job, automatically processes
 multiple objects forward and backward from each object's Prompt Frame, displays
@@ -257,7 +273,7 @@ progress, and returns standard single-label PNG masks with the working JPG seque
 
 * Lite Web accepts JPG, PNG, DICOM, and NIfTI input.
 * Configure object jobs in **Batch Jobs**, then export one `segonweb_input.zip` file.
-* Run SegOnWeb on a Colab GPU and restore the returned `segref3d_result.zip` with **Import Result**.
+* Run Seg Anything on a Colab GPU and restore the returned `segref3d_result.zip` with **Import Result**.
 * The web version outputs **standard PNG label masks** with the same image size as the original input images.
 
 ### 🔁 Final Integration

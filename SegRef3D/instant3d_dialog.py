@@ -1,4 +1,4 @@
-"""Compact Instant3DWeb2 workflow dialog for SegRef3D desktop."""
+"""Compact Seg CT/MRI workflow dialog for SegRef3D desktop."""
 
 from __future__ import annotations
 
@@ -22,23 +22,33 @@ class Instant3DWorkflowDialog(QDialog):
     importRequested = pyqtSignal()
     openColabRequested = pyqtSignal()
 
-    def __init__(self, catalog: dict, mappings: list[dict], source_ready: bool, parent=None):
+    def __init__(self, catalog: dict, mappings: list[dict], source_ready: bool, modality="CT", parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Instant3DWeb2 / TotalSegmentator")
+        self.setWindowTitle("Seg CT/MRI")
         self.resize(620, 620)
-        self.catalog = [item for item in catalog["structures"] if not item.get("license_required", False)]
+        self.modality = str(modality or "CT").upper()
+        self.catalog = [
+            item for item in catalog["structures"]
+            if not item.get("license_required", False) and self.modality in item.get("modality", [])
+        ]
         self.mappings = [dict(item) for item in mappings]
 
         layout = QVBoxLayout(self)
-        title = QLabel("Automatic segmentation with TotalSegmentator")
+        title = QLabel("Automatic anatomical segmentation")
         title.setStyleSheet("font-size: 16px; font-weight: 600;")
         layout.addWidget(title)
         source = QLabel(
-            "Source: compatible CT NIfTI volume" if source_ready else
-            "Load a compatible CT NIfTI (.nii or .nii.gz) volume before exporting."
+            f"Current modality: {self.modality} · compatible NIfTI volume" if source_ready else
+            "Load a compatible CT/MRI NIfTI (.nii or .nii.gz) volume before exporting."
         )
         source.setWordWrap(True)
         layout.addWidget(source)
+        availability = QLabel(
+            "Available structures depend on the imaging modality and the TotalSegmentator model. "
+            "The current v1 catalog includes supported open-license CT structures."
+        )
+        availability.setWordWrap(True)
+        layout.addWidget(availability)
 
         self.search = QLineEdit()
         self.search.setPlaceholderText("Search anatomical structures...")
@@ -78,7 +88,7 @@ class Instant3DWorkflowDialog(QDialog):
         self.import_button = QPushButton("Import Result ZIP")
         self.import_button.setEnabled(source_ready)
         self.import_button.clicked.connect(self.importRequested.emit)
-        self.open_button = QPushButton("Open Instant3DWeb2")
+        self.open_button = QPushButton("Open Seg CT/MRI")
         self.open_button.clicked.connect(self.openColabRequested.emit)
         actions.addWidget(self.export_button)
         actions.addWidget(self.import_button)
@@ -111,7 +121,7 @@ class Instant3DWorkflowDialog(QDialog):
                 continue
             item = QListWidgetItem(f'{structure["display_name"]}  ·  {structure.get("category", "Other")}')
             item.setData(Qt.ItemDataRole.UserRole, structure)
-            item.setToolTip(structure["roi"])
+            item.setToolTip(f'{structure.get("category", "Other")} · {self.modality}')
             self.available.addItem(item)
 
     def _next_free_object_id(self):
@@ -152,7 +162,7 @@ class Instant3DWorkflowDialog(QDialog):
         for mapping in self.mappings:
             item = QListWidgetItem(f'Obj {mapping["object_id"]}  —  {mapping["display_name"]}')
             item.setData(Qt.ItemDataRole.UserRole, int(mapping["object_id"]))
-            item.setToolTip(f'{mapping["task"]} / {mapping["roi"]}')
+            item.setToolTip(mapping["display_name"])
             self.selected.addItem(item)
 
     def _emit_export(self):

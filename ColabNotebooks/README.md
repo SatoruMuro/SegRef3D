@@ -1,9 +1,9 @@
 
-# SegOnWeb Colab Notebooks
+# SegRef3D AI Segmentation Notebooks
 
-## Current SegRef3D Job Workflow
+## Seg Anything
 
-Use `SegOnWebJob_v1_0.ipynb` for the Gradio-free SegRef3D segmentation job workflow.
+Use `SegOnWebJob_v1_0.ipynb` for the Gradio-free Seg Anything workflow.
 The public redirect is `segonweb.html`.
 
 1. Configure **AI Tracking Setup** objects in SegRef3D Lite Web or Batch Tracking in Desktop.
@@ -48,14 +48,15 @@ The shared archive schema is documented in
 `SegRef3D/docs/SEGONWEB_JOB_FORMAT.md` and implemented by
 `SegRef3D/segmentation_job.py`.
 
-## Instant3DWeb2 TotalSegmentator Workflow
+## Seg CT/MRI
 
 Use `Instant3DWeb2.ipynb` for the Gradio-free CT structure workflow. The public launcher is
-`instant3dweb2.html`, and `instant3dweb2_backend.py` contains request validation, task grouping,
+`segctmri.html`. The former `instant3dweb2.html` URL remains as a compatibility redirect.
+`instant3dweb2_backend.py` contains request validation, task grouping,
 TotalSegmentator invocation, geometry-aware output handling, and result ZIP generation.
 
 1. Create `instant3d_request.zip` in SegRef3D Desktop or Lite Web.
-2. Open the Instant3DWeb2 launcher and select a T4 GPU runtime when available.
+2. Open the Seg CT/MRI launcher and select a T4 GPU runtime when available.
 3. Upload the request ZIP in the first executable upload cell.
 4. Run validation before TotalSegmentator is installed or invoked.
 5. Run the grouped open-license tasks and create `instant3d_result.zip`.

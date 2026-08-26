@@ -1,6 +1,6 @@
-# Seg on Web: SegRef3D Job Workflow
+# Seg Anything: SegRef3D Job Workflow
 
-SegOnWeb uses a Google Colab GPU as a computation backend. All prompt configuration
+Seg Anything uses a Google Colab GPU as a computation backend. All prompt configuration
 is performed in SegRef3D; there is no separate Gradio interface.
 
 ## 1. Configure Objects In SegRef3D
@@ -19,13 +19,13 @@ Tracking Ranges, and box coordinates. Prompt Frame must be inside its Tracking R
 
 ## 2. Export The Job
 
-Under **Extensions > Batch Tracking**, choose **Export for SegOnWeb** and save
+Under **AI Segmentation > Seg Anything**, choose **Create Input ZIP** and save
 `segonweb_input.zip`. It contains the working JPG sequence and `manifest.json`.
 
-## 3. Run SegOnWeb
+## 3. Run Seg Anything
 
-1. Choose **Seg on Web** in SegRef3D, or open
-   [Seg on Web](https://satorumuro.github.io/SegRef3D/ColabNotebooks/segonweb.html).
+1. Choose **Seg Anything** in SegRef3D, or open
+   [Seg Anything](https://satorumuro.github.io/SegRef3D/ColabNotebooks/segonweb.html).
 2. In Colab, select **Runtime > Change runtime type > T4 GPU > Save**.
 3. Select **Runtime > Run all**.
 4. Upload `segonweb_input.zip` when the upload control appears.
@@ -38,7 +38,7 @@ The progress display shows the current step, object, frame, and overall progress
 ## 4. Import The Result
 
 1. Return to SegRef3D.
-2. Under **Extensions > Batch Tracking**, choose **Import SegOnWeb Result**.
+2. Under **AI Segmentation > Seg Anything**, choose **Import Result ZIP**.
 3. Select `segref3d_result.zip`.
 4. Confirm replacement if the current project already contains label masks.
 
@@ -49,7 +49,7 @@ Imported masks are immediately written to a new `[autosave]` label PNG folder.
 ### Lite Web controls
 
 The browser app uses the same manifest and ZIP formats. Open **Batch Jobs**, set each
-object's prompt and range, choose **Export SegOnWeb**, then restore the Colab output with
+object's prompt and range, choose **Create Input ZIP**, then restore the Colab output with
 **Import Result**. Keep **Batch Jobs** open while navigating with the mouse wheel or F/R,
 then use **Use current** to capture Tracking Start and End. **Set Box on Canvas** displays
 crosshair guides for accurate Box Prompt placement. No local SAM2 package or NVIDIA GPU is

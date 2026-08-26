@@ -52,5 +52,5 @@ SEGREF3D_DISABLE_SAM2=1
 
 so the executable will not attempt to import SAM2 or torch at startup.
 
-Local SAM2 buttons are disabled with an explanation. `Seg on Web` and
-`Instant3Dweb` remain enabled.
+Local SAM2 buttons are disabled with an explanation. `Seg Anything`, `Seg CT/MRI`, and
+`Legacy Instant3DWeb` remain enabled.

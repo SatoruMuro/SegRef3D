@@ -8,7 +8,7 @@ async function readLiteWebFile(name) {
   return readFile(new URL(name, liteWebRoot), "utf8");
 }
 
-test("local-processing UI and Seg on Web confirmation are wired into the app", async () => {
+test("local-processing UI and Seg Anything confirmation are wired into the app", async () => {
   const [html, app] = await Promise.all([
     readLiteWebFile("index.html"),
     readLiteWebFile("app.mjs"),
@@ -17,6 +17,11 @@ test("local-processing UI and Seg on Web confirmation are wired into the app", a
   assert.match(html, /id="local-processing-status"/);
   assert.match(html, /id="local-processing-dialog"/);
   assert.match(html, /id="segonweb-warning-dialog"/);
+  assert.match(html, />Seg Anything</);
+  assert.match(html, />Seg CT\/MRI</);
+  assert.match(html, /ColabNotebooks\/segctmri\.html/);
+  assert.doesNotMatch(html, />Seg on Web</);
+  assert.doesNotMatch(html, />Instant3DWeb2/);
   assert.match(html, /segonweb_input\.zip.*working image sequence/s);
   assert.match(app, /elements\.segOnWeb\.addEventListener\("click"/);
   assert.match(app, /event\.preventDefault\(\);[\s\S]*elements\.segonwebWarningDialog\.showModal\(\)/);
@@ -28,13 +33,13 @@ test("offline cache uses the current UI asset generation", async () => {
     readLiteWebFile("service-worker.js"),
   ]);
 
-  assert.match(html, /styles\.css\?v=30/);
-  assert.match(html, /app\.mjs\?v=30/);
-  assert.match(worker, /segref3d-lite-web-v30/);
-  assert.match(worker, /styles\.css\?v=30/);
-  assert.match(worker, /app\.mjs\?v=30/);
-  assert.match(worker, /workspace-ui\.mjs\?v=29/);
-  assert.match(worker, /instant3d-bridge\.mjs\?v=2/);
+  assert.match(html, /styles\.css\?v=31/);
+  assert.match(html, /app\.mjs\?v=31/);
+  assert.match(worker, /segref3d-lite-web-v31/);
+  assert.match(worker, /styles\.css\?v=31/);
+  assert.match(worker, /app\.mjs\?v=31/);
+  assert.match(worker, /workspace-ui\.mjs\?v=30/);
+  assert.match(worker, /instant3d-bridge\.mjs\?v=3/);
   assert.match(worker, /totalsegmentator_roi_catalog\.json/);
 });
 

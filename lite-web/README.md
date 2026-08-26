@@ -86,10 +86,10 @@ do not endorse SegRef3D. The approximately 20 MB demo volume is fetched only whe
 - Export and restore Project ZIP files containing label masks and editor settings
 - Use the Objects panel as the current-target selector, with visibility, rename, relabel, merge,
   and object-only clear actions
-- Configure one tracking range and multiple box-prompt keyframes per Seg on Web object
+- Configure one tracking range and multiple box-prompt keyframes per Seg Anything object
 - Export `segonweb_input.zip` and import the complete `segref3d_result.zip` returned by Colab
 - Select open-license TotalSegmentator structures, map them to Obj 1-20, and exchange validated
-  `instant3d_request.zip` / `instant3d_result.zip` archives with Instant3DWeb2
+  `instant3d_request.zip` / `instant3d_result.zip` archives with Seg CT/MRI
 - Plain wheel image navigation, Ctrl/Command+wheel zoom, Shift+wheel horizontal pan
 - Middle-button drag and WASD/arrow-key canvas pan
 - Label visibility controls
@@ -104,7 +104,7 @@ do not endorse SegRef3D. The approximately 20 MB demo volume is fetched only whe
 - Per-object Volume Statistics with voxel count, calibrated mm³/cm³, occupied range, and CSV export
 - Shared-mesh Three.js STL preview with rotate, pan, zoom, camera reset, visibility, and opacity
 - Project Check for dimensions, spacing, labels, isolated components, numbered-frame gaps, and
-  Seg on Web prompt/range validity
+  Seg Anything prompt/range validity
 - Responsive desktop/mobile layout and offline cache
 
 ### Local processing and data flow
@@ -116,12 +116,14 @@ do not endorse SegRef3D. The approximately 20 MB demo volume is fetched only whe
   downloaded directly to the user's device.
 - Lite Web does not operate an image-upload API, analytics pipeline, or telemetry service.
 
-Seg on Web is the explicit exception to this browser-local workflow. It is a separate Google
-Colab workflow for SAM2 segmentation. The generated `segonweb_input.zip` includes the working
-image sequence and Seg on Web job settings. The user explicitly uploads that ZIP to their own
-Google Colab runtime; SegRef3D does not operate an intermediate image-upload server. Institutional
-research-data or privacy rules may restrict uploading research or medical data to Google Colab,
-so users should confirm that this use is permitted before continuing.
+Seg Anything and Seg CT/MRI are the explicit exceptions to this browser-local workflow. They are
+separate Google Colab workflows. Seg Anything provides SAM-based segmentation for user-specified
+structures. Seg CT/MRI provides automatic anatomical segmentation with TotalSegmentator.
+The generated `segonweb_input.zip` includes the working image sequence and Seg Anything job
+settings. The Seg CT/MRI request ZIP includes the source NIfTI. The user explicitly uploads these
+files to their own Google Colab runtime; SegRef3D does not operate an intermediate image-upload
+server. Institutional research-data or privacy rules may restrict uploading research or medical
+data to Google Colab, so users should confirm that this use is permitted before continuing.
 
 Project ZIP files do not contain the source images. Load the original image folder first, then
 open the Project ZIP from **Open > Masks / Project ZIP** to restore its masks and editor settings.
@@ -149,19 +151,19 @@ the entire loaded project after confirmation.
 JPEG-LS, JPEG 2000, RLE, other compressed DICOM transfer syntaxes, and 4D NIfTI volumes are
 currently rejected with a clear error instead of being rendered incorrectly.
 
-### Seg on Web workflow
+### Seg Anything workflow
 
 1. Load an image sequence in SegRef3D Lite Web.
 2. Open **AI Segmentation > Edit Setup** in the Tools dock.
 3. Define the tracking range for each object.
 4. Move to useful keyframes and add one or more box prompts with **Add Box Prompt Here**.
 5. Return to **AI Segmentation** and choose **Create Input ZIP**.
-6. Choose **Open Seg on Web**, run all Colab cells, and upload the ZIP in the first upload cell.
+6. Choose **Open Seg Anything**, run all Colab cells, and upload the ZIP in the first upload cell.
 7. Download the generated `segref3d_result.zip`.
 8. Choose **AI Segmentation > Import AI Result** in Lite Web.
 9. Refine the returned masks, run **Tools > Check Project**, and export measurements or 3D data.
 
-Opening Seg on Web displays a confirmation before leaving the browser-local workflow. Creating
+Opening Seg Anything displays a confirmation before leaving the browser-local workflow. Creating
 the input ZIP does not upload it: the upload occurs only when the user selects the ZIP in Google
 Colab. The ZIP contains the working image sequence, not only prompt coordinates or job metadata.
 
@@ -179,13 +181,13 @@ The result ZIP can restore its working JPG sequence when no images are loaded. W
 sequence is already open, Lite Web verifies frame count, order, dimensions, and filenames before
 replacing masks.
 
-### Instant3DWeb2 workflow
+### Seg CT/MRI workflow
 
 1. Load a CT NIfTI `.nii` or `.nii.gz` volume. Lite Web retains the original bytes and full affine.
-2. Open **AI Segmentation > Instant3DWeb2 / TotalSegmentator**.
+2. Open **AI Segmentation > Seg CT/MRI**.
 3. Search the shared open-license ROI catalog and map each selected structure to Obj 1-20.
 4. Choose **Create Request ZIP** and confirm the Google Colab data-flow notice.
-5. Open [Instant3DWeb2](https://satorumuro.github.io/SegRef3D/ColabNotebooks/instant3dweb2.html).
+5. Open [Seg CT/MRI](https://satorumuro.github.io/SegRef3D/ColabNotebooks/segctmri.html).
 6. Upload `instant3d_request.zip` to your own Colab runtime and run the notebook.
 7. Download `instant3d_result.zip`, then choose **Import Result ZIP** in Lite Web.
 8. Select Replace or Merge when target objects already contain labels, then refine the masks.
@@ -196,7 +198,7 @@ changing masks. The labelmap is converted back to the same editable slice order 
 transaction. Binary per-ROI NIfTI files remain the backend source of truth; where structures
 overlap in the combined single-label map, the lower Obj ID has priority and the overlap is reported.
 
-Instant3DWeb2 uses TotalSegmentator in Google Colab; it does not run in the browser and is not
+Seg CT/MRI uses TotalSegmentator in Google Colab; it does not run in the browser and is not
 bundled with Lite Web. The selectable catalog contains only supported open-license tasks. Users
 must confirm that uploading research or medical data to Google Colab is permitted by their
 institution. Results are algorithmic segmentations intended for review and refinement, not an
@@ -218,8 +220,8 @@ node --test "lite-web/tests/*.test.mjs"
 
 ## Browser limits
 
-Lite Web processing and export are browser-local. Seg on Web is separate and requires the user to
-explicitly upload its image-containing input ZIP to Google Colab. Very large TIFF stacks, all-frame
+Lite Web processing and export are browser-local. Seg Anything and Seg CT/MRI are separate and
+require the user to explicitly upload their image-containing input ZIP to Google Colab. Very large TIFF stacks, all-frame
 cleanup, interpolation, and mesh generation can require substantial browser memory. Lite Web warns
 before unusually large TIFF imports and uses progress states and yielded processing for long
 operations. Use the Windows build for datasets that exceed the browser's available memory.

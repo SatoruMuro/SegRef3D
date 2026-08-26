@@ -262,13 +262,15 @@ class Ui_MainWindow:
         self.btn_add_object_prompt = QPushButton("Add Object Prompt")
         self.btn_batch_tracking = QPushButton("Run Batch Tracking")
         self.btn_manage_batch_jobs = QPushButton("Batch Jobs")
-        self.btn_export_segonweb = QPushButton("Export for SegOnWeb")
-        self.btn_import_segonweb_result = QPushButton("Import SegOnWeb Result")
+        self.btn_export_segonweb = QPushButton("Create Input ZIP")
+        self.btn_import_segonweb_result = QPushButton("Import Result ZIP")
         self.btn_run_tracking = QPushButton("Run Tracking")
         self.btn_run_sam2 = QPushButton("Run Seg")
-        self.btn_seg_on_web = QPushButton("Seg on Web")
-        self.btn_instant3dweb = QPushButton("Instant3Dweb")
-        self.btn_instant3d_workflow = QPushButton("Instant3DWeb2")
+        self.btn_seg_on_web = QPushButton("Seg Anything")
+        self.btn_instant3dweb = QPushButton("Legacy Instant3DWeb")
+        self.btn_instant3d_workflow = QPushButton("Seg CT/MRI")
+        self.btn_seg_on_web.setToolTip("Prompt-based segmentation using SAM")
+        self.btn_instant3d_workflow.setToolTip("Automatic anatomical segmentation with TotalSegmentator")
 
         sam_layout.addWidget(self.btn_prepare_tracking)
         sam_layout.addWidget(self.btn_set_box_prompt)        
@@ -1204,18 +1206,19 @@ class Ui_MainWindow:
         self.btn_run_sam2.setProperty("primary", True)
         ai_layout.addWidget(self.local_sam2_widget)
         self.lite_sam2_widget = group("Local SAM2", [
-            QLabel("Not available in this build.\nUse Seg on Web for AI segmentation."),
+            QLabel("Not available in this build.\nUse Seg Anything for SAM-based segmentation."),
         ])
         ai_layout.addWidget(self.lite_sam2_widget)
-        self.segonweb_widget = group("Seg on Web Workflow", [
+        self.segonweb_widget = group("Seg Anything", [
+            QLabel("Prompt-based segmentation for structures you specify using SAM in Google Colab."),
             self.btn_manage_batch_jobs,
             self.btn_export_segonweb,
             self.btn_import_segonweb_result,
             self.btn_seg_on_web,
         ])
         ai_layout.addWidget(self.segonweb_widget)
-        self.instant3d_widget = group("Instant3DWeb2 / TotalSegmentator", [
-            QLabel("Choose structures in SegRef3D, process the request ZIP in Colab, then import the result."),
+        self.instant3d_widget = group("Seg CT/MRI", [
+            QLabel("Automatically segment supported anatomical structures with TotalSegmentator in Google Colab."),
             self.btn_instant3d_workflow,
         ])
         ai_layout.addWidget(self.instant3d_widget)

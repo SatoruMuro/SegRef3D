@@ -11,7 +11,7 @@
     <title>SegRef3D Lite Web</title>
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
     <link rel="manifest" href="./manifest.webmanifest" />
-    <link rel="stylesheet" href="./styles.css?v=30" />
+    <link rel="stylesheet" href="./styles.css?v=31" />
   </head>
   <body>
     <svg class="svg-defs" aria-hidden="true">
@@ -230,8 +230,8 @@
           <button id="image-tools" class="command-button" type="button" disabled>
             <svg><use href="#i-sliders"></use></svg><span>Tools</span>
           </button>
-          <button id="segonweb-workflow" class="command-button" type="button" title="Open Seg on Web workflow">
-            <svg><use href="#i-box"></use></svg><span>Seg on Web</span>
+          <button id="segonweb-workflow" class="command-button" type="button" title="Prompt-based segmentation using SAM">
+            <svg><use href="#i-box"></use></svg><span>Seg Anything</span>
           </button>
           <details id="export-menu" class="toolbar-menu">
             <summary class="command-button"><svg><use href="#i-download"></use></svg><span>Export</span></summary>
@@ -357,14 +357,14 @@
           <p>Masks and autosave data are stored locally in your browser. Exported files are downloaded directly to your device.</p>
         </div>
         <div class="local-file-assurance dialog-exception">
-          <strong>Exception: Seg on Web</strong>
-          <span>Seg on Web uses Google Colab for SAM2 segmentation. You must explicitly upload the generated input ZIP, including the working images, to your own Google Colab runtime.</span>
+          <strong>Exceptions: Seg Anything and Seg CT/MRI</strong>
+          <span>These AI workflows use Google Colab. You must explicitly upload their generated input ZIP, including working images or the source NIfTI, to your own Google Colab runtime.</span>
         </div>
         <section class="dialog-language-block" lang="ja" aria-labelledby="local-processing-ja-title">
           <h3 id="local-processing-ja-title">ローカル処理について</h3>
           <p>SegRef3D Lite Web に読み込んだ画像は、通常ブラウザ内で処理され、元画像が SegRef3D のサーバーへ自動的にアップロードされることはありません。</p>
           <p>マスクや自動保存データもブラウザ内に保存され、Exportしたファイルは端末へ直接保存されます。</p>
-          <p><strong>例外：Seg on Web</strong><br />Seg on Web は SAM2 の実行に Google Colab を使用します。作成された入力ZIP（作業用画像を含む）は、ユーザー自身が Google Colab ランタイムへ明示的にアップロードします。</p>
+          <p><strong>例外：Seg Anything／Seg CT/MRI</strong><br />これらのAI機能は Google Colab を使用します。作成された入力ZIP（作業用画像または元NIfTIを含む）は、ユーザー自身が Google Colab ランタイムへ明示的にアップロードします。</p>
         </section>
         <div class="local-file-dialog-actions compact-dialog-actions">
           <button id="local-processing-close" class="command-button accent" type="button">Close</button>
@@ -531,9 +531,10 @@
         <header class="tools-dialog-header">
           <div>
             <span class="dialog-kicker">AI SEGMENTATION WORKFLOW</span>
-            <h2 id="segonweb-workflow-title">Seg on Web</h2>
+            <h2 id="segonweb-workflow-title">Seg Anything</h2>
+            <span>Prompt-based segmentation for structures you specify using SAM</span>
           </div>
-          <button id="segonweb-workflow-close" class="icon-button" type="button" title="Close Seg on Web workflow">
+          <button id="segonweb-workflow-close" class="icon-button" type="button" title="Close Seg Anything workflow">
             <svg><use href="#i-close"></use></svg>
           </button>
         </header>
@@ -546,14 +547,14 @@
           </li>
           <li>
             <span class="workflow-step-number">2</span>
-            <div><strong>Create Input ZIP</strong><span><code>segonweb_input.zip</code> includes the working image sequence and Seg on Web job settings. It stays local until you upload it in Colab.</span></div>
+            <div><strong>Create Input ZIP</strong><span><code>segonweb_input.zip</code> includes the working image sequence and Seg Anything job settings. It stays local until you upload it in Colab.</span></div>
             <button id="export-segonweb" class="command-button" type="button" disabled>Create Input ZIP</button>
           </li>
           <li>
             <span class="workflow-step-number">3</span>
             <div><strong>Run SAM2</strong><span>Open the Colab backend and upload the input ZIP.</span></div>
-            <a id="seg-on-web" class="command-button" href="https://satorumuro.github.io/SegRef3D/ColabNotebooks/segonweb.html" target="_blank" rel="noopener noreferrer" aria-label="Open Seg on Web">
-              <svg><use href="#i-external"></use></svg><span>Open Seg on Web</span>
+            <a id="seg-on-web" class="command-button" href="https://satorumuro.github.io/SegRef3D/ColabNotebooks/segonweb.html" target="_blank" rel="noopener noreferrer" aria-label="Open Seg Anything">
+              <svg><use href="#i-external"></use></svg><span>Open Seg Anything</span>
             </a>
           </li>
           <li>
@@ -564,17 +565,18 @@
         </ol>
         <section class="instant3d-workflow" aria-labelledby="instant3d-title">
           <div class="tool-section-heading">
-            <strong id="instant3d-title">Instant3DWeb2 / TotalSegmentator</strong>
-            <span>Choose anatomy here, run TotalSegmentator in Colab, then refine the returned masks.</span>
+            <strong id="instant3d-title">Seg CT/MRI</strong>
+            <span>Automatic anatomical segmentation with TotalSegmentator</span>
           </div>
-          <div id="instant3d-source-status" class="workflow-summary">Load a compatible CT NIfTI volume to begin.</div>
+          <div id="instant3d-source-status" class="workflow-summary">Load a compatible CT/MRI NIfTI volume to begin.</div>
+          <p class="instant3d-availability">Available structures depend on the imaging modality and model. The v1 catalog currently includes supported open-license CT structures.</p>
           <label class="field-stack">
             <span>Search structures</span>
             <input id="instant3d-search" type="search" placeholder="Kidney, liver, psoas..." />
           </label>
           <label class="field-stack">
             <span>Available structures</span>
-            <select id="instant3d-available" size="7" aria-label="Available TotalSegmentator structures"></select>
+            <select id="instant3d-available" size="7" aria-label="Available anatomical structures"></select>
           </label>
           <div class="instant3d-add-row">
             <label><span>Assign to</span><select id="instant3d-object-id"></select></label>
@@ -587,7 +589,7 @@
           <label class="checkbox-row"><input id="instant3d-fast" type="checkbox" />Fast mode (lower-resolution model)</label>
           <div class="instant3d-actions">
             <button id="instant3d-export" class="command-button accent" type="button" disabled>Create Request ZIP</button>
-            <a id="instant3d-open" class="command-button" href="https://satorumuro.github.io/SegRef3D/ColabNotebooks/instant3dweb2.html" target="_blank" rel="noopener noreferrer">Open Instant3DWeb2</a>
+            <a id="instant3d-open" class="command-button" href="https://satorumuro.github.io/SegRef3D/ColabNotebooks/segctmri.html" target="_blank" rel="noopener noreferrer">Open Seg CT/MRI</a>
             <button id="instant3d-import" class="command-button" type="button" disabled>Import Result ZIP</button>
           </div>
           <p class="instant3d-privacy"><code>instant3d_request.zip</code> contains the source NIfTI volume and job settings. It stays in your browser until you explicitly upload it to your own Google Colab runtime.</p>
@@ -599,7 +601,7 @@
 
     <dialog id="instant3d-warning-dialog" class="local-file-dialog information-dialog" aria-labelledby="instant3d-warning-title">
       <div class="local-file-dialog-content">
-        <div class="local-file-dialog-heading"><span class="local-file-dialog-icon cloud-dialog-icon"><svg><use href="#i-external"></use></svg></span><div><span class="dialog-kicker cloud-dialog-kicker">PROCESSING LOCATION CHANGES</span><h2 id="instant3d-warning-title">Instant3DWeb2 uses Google Colab</h2></div></div>
+        <div class="local-file-dialog-heading"><span class="local-file-dialog-icon cloud-dialog-icon"><svg><use href="#i-external"></use></svg></span><div><span class="dialog-kicker cloud-dialog-kicker">PROCESSING LOCATION CHANGES</span><h2 id="instant3d-warning-title">Seg CT/MRI uses Google Colab</h2></div></div>
         <div class="local-file-dialog-copy">
           <p>The exported request ZIP contains the source NIfTI volume and selected structure settings.</p>
           <p>You must explicitly upload it to your own Google Colab runtime for TotalSegmentator processing. It is not uploaded to a SegRef3D-operated server.</p>
@@ -629,12 +631,12 @@
           </span>
           <div>
             <span class="dialog-kicker cloud-dialog-kicker">PROCESSING LOCATION CHANGES</span>
-            <h2 id="segonweb-warning-title">Seg on Web uses Google Colab</h2>
+            <h2 id="segonweb-warning-title">Seg Anything uses Google Colab</h2>
           </div>
         </div>
         <div class="local-file-dialog-copy">
           <p>SegRef3D Lite Web normally processes images locally in your browser.</p>
-          <p>Seg on Web is different: <code>segonweb_input.zip</code> contains the working image sequence and must be uploaded to your Google Colab runtime for SAM2 processing.</p>
+          <p>Seg Anything is different: <code>segonweb_input.zip</code> contains the working image sequence and must be uploaded to your Google Colab runtime for SAM-based processing.</p>
           <p>Your images are not uploaded to a SegRef3D-operated server.</p>
         </div>
         <div class="local-file-assurance cloud-assurance">
@@ -642,8 +644,8 @@
           <span>Make sure uploading research or medical data to Google Colab is permitted under your institution's research data and privacy policies.</span>
         </div>
         <section class="dialog-language-block" lang="ja" aria-labelledby="segonweb-warning-ja-title">
-          <h3 id="segonweb-warning-ja-title">Seg on Web は Google Colab を使用します</h3>
-          <p>SegRef3D Lite Webでは通常、画像はブラウザ内で処理されます。ただし Seg on Web では、作業画像を含む入力ZIPをユーザー自身の Google Colab ランタイムへアップロードする必要があります。</p>
+          <h3 id="segonweb-warning-ja-title">Seg Anything は Google Colab を使用します</h3>
+          <p>SegRef3D Lite Webでは通常、画像はブラウザ内で処理されます。ただし Seg Anything では、作業画像を含む入力ZIPをユーザー自身の Google Colab ランタイムへアップロードする必要があります。</p>
           <p>画像が SegRef3D の運営するサーバーへアップロードされることはありません。研究データ・医用画像を使用する場合は、所属機関の規定上、Google Colabへのアップロードが許可されていることを確認してください。</p>
         </section>
         <div class="local-file-dialog-actions">
@@ -654,7 +656,7 @@
             href="#"
             target="_blank"
             rel="noopener noreferrer"
-          >Continue to Seg on Web</a>
+          >Continue to Seg Anything</a>
         </div>
       </div>
     </dialog>
@@ -663,7 +665,7 @@
       <div class="segonweb-jobs-shell">
         <header class="tools-dialog-header">
           <div>
-            <span class="dialog-kicker">SEG ON WEB SETUP</span>
+            <span class="dialog-kicker">SEG ANYTHING SETUP</span>
             <h2 id="segonweb-jobs-title">AI Tracking Setup</h2>
           </div>
           <button id="segonweb-jobs-close" class="icon-button" type="button" title="Close batch jobs">
@@ -1066,7 +1068,7 @@
       });
     </script>
     <script type="module">
-      import("./app.mjs?v=30").catch((error) => {
+      import("./app.mjs?v=31").catch((error) => {
         console.error("Application module failed to load", error);
         const status = document.querySelector("#status-text");
         if (status) status.textContent = `Application startup failed: ${error.message}`;

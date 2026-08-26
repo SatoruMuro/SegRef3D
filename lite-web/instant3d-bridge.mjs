@@ -49,7 +49,7 @@ export async function sha256Hex(bytes) {
 }
 
 export async function createInstant3DRequest({ source, objects, catalog, fast = false }) {
-  requireValue(source?.format === "nifti" && source.bytes, "Instant3DWeb2 requires a compatible CT NIfTI volume.");
+  requireValue(source?.format === "nifti" && source.bytes, "Seg CT/MRI requires a compatible CT/MRI NIfTI volume.");
   requireValue(catalog?.schema_version === INSTANT3D_SCHEMA_VERSION, "The ROI catalog is unavailable or unsupported.");
   const normalizedObjects = validateInstant3DObjects(objects, catalog);
   const extension = source.filename.toLowerCase().endsWith(".nii.gz") ? ".nii.gz" : ".nii";
@@ -112,13 +112,13 @@ export function validateInstant3DResult(entries, currentSource, catalog) {
     throw new Error(`manifest.json could not be read: ${error.message}`);
   }
   requireValue(manifest.schema === INSTANT3D_SCHEMA && manifest.schema_version === INSTANT3D_SCHEMA_VERSION,
-    "This ZIP uses an unsupported Instant3D bridge schema.");
+    "This ZIP uses an unsupported Seg CT/MRI bridge schema.");
   requireValue(manifest.status === "success", "Instant3D result status is not success.");
   manifest.objects = validateInstant3DObjects(manifest.objects, catalog);
   requireValue(currentSource?.format === "nifti", "Load the original NIfTI volume before importing its result.");
   const mismatches = geometryMismatches(manifest.source, currentSource);
   requireValue(mismatches.length === 0,
-    `Instant3D result does not match the loaded volume: ${mismatches.join(", ")}.`);
+    `Seg CT/MRI result does not match the loaded volume: ${mismatches.join(", ")}.`);
   const labelmap = byName.get(INSTANT3D_LABELMAP);
   requireValue(labelmap, `${INSTANT3D_LABELMAP} is missing from the result ZIP.`);
   return { manifest, labelmap, entriesByName: byName };

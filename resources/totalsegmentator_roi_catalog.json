@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "source": "TotalSegmentator open-task catalog used by Instant3DWeb2",
+  "source": "TotalSegmentator open-task catalog used by Seg CT/MRI",
   "structures": [
     {"display_name":"Adrenal gland, left","task":"total","roi":"adrenal_gland_left","modality":["CT"],"license_required":false,"category":"Abdomen","synonyms":["left adrenal"]},
     {"display_name":"Adrenal gland, right","task":"total","roi":"adrenal_gland_right","modality":["CT"],"license_required":false,"category":"Abdomen","synonyms":["right adrenal"]},

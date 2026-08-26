@@ -1,4 +1,4 @@
-const CACHE_NAME = "segref3d-lite-web-v30";
+const CACHE_NAME = "segref3d-lite-web-v31";
 const APPLE_DEMO_FILES = Array.from(
   { length: 20 },
   (_, index) => `./demo/apple-kanzi-84/apple_${String(index + 1).padStart(4, "0")}.jpg`,
@@ -6,14 +6,14 @@ const APPLE_DEMO_FILES = Array.from(
 const APP_FILES = [
   "./",
   "./index.html",
-  "./styles.css?v=30",
-  "./app.mjs?v=30",
-  "./workspace-ui.mjs?v=29",
+  "./styles.css?v=31",
+  "./app.mjs?v=31",
+  "./workspace-ui.mjs?v=30",
   "./core.mjs?v=25",
   "./demo-datasets.mjs?v=3",
   "./image-tools.mjs?v=25",
   "./medical-io.mjs?v=18",
-  "./instant3d-bridge.mjs?v=2",
+  "./instant3d-bridge.mjs?v=3",
   "../resources/totalsegmentator_roi_catalog.json",
   "./segmentation-job.mjs?v=17",
   "./mask-tools.mjs?v=18",

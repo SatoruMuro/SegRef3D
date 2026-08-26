@@ -21,7 +21,7 @@ RESULT_LABELMAP = "labelmap/labels.nii.gz"
 
 
 class Instant3DBridgeError(ValueError):
-    """A concise, user-facing Instant3DWeb2 validation error."""
+    """A concise, user-facing Seg CT/MRI validation error."""
 
 
 def resource_root() -> Path:
@@ -70,7 +70,7 @@ def nifti_fingerprint(path: str | os.PathLike) -> dict:
         image = nib.load(str(source))
         shape = tuple(int(value) for value in image.shape)
         if len(shape) != 3 or any(value < 1 for value in shape):
-            raise Instant3DBridgeError("Instant3DWeb2 requires one 3D NIfTI volume.")
+            raise Instant3DBridgeError("Seg CT/MRI requires one 3D NIfTI volume.")
         affine = np.asarray(image.affine, dtype=float)
         spacing = tuple(float(value) for value in image.header.get_zooms()[:3])
         orientation = "".join(nib.aff2axcodes(affine))
@@ -160,7 +160,7 @@ def _read_manifest(archive: zipfile.ZipFile) -> tuple[dict, set[str]]:
     except Exception as exc:
         raise Instant3DBridgeError(f"manifest.json could not be read: {exc}") from exc
     if manifest.get("schema") != BRIDGE_SCHEMA or manifest.get("schema_version") != BRIDGE_VERSION:
-        raise Instant3DBridgeError("This ZIP uses an unsupported Instant3D bridge schema.")
+        raise Instant3DBridgeError("This ZIP uses an unsupported Seg CT/MRI bridge schema.")
     return manifest, members
 
 
@@ -207,7 +207,7 @@ def validate_request_zip(zip_path: str | os.PathLike, extract_dir: str | os.Path
     except Instant3DBridgeError:
         raise
     except (OSError, zipfile.BadZipFile) as exc:
-        raise Instant3DBridgeError(f"Invalid Instant3D request ZIP: {exc}") from exc
+        raise Instant3DBridgeError(f"Invalid Seg CT/MRI request ZIP: {exc}") from exc
 
 
 def validate_result_zip(zip_path: str | os.PathLike, current_source_path: str | os.PathLike) -> tuple[dict, bytes]:
@@ -223,13 +223,13 @@ def validate_result_zip(zip_path: str | os.PathLike, current_source_path: str | 
             mismatches = geometry_mismatches(manifest.get("source", {}), current)
             if mismatches:
                 raise Instant3DBridgeError(
-                    "Instant3D result does not match the currently loaded volume: " + ", ".join(mismatches) + "."
+                    "Seg CT/MRI result does not match the currently loaded volume: " + ", ".join(mismatches) + "."
                 )
             return manifest, archive.read(RESULT_LABELMAP)
     except Instant3DBridgeError:
         raise
     except (OSError, zipfile.BadZipFile) as exc:
-        raise Instant3DBridgeError(f"Invalid Instant3D result ZIP: {exc}") from exc
+        raise Instant3DBridgeError(f"Invalid Seg CT/MRI result ZIP: {exc}") from exc
 
 
 def labelmap_from_bytes(data: bytes, expected_source: dict) -> np.ndarray:

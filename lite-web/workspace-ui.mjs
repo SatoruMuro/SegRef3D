@@ -244,7 +244,7 @@ export function upgradeWorkspaceLayout() {
   tabs.setAttribute("aria-label", "Tool categories");
   tabs.append(
     toolTab("draw", "Draw & Refine", "Drawing mode, mask operation, transfer, and Auto Apply"),
-    toolTab("ai", "AI Segmentation", "Seg on Web workflow using Google Colab"),
+    toolTab("ai", "AI Segmentation", "Seg Anything and Seg CT/MRI workflows using Google Colab"),
     toolTab("display", "Display", "Window/level, brightness, and contrast"),
     toolTab("extract", "Extract", "Threshold and RGB extraction"),
     toolTab("cleanup", "Mask Cleanup", "Cleanup scope and signed-distance interpolation"),

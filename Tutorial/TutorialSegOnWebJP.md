@@ -1,6 +1,6 @@
-# Seg on Web：SegRef3D Job ワークフロー
+# Seg Anything：SegRef3D Job ワークフロー
 
-SegOnWebは、Google ColabのGPUを計算backendとして利用します。Box Prompt、Prompt Frame、Tracking Rangeの設定はすべてSegRef3Dで行い、別のGradio画面は使用しません。
+Seg Anythingは、Google ColabのGPUを計算backendとして利用します。Box Prompt、Prompt Frame、Tracking Rangeの設定はすべてSegRef3Dで行い、別のGradio画面は使用しません。
 
 ## 1. SegRef3Dでobjectを設定
 
@@ -17,11 +17,11 @@ SegOnWebは、Google ColabのGPUを計算backendとして利用します。Box P
 
 ## 2. Job ZIPを出力
 
-**Extensions > Batch Tracking**から**Export for SegOnWeb**を押し、`segonweb_input.zip`を保存します。ZIPには作業用JPG画像系列と`manifest.json`が入ります。
+**AI Segmentation > Seg Anything**から**Create Input ZIP**を押し、`segonweb_input.zip`を保存します。ZIPには作業用JPG画像系列と`manifest.json`が入ります。
 
-## 3. SegOnWebを実行
+## 3. Seg Anythingを実行
 
-1. SegRef3Dの**Seg on Web**を押すか、[Seg on Web](https://satorumuro.github.io/SegRef3D/ColabNotebooks/segonweb.html)を開きます。
+1. SegRef3Dの**Seg Anything**を押すか、[Seg Anything](https://satorumuro.github.io/SegRef3D/ColabNotebooks/segonweb.html)を開きます。
 2. Colabで**ランタイム > ランタイムのタイプを変更 > T4 GPU > 保存**を選びます。
 3. **ランタイム > すべてのセルを実行**を選びます。
 4. upload欄が表示されたら`segonweb_input.zip`を選びます。
@@ -33,7 +33,7 @@ SegOnWebは、Google ColabのGPUを計算backendとして利用します。Box P
 ## 4. 結果ZIPを読み込み
 
 1. SegRef3Dへ戻ります。
-2. **Extensions > Batch Tracking > Import SegOnWeb Result**を押します。
+2. **AI Segmentation > Seg Anything > Import Result ZIP**を押します。
 3. `segref3d_result.zip`を選びます。
 4. 既にlabel maskがある場合は、置換確認に同意します。
 
@@ -41,7 +41,7 @@ SegRef3Dは画像系列とmaskを検証してから反映します。画像を�
 
 ### Lite Webでの操作
 
-ブラウザ版も同じmanifest/ZIP形式を使用します。**Batch Jobs**を開いたままmouse wheelまたはF/Rで画像を移動し、**Use current**で現在画像をTracking Start/Endとして取り込みます。**Set Box on Canvas**ではcrosshair補助線を使ってBox Promptを設定できます。**Export SegOnWeb**で出力し、Colabの結果を**Import Result**で復元します。jobの準備にはローカルSAM2やNVIDIA GPUは不要です。
+ブラウザ版も同じmanifest/ZIP形式を使用します。**Batch Jobs**を開いたままmouse wheelまたはF/Rで画像を移動し、**Use current**で現在画像をTracking Start/Endとして取り込みます。**Set Box on Canvas**ではcrosshair補助線を使ってBox Promptを設定できます。**Create Input ZIP**で出力し、Colabの結果を**Import Result**で復元します。jobの準備にはローカルSAM2やNVIDIA GPUは不要です。
 
 ## 5. 修正と3D構築
 

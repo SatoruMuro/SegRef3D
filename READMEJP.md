@@ -47,20 +47,28 @@ Lite版のマスク編集の主要ワークフローを、Windows、macOS、Linu
 - Free / Click / Snap描画、Auto Add / Erase / Transfer、Threshold / RGB抽出、Undo / Redo
 - Window/Level、明るさ・コントラスト、基準線キャリブレーション、VolInfo CSV
 - ラベルPNG、overlay PNG、NIfTI、TIFF、1x/5x/10x補間STLの出力
-- 複数objectのSegOnWeb job設定、`segonweb_input.zip`出力、`segref3d_result.zip`復元
+- 複数objectのSeg Anything job設定、`segonweb_input.zip`出力、`segref3d_result.zip`復元
 - ブラウザ自動保存、Project ZIP、マウス/キーボード操作、モバイル対応UI
 
-SAM2本体はブラウザ内では動作しません。Lite WebでBox Prompt、Prompt Frame、Tracking Rangeを設定し、明示的にGoogle Colabへjob ZIPをuploadした場合だけ画像が外部へ送信されます。その他の編集・抽出・出力処理はブラウザ内で完結します。
+SAM2本体はブラウザ内では動作しません。Lite Webの**Seg Anything**でBox Prompt、Prompt Frame、Tracking Rangeを設定し、明示的にGoogle Colabへjob ZIPをuploadした場合だけ画像が外部へ送信されます。その他の編集・抽出・出力処理はブラウザ内で完結します。
 
-## Instant3DWeb2 / TotalSegmentator
+## AI支援セグメンテーション
 
-Desktop版とLite Webは、CT NIfTIから解剖学的構造を抽出する共通のZIPワークフローに対応しています。
+### Seg Anything
+
+ユーザーが指定した任意対象をSAM系モデルでsegmentします。解剖構造catalogにない対象、病変や
+変異の大きい構造、ユーザー自身が対象を定義したい場合に使用します。
+
+### Seg CT/MRI
+
+TotalSegmentatorを用いてCT/MRIから既知の解剖学的構造を自動segmentします。利用可能な構造は
+modalityとmodelに依存し、v1 catalogではopen-licenseの対応CT構造を提供します。
 
 1. CTの`.nii`または`.nii.gz`を読み込む
-2. Desktopでは**Instant3DWeb2**、Lite Webでは**AI Segmentation > Instant3DWeb2**を開く
+2. **AI Segmentation > Seg CT/MRI**を開く
 3. open-license ROI catalogを検索し、各構造をObj 1-20へ割り当てる
 4. `instant3d_request.zip`を出力する
-5. [Google Colab版Instant3DWeb2](https://satorumuro.github.io/SegRef3D/ColabNotebooks/instant3dweb2.html)を開く
+5. [Google Colab版Seg CT/MRI](https://satorumuro.github.io/SegRef3D/ColabNotebooks/segctmri.html)を開く
 6. 自分のColab runtimeへZIPを明示的にuploadしてTotalSegmentatorを実行する
 7. `instant3d_result.zip`をdownloadし、同じ元volumeを開いたSegRef3Dへ読み込む
 8. 返されたmaskを修正し、計測・3D出力へ進む
@@ -225,7 +233,7 @@ SegRef3D を動かすのに必要なものはすべてアプリケーション�
 
 ## 🖥️ GPU非搭載環境での活用法
 
-CUDA非対応環境でも、Windows Lite版またはLite WebでobjectごとのBox Prompt、Prompt Frame、Tracking Rangeを設定し、**Export for SegOnWeb**で`segonweb_input.zip`を作成できます。Colabで全セルを実行してZIPを1つuploadすると、複数objectを自動処理した`segref3d_result.zip`が生成されます。**Import SegOnWeb Result**または**Import Result**で戻すと、そのままmask修正と3D構築へ進めます。Colab側でGradio操作は行いません。
+CUDA非対応環境でも、Windows Lite版またはLite Webの**Seg Anything**でobjectごとのBox Prompt、Prompt Frame、Tracking Rangeを設定し、**Create Input ZIP**で`segonweb_input.zip`を作成できます。Colabで全セルを実行してZIPを1つuploadすると、複数objectを自動処理した`segref3d_result.zip`が生成されます。**Import Result ZIP**で戻すと、そのままmask修正と3D構築へ進めます。Colab側でGradio操作は行いません。
 
 ### 🔗 Webベースのセグメンテーション手順
 
@@ -246,7 +254,7 @@ CUDA非対応環境でも、Windows Lite版またはLite WebでobjectごとのBo
   * `1–20` = object labels
 * 読み込み後、SegRef3D 上でインタラクティブに修正・3D STL / NIfTI / CSV 出力を実施
 * 旧バージョンで作成した `.svg` マスクも読み込み可能ですが、現在の推奨形式は正本 PNG マスクです
-* GPU が無い場合、ローカルSAM2実行は無効ですが、SegOnWeb jobの準備・入出力は利用できます
+* GPU が無い場合、ローカルSAM2実行は無効ですが、Seg Anything jobの準備・入出力は利用できます
 
 ---
 

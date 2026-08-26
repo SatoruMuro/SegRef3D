@@ -52,6 +52,13 @@ class Instant3DDesktopUiTests(unittest.TestCase):
         self.assertEqual(self.window.source_nifti_fingerprint["orientation"], "LAS")
         np.testing.assert_allclose(self.window.source_nifti_fingerprint["affine"], self.affine)
 
+    def test_external_ai_entry_names_are_distinct_and_legacy_is_preserved(self):
+        self.assertEqual(self.window.btn_seg_on_web.text(), "Seg Anything")
+        self.assertEqual(self.window.btn_instant3d_workflow.text(), "Seg CT/MRI")
+        self.assertEqual(self.window.btn_instant3dweb.text(), "Legacy Instant3DWeb")
+        self.assertIn("SAM", self.window.btn_seg_on_web.toolTip())
+        self.assertIn("TotalSegmentator", self.window.btn_instant3d_workflow.toolTip())
+
     def test_result_import_maps_source_xy_to_display_rows_without_flipping(self):
         self.assertTrue(self.window._load_nifti_volume(str(self.source)))
         objects = [{

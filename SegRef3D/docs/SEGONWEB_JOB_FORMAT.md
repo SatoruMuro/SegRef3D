@@ -1,6 +1,8 @@
 # SegRef3D Segmentation Job Format
 
-`segref3d-segjob-1.0` is the shared interface between SegRef3D and SegOnWeb.
+`segref3d-segjob-1.0` is the shared interface between SegRef3D and the
+**Seg Anything** workflow. `SegOnWeb` remains the internal compatibility name
+used by existing archives, modules, and URLs.
 The schema implementation and validator live in `SegRef3D/segmentation_job.py`.
 
 ## Input ZIP
