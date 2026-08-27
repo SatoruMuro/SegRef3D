@@ -71,6 +71,8 @@ SegRef3Dの基本的な操作手順をご覧いただける動画を掲載して
 
 **[SegRef3D Liteを開く](https://satorumuro.github.io/SegRef3D/lite-web/)**
 
+📘 **基本操作チュートリアル:** [日本語](Tutorial/TutorialSegRef3DLiteJP.md) · [English](Tutorial/TutorialSegRef3DLiteEN.md)
+
 マスク編集の主要ワークフローを、Windows、macOS、Linux、iPadOSなどのモダンブラウザで利用できます。
 
 - JPG/PNG、DICOM、NIfTIの読み込みと20オブジェクトのラベル編集

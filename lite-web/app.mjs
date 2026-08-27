@@ -4366,10 +4366,10 @@ function handlePointerDown(event) {
         setStatus(calibrationStatus);
         syncDemoCalibrationGuide();
         exportVolInfoCsv({ automatic: true });
-        const dataset = activeDemoDataset();
-        if (dataset) {
-          setStatus(`${calibrationStatus} ${dataset.nextStep}`);
-          showToast(dataset.nextStep);
+        const nextStep = activeDemoDataset()?.guide?.nextStep;
+        if (nextStep) {
+          setStatus(`${calibrationStatus} ${nextStep}`);
+          showToast(nextStep);
         }
       } else {
         setStatus("Calibration points must be different.");

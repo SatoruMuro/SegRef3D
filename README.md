@@ -81,6 +81,8 @@ Watch the **Basic Workflow** video to learn how to use SegRef3D, from loading im
 
 **[Open SegRef3D Lite](https://satorumuro.github.io/SegRef3D/lite-web/)**
 
+📘 **Basic Tutorial:** [English](Tutorial/TutorialSegRef3DLiteEN.md) · [日本語](Tutorial/TutorialSegRef3DLiteJP.md)
+
 The lightweight mask-editing workflow is also available as a browser app on
 Windows, macOS, Linux, iPadOS, and other modern browser platforms.
 
