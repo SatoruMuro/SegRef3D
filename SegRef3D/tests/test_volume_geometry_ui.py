@@ -3,6 +3,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import nibabel as nib
 import numpy as np
@@ -48,6 +49,12 @@ class VolumeGeometryUiTests(unittest.TestCase):
             mask = np.zeros((5, 6), dtype=np.uint8)
             mask[1, index + 1] = index + 1
             self.window.label_masks[key] = mask
+        self.window.original_image_filenames = {
+            "0001": "Patient 01.nii.gz#slice=1",
+            "0002": "Patient 01.nii.gz#slice=2",
+            "0003": "Patient 01.nii.gz#slice=3",
+        }
+        self.window.source_dataset_name = "Study Folder.v1"
         self.window._set_volume_geometry(VolumeGeometry((6, 5, 3), self.affine, "dicom"))
 
     def tearDown(self):
@@ -58,15 +65,61 @@ class VolumeGeometryUiTests(unittest.TestCase):
 
     def test_desktop_export_uses_canonical_source_affine(self):
         self.window.export_nifti_labelmap()
-        output = next(Path(self.temp.name).glob("nifti_output_*/segref3d_labelmap.nii.gz"))
+        output = next(Path(self.temp.name).glob(
+            "Study Folder.v1_nifti_output_*/Study Folder.v1_segref3d_labelmap.nii.gz"
+        ))
         image = nib.load(output)
         np.testing.assert_allclose(image.affine, self.affine, atol=1e-5)
         self.assertEqual(image.shape, (6, 5, 3))
         self.assertIn("source image geometry", self.window.label_status.text())
 
+    def test_output_names_use_the_loaded_folder_name(self):
+        self.assertEqual(self.window.output_file_stem(), "Study Folder.v1")
+        self.assertEqual(
+            self.window._safe_output_dataset_name('bad:name?.folder'),
+            "bad_name_.folder",
+        )
+        self.window.reset_autosave_label_dir()
+        self.assertTrue(Path(self.window.output_label_dir).name.startswith(
+            "Study Folder.v1_label_png_[autosave]_"
+        ))
+        self.assertEqual(Path(self.window.get_label_png_path("0001")).name, "mask0001.png")
+
+        preview = type("Preview", (), {
+            "color_labels": [(255, 0, 0), (0, 255, 0), (0, 0, 255)]
+        })()
+        self.assertEqual(
+            app_module.STLPreviewDialog._color_for_path(
+                preview, "image0001_object_03.stl"
+            ),
+            (0.0, 0.0, 1.0),
+        )
+
+    def test_save_masks_exports_only_labels_directly_to_dataset_folder(self):
+        destination = Path(self.temp.name) / "exports"
+        destination.mkdir()
+        with patch.object(
+            app_module.QFileDialog,
+            "getExistingDirectory",
+            return_value=str(destination),
+        ):
+            self.window.save_svg_as()
+
+        label_folder = next(destination.glob("Study Folder.v1_label_png_*"))
+        self.assertEqual(
+            sorted(path.name for path in label_folder.glob("*.png")),
+            ["mask0001.png", "mask0002.png", "mask0003.png"],
+        )
+        self.assertFalse((label_folder / "label_png").exists())
+        self.assertFalse((label_folder / "preview_png").exists())
+        self.assertEqual(list(label_folder.glob("preview_mask*.png")), [])
+        self.assertIn(str(label_folder), self.window.label_status.text())
+
     def test_desktop_5x_export_preserves_key_slices_and_updates_affine(self):
         self.window.export_nifti_labelmap(5)
-        output = next(Path(self.temp.name).glob("nifti_output_*/segref3d_labelmap_5x.nii.gz"))
+        output = next(Path(self.temp.name).glob(
+            "Study Folder.v1_nifti_output_*/Study Folder.v1_segref3d_labelmap_5x.nii.gz"
+        ))
         image = nib.load(output)
         data = np.asarray(image.dataobj)
         self.assertEqual(image.shape, (6, 5, 11))
@@ -83,7 +136,9 @@ class VolumeGeometryUiTests(unittest.TestCase):
 
     def test_reversed_export_preserves_physical_label_location(self):
         self.window.export_nifti_labelmap_reversed()
-        output = next(Path(self.temp.name).glob("nifti_output_*/segref3d_labelmap_revZ.nii.gz"))
+        output = next(Path(self.temp.name).glob(
+            "Study Folder.v1_nifti_output_*/Study Folder.v1_segref3d_labelmap_revZ.nii.gz"
+        ))
         image = nib.load(output)
         data = np.asarray(image.dataobj)
         for new_k in range(3):

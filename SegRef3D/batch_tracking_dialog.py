@@ -81,13 +81,22 @@ class BatchObjectEditDialog(QDialog):
 
 
 class BatchTrackingDialog(QDialog):
-    def __init__(self, objects: list[dict], image_count: int, current_prompt_provider, parent=None):
+    def __init__(
+        self,
+        objects: list[dict],
+        image_count: int,
+        current_prompt_provider,
+        parent=None,
+        local_batch_available: bool = False,
+    ):
         super().__init__(parent)
         self.setWindowTitle("Batch Tracking Jobs")
         self.resize(900, 360)
         self._objects = copy.deepcopy(objects)
         self._image_count = image_count
         self._current_prompt_provider = current_prompt_provider
+        self._local_batch_available = bool(local_batch_available)
+        self.run_local_requested = False
 
         layout = QVBoxLayout(self)
         self.table = QTableWidget(0, 5)
@@ -102,21 +111,33 @@ class BatchTrackingDialog(QDialog):
         layout.addWidget(self.table)
 
         actions = QHBoxLayout()
-        edit_button = QPushButton("Edit")
-        replace_button = QPushButton("Replace with Current Prompt")
-        delete_button = QPushButton("Delete")
-        edit_button.clicked.connect(self._edit_selected)
-        replace_button.clicked.connect(self._replace_selected)
-        delete_button.clicked.connect(self._delete_selected)
-        actions.addWidget(edit_button)
-        actions.addWidget(replace_button)
-        actions.addWidget(delete_button)
+        self.add_button = QPushButton("Add Current Prompt")
+        self.edit_button = QPushButton("Edit")
+        self.replace_button = QPushButton("Replace with Current Prompt")
+        self.delete_button = QPushButton("Delete")
+        self.add_button.clicked.connect(self._add_current_prompt)
+        self.edit_button.clicked.connect(self._edit_selected)
+        self.replace_button.clicked.connect(self._replace_selected)
+        self.delete_button.clicked.connect(self._delete_selected)
+        actions.addWidget(self.add_button)
+        actions.addWidget(self.edit_button)
+        actions.addWidget(self.replace_button)
+        actions.addWidget(self.delete_button)
         actions.addStretch(1)
         layout.addLayout(actions)
 
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
         )
+        self.run_local_button = QPushButton("Save and Run Local Batch Tracking")
+        self.run_local_button.setEnabled(self._local_batch_available)
+        self.run_local_button.setToolTip(
+            "Run all listed jobs with local SAM2."
+            if self._local_batch_available
+            else "Local SAM2 is unavailable in this build."
+        )
+        buttons.addButton(self.run_local_button, QDialogButtonBox.ButtonRole.ActionRole)
+        self.run_local_button.clicked.connect(self._accept_and_run_local)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
@@ -153,6 +174,52 @@ class BatchTrackingDialog(QDialog):
         if self._objects:
             row = min(selected if selected is not None else 0, len(self._objects) - 1)
             self.table.selectRow(row)
+        self._update_action_states()
+
+    def _update_action_states(self):
+        has_selection = self._selected_index() is not None
+        self.edit_button.setEnabled(has_selection)
+        self.replace_button.setEnabled(has_selection)
+        self.delete_button.setEnabled(has_selection)
+        self.run_local_button.setEnabled(self._local_batch_available and bool(self._objects))
+
+    def _add_current_prompt(self):
+        try:
+            new_object = self._current_prompt_provider()
+        except ValueError as exc:
+            QMessageBox.warning(self, "Current Prompt Is Incomplete", str(exc))
+            return
+
+        object_id = int(new_object["id"])
+        if any(int(item["id"]) == object_id for item in self._objects):
+            QMessageBox.warning(
+                self,
+                "Object Already Exists",
+                f"Object {object_id} is already listed. Select it and use "
+                "Replace with Current Prompt.",
+            )
+            return
+        if len(self._objects) >= 20:
+            QMessageBox.warning(self, "Object Limit", "A maximum of 20 objects is supported.")
+            return
+
+        self._objects.append(new_object)
+        self._objects.sort(key=lambda item: int(item["id"]))
+        selected = next(
+            index for index, item in enumerate(self._objects) if int(item["id"]) == object_id
+        )
+        self._refresh(selected)
+
+    def _accept_and_run_local(self):
+        if not self._objects:
+            QMessageBox.warning(
+                self,
+                "No Batch Jobs",
+                "Add at least one object before running local Batch Tracking.",
+            )
+            return
+        self.run_local_requested = True
+        self.accept()
 
     def _edit_selected(self, *_):
         index = self._selected_index()

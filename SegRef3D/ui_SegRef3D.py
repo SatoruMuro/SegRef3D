@@ -168,12 +168,22 @@ class Ui_MainWindow:
         self.spin_threshold_max.setRange(0, 255)
         self.spin_threshold_max.setValue(255)
         self.spin_threshold_max.setFixedWidth(80)
-        
+
+        self.label_threshold_pick_tol = QLabel("Pick ±Tol:")
+        self.spin_threshold_pick_tol = QSpinBox()
+        self.spin_threshold_pick_tol.setRange(0, 128)
+        self.spin_threshold_pick_tol.setValue(15)
+        self.spin_threshold_pick_tol.setFixedWidth(80)
+        self.btn_threshold_pick = QPushButton("Pick Gray Value")
+
         self.btn_extract_threshold = QPushButton("Extract by Threshold")
         
         self.btn_extract_inside_object = QPushButton("Extract Inside Obj")
         self.btn_extract_inside_object_all = QPushButton("Extract Inside Obj All")        
-        self.btn_show_fraction = QPushButton("Show Fraction")
+        self.btn_show_fraction = QPushButton("Show Extracted Fraction")
+        self.btn_show_fraction.setToolTip(
+            "For the current slice, show Transfer Obj / (Target Obj + Transfer Obj)."
+        )
 
         
         # 🔹 RGB抽出設定
@@ -227,6 +237,9 @@ class Ui_MainWindow:
         button_layout2.addWidget(self.label_threshold_range)
         button_layout2.addWidget(self.spin_threshold_min)
         button_layout2.addWidget(self.spin_threshold_max)
+        button_layout2.addWidget(self.label_threshold_pick_tol)
+        button_layout2.addWidget(self.spin_threshold_pick_tol)
+        button_layout2.addWidget(self.btn_threshold_pick)
         button_layout2.addWidget(self.btn_extract_threshold)
                 
         button_layout2.addWidget(self.btn_extract_inside_object)
@@ -261,11 +274,12 @@ class Ui_MainWindow:
         self.btn_prepare_tracking = QPushButton("Prepare Tracking")
         self.btn_set_box_prompt = QPushButton("Set Box Prompt")
         self.btn_clear_box = QPushButton("Clear Box")                
-        self.btn_set_tracking_start = QPushButton("Set Tracking Start")                     
+        self.btn_set_tracking_start = QPushButton("Set Tracking Start")
         self.btn_set_tracking_end = QPushButton("Set Tracking End")
         self.btn_add_object_prompt = QPushButton("Add Object Prompt")
         self.btn_batch_tracking = QPushButton("Run Batch Tracking")
         self.btn_manage_batch_jobs = QPushButton("Batch Jobs")
+        self.btn_manage_local_batch_jobs = QPushButton("Batch Jobs")
         self.btn_export_segonweb = QPushButton("Create Input ZIP")
         self.btn_import_segonweb_result = QPushButton("Import Result ZIP")
         self.btn_run_tracking = QPushButton("Run Tracking")
@@ -284,6 +298,7 @@ class Ui_MainWindow:
         sam_layout.addWidget(self.btn_add_object_prompt)
         sam_layout.addWidget(self.btn_batch_tracking)
         sam_layout.addWidget(self.btn_manage_batch_jobs)
+        sam_layout.addWidget(self.btn_manage_local_batch_jobs)
         sam_layout.addWidget(self.btn_export_segonweb)
         sam_layout.addWidget(self.btn_import_segonweb_result)
         sam_layout.addWidget(self.btn_run_tracking)
@@ -794,6 +809,9 @@ class Ui_MainWindow:
                 self.label_threshold_range,
                 self.spin_threshold_min,
                 self.spin_threshold_max,
+                self.label_threshold_pick_tol,
+                self.spin_threshold_pick_tol,
+                self.btn_threshold_pick,
                 self.btn_extract_threshold,
                 self.btn_extract_inside_object,
                 self.btn_extract_inside_object_all,
@@ -996,6 +1014,10 @@ class Ui_MainWindow:
             layout.setSpacing(6)
             for widget in widgets:
                 layout.addWidget(widget)
+                # Legacy advanced groups explicitly hid their controls before
+                # this desktop layout rehomes them. Showing only the row
+                # container leaves those child controls invisible.
+                widget.show()
             if stretch:
                 layout.addStretch(1)
             return container
@@ -1201,13 +1223,21 @@ class Ui_MainWindow:
         ]))
 
         ai_layout = tool_page("AI Segmentation")
-        self.local_sam2_widget = group("Local SAM2", [
+        self.btn_add_object_prompt.setText("Add Current Prompt")
+        self.btn_batch_tracking.setText("Run Local Batch Tracking")
+        self.prompt_setup_widget = group("Prompt Setup", [
+            QLabel("Define the box prompt and tracking range used by local SAM2 or Seg Anything."),
             row(self.btn_set_box_prompt, self.btn_clear_box),
+            row(self.btn_set_tracking_start, self.btn_set_tracking_end),
+            self.btn_add_object_prompt,
+        ])
+        ai_layout.addWidget(self.prompt_setup_widget)
+        self.local_sam2_widget = group("Local SAM2", [
             self.btn_run_sam2,
             self.btn_prepare_tracking,
-            row(self.btn_set_tracking_start, self.btn_set_tracking_end),
             self.btn_run_tracking,
-            row(self.btn_add_object_prompt, self.btn_batch_tracking),
+            self.btn_manage_local_batch_jobs,
+            self.btn_batch_tracking,
         ])
         self.btn_run_sam2.setProperty("primary", True)
         ai_layout.addWidget(self.local_sam2_widget)
@@ -1219,8 +1249,8 @@ class Ui_MainWindow:
             QLabel("Prompt-based segmentation for structures you specify using SAM in Google Colab."),
             self.btn_manage_batch_jobs,
             self.btn_export_segonweb,
-            self.btn_import_segonweb_result,
             self.btn_seg_on_web,
+            self.btn_import_segonweb_result,
         ])
         ai_layout.addWidget(self.segonweb_widget)
         self.instant3d_widget = group("Seg CT/MRI", [
@@ -1245,6 +1275,25 @@ class Ui_MainWindow:
         cleanup_layout.addWidget(group("Delete Target Object", [
             self.btn_delete_current_only,
             self.btn_delete_object,
+        ]))
+        self.combo_interpolation_object = QComboBox()
+        for object_id in range(1, 21):
+            self.combo_interpolation_object.addItem(f"Obj {object_id}", object_id)
+        self.spin_interpolation_start = QSpinBox()
+        self.spin_interpolation_end = QSpinBox()
+        for spin in (self.spin_interpolation_start, self.spin_interpolation_end):
+            spin.setRange(1, 1)
+        self.btn_interpolate_masks = QPushButton("Interpolate Masks")
+        self.btn_interpolate_masks.setToolTip(
+            "Generate masks on the intermediate frames from masks on the Start and End frames."
+        )
+        cleanup_layout.addWidget(group("Interpolate Between Frames", [
+            row(QLabel("Object"), self.combo_interpolation_object),
+            row(
+                QLabel("Start frame"), self.spin_interpolation_start,
+                QLabel("End frame"), self.spin_interpolation_end,
+            ),
+            self.btn_interpolate_masks,
         ]))
         self.btn_mask_cleanup.setText("Open Mask Post-processing")
         cleanup_layout.addWidget(self.btn_mask_cleanup)
@@ -1301,6 +1350,8 @@ class Ui_MainWindow:
         advanced_layout.addWidget(group("Threshold", [
             row(self.label_threshold_preset, self.combo_threshold_preset),
             row(self.label_threshold_range, self.spin_threshold_min, self.spin_threshold_max),
+            row(self.label_threshold_pick_tol, self.spin_threshold_pick_tol),
+            self.btn_threshold_pick,
             self.btn_extract_threshold,
             row(self.btn_extract_inside_object, self.btn_extract_inside_object_all),
             self.btn_show_fraction,

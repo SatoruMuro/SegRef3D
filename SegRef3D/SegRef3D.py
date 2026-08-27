@@ -16,7 +16,12 @@ from PyQt6.QtWidgets import (
     QGraphicsScene,
     QGraphicsPixmapItem,
     QGraphicsPathItem,
-    QCheckBox
+    QCheckBox,
+    QAbstractSpinBox,
+    QComboBox,
+    QLineEdit,
+    QPlainTextEdit,
+    QTextEdit,
 )
 
 from PyQt6.QtSvgWidgets import QGraphicsSvgItem
@@ -234,6 +239,7 @@ class CustomGraphicsView(QGraphicsView):
 
         self.save_callback = None  # ✅ コールバック追加
         self.image_wheel_callback = None
+        self.point_pick_callback = None
         
         self.temp_preview_item = None  # 仮のスムージングプレビュー用
         
@@ -388,7 +394,14 @@ class CustomGraphicsView(QGraphicsView):
 
         if event.button() == Qt.MouseButton.LeftButton:
             scene_pos = self.mapToScene(event.pos())
-    
+
+            if self.point_pick_callback is not None:
+                callback = self.point_pick_callback
+                self.point_pick_callback = None
+                callback(scene_pos)
+                event.accept()
+                return
+
             if self.draw_mode == 'free':
                 self.drawing = True
                 self.current_path = QPainterPath(scene_pos)
@@ -622,7 +635,9 @@ class STLPreviewDialog(QDialog):
         """ファイル名中の連番（例: object_01.stl → 1）から self.color_labels の色を返す"""
         import os, re
         base = os.path.basename(path)
-        m = re.search(r'(\d+)', base)  # どこかに数字があればOK（object_01, label3 など）
+        m = re.search(r'(?:object|obj|label)[_-]?(\d+)', base, re.IGNORECASE)
+        if m is None:
+            m = re.search(r'(\d+)', base)
         if m and self.color_labels:
             idx = int(m.group(1)) - 1  # 1始まり → 0始まり
             if 0 <= idx < len(self.color_labels):
@@ -708,6 +723,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         self.box_per_frame = {}  # 例: {0: ((x1,y1), (x2,y2)), 1: ((x1,y1), (x2,y2)), ...}
         self.object_label_names = {}
         self.original_image_filenames = {}
+        self.source_dataset_name = None
         self.source_nifti_path = None
         self.source_nifti_fingerprint = None
         self.volume_geometry = None
@@ -788,6 +804,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             self.extract_threshold_inside_object_all
         )   
         self.btn_show_fraction.clicked.connect(self.show_threshold_fraction_current)
+        self.btn_threshold_pick.clicked.connect(self.enable_threshold_picker)
                 
 
 
@@ -833,6 +850,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             self.on_remove_small_parts_current
         )
         self.btn_mask_cleanup.clicked.connect(self.show_mask_postprocessing_dialog)
+        self.btn_interpolate_masks.clicked.connect(self.interpolate_masks_from_panel)
         self.btn_delete_current_only.clicked.connect(self.delete_selected_object_from_current_image)
         self.btn_delete_object.clicked.connect(self.delete_selected_object)
         self.btn_undo_delete.clicked.connect(self.smart_undo)
@@ -910,7 +928,9 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         self.drawn_paths_per_image = {}  # 画像キー → [(QPainterPath, モード)] の辞書
         
         now = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.output_mask_dir = os.path.join(os.getcwd(), f"masks_{now}")
+        self.output_mask_dir = os.path.join(
+            os.getcwd(), self.timestamped_output_name("masks", now)
+        )
         os.makedirs(self.output_mask_dir, exist_ok=True)
 
         # ✅ PNG単一ラベル保存先（新規）
@@ -1004,6 +1024,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         self.btn_add_object_prompt.clicked.connect(self.add_object_prompt_for_batch)
         self.btn_batch_tracking.clicked.connect(self.run_batch_tracking)
         self.btn_manage_batch_jobs.clicked.connect(self.show_batch_tracking_jobs)
+        self.btn_manage_local_batch_jobs.clicked.connect(self.show_batch_tracking_jobs)
         self.btn_export_segonweb.clicked.connect(self.export_for_segonweb)
         self.btn_import_segonweb_result.clicked.connect(self.import_segonweb_result)
         self.initialize_sam2()
@@ -1527,10 +1548,48 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
 
 #ヘルパー関数
-    
+
+    @staticmethod
+    def _safe_output_stem_from_name(name: str) -> str:
+        source_name = os.path.basename(str(name or "").split("#", 1)[0].strip())
+        if source_name.lower().endswith(".nii.gz"):
+            source_name = source_name[:-7]
+        else:
+            source_name = os.path.splitext(source_name)[0]
+        source_name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", source_name)
+        source_name = source_name.strip(" .")[:96]
+        return source_name or "SegRef3D"
+
+    @staticmethod
+    def _safe_output_dataset_name(name: str) -> str:
+        source_name = str(name or "").strip().replace("\\", "/").rstrip("/")
+        source_name = source_name.rsplit("/", 1)[-1]
+        source_name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", source_name)
+        source_name = source_name.strip(" .")[:96]
+        return source_name or "SegRef3D"
+
+    def output_file_stem(self) -> str:
+        if self.source_dataset_name:
+            return self._safe_output_dataset_name(self.source_dataset_name)
+        if self.image_paths:
+            first_key = sorted(self.image_paths.keys())[0]
+            parent_name = Path(self.image_paths[first_key]).parent.name
+            if parent_name:
+                return self._safe_output_dataset_name(parent_name)
+            source_name = self.original_image_filenames.get(first_key)
+            if source_name:
+                return self._safe_output_stem_from_name(source_name)
+        return "SegRef3D"
+
+    def timestamped_output_name(self, category: str, timestamp: str | None = None) -> str:
+        timestamp = timestamp or datetime.now().strftime("%Y%m%d_%H%M%S")
+        return f"{self.output_file_stem()}_{category}_{timestamp}"
+
     def reset_autosave_label_dir(self) -> None:
         now = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.output_label_dir = os.path.join(os.getcwd(), f"label_png_[autosave]_{now}")
+        self.output_label_dir = os.path.join(
+            os.getcwd(), self.timestamped_output_name("label_png_[autosave]", now)
+        )
         os.makedirs(self.output_label_dir, exist_ok=True)
         self.label_mask_paths = {
             key: self.get_label_png_path(key)
@@ -1582,7 +1641,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         ok = cv2.imwrite(save_path, self.label_masks[key])
         if not ok:
             raise IOError(f"Failed to save label mask: {save_path}")
-    
+
         self.label_mask_paths[key] = save_path
         message = f"Autosaved label PNG: {os.path.basename(save_path)}"
         print(f"[INFO] {message}")
@@ -1830,7 +1889,10 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
                 "The current v1 catalog supports open-license CT structures.",
             )
             return
-        suggested = os.path.join(os.path.dirname(self.source_nifti_path), "instant3d_request.zip")
+        suggested = os.path.join(
+            os.path.dirname(self.source_nifti_path),
+            f"{self.output_file_stem()}_instant3d_request.zip",
+        )
         output_path, _ = QFileDialog.getSaveFileName(
             self, "Export Seg CT/MRI Request", suggested, "ZIP Files (*.zip)"
         )
@@ -1995,14 +2057,13 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
     
     
     def enable_rgb_picker(self):
-        self.label_status.setText("🎯 Click image to pick color.")
+        self.label_status.setText("Click the image to pick an RGB color.")
         self.graphicsView.setCursor(Qt.CursorShape.CrossCursor)
-        self.graphicsView.mousePressEvent = self.pick_color_from_click
-    
-    def pick_color_from_click(self, event: QMouseEvent):
-        scene_pos = self.graphicsView.mapToScene(event.pos())
+        self.graphicsView.point_pick_callback = self.pick_color_from_scene
+
+    def pick_color_from_scene(self, scene_pos: QPointF):
         x, y = int(scene_pos.x()), int(scene_pos.y())
-    
+
         key = self.get_current_image_key()
         if key and key in self.image_paths:
             img = cv2.imread(self.image_paths[key])
@@ -2011,11 +2072,42 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
                 self.spin_r.setValue(r)
                 self.spin_g.setValue(g)
                 self.spin_b.setValue(b)
-                self.label_status.setText(f"🎯 Picked RGB: ({r}, {g}, {b})")
-    
-        # マウスイベントを戻す
+                self.label_status.setText(f"Picked RGB: ({r}, {g}, {b})")
+            else:
+                self.label_status.setText("⚠ Could not sample a color at that position.")
+        else:
+            self.label_status.setText("⚠ Load an image before picking a color.")
+
         self.graphicsView.setCursor(Qt.CursorShape.ArrowCursor)
-        self.graphicsView.mousePressEvent = self.graphicsView.__class__.mousePressEvent
+
+    def enable_threshold_picker(self):
+        self.label_status.setText("Click the image to pick a grayscale threshold value.")
+        self.graphicsView.setCursor(Qt.CursorShape.CrossCursor)
+        self.graphicsView.point_pick_callback = self.pick_threshold_from_scene
+
+    def pick_threshold_from_scene(self, scene_pos: QPointF):
+        x, y = int(scene_pos.x()), int(scene_pos.y())
+        key = self.get_current_image_key()
+        if key and key in self.image_paths:
+            image = cv2.imread(self.image_paths[key], cv2.IMREAD_GRAYSCALE)
+            if image is not None and 0 <= y < image.shape[0] and 0 <= x < image.shape[1]:
+                value = int(image[y, x])
+                tolerance = self.spin_threshold_pick_tol.value()
+                self.ignore_spinbox_change = True
+                self.combo_threshold_preset.setCurrentText("Custom")
+                self.spin_threshold_min.setValue(max(0, value - tolerance))
+                self.spin_threshold_max.setValue(min(255, value + tolerance))
+                self.ignore_spinbox_change = False
+                self.label_status.setText(
+                    f"Picked gray value {value}: threshold "
+                    f"{self.spin_threshold_min.value()}-{self.spin_threshold_max.value()}."
+                )
+            else:
+                self.label_status.setText("⚠ Could not sample a gray value at that position.")
+        else:
+            self.label_status.setText("⚠ Load an image before picking a threshold value.")
+
+        self.graphicsView.setCursor(Qt.CursorShape.ArrowCursor)
 
 
 
@@ -3304,6 +3396,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             len(self.image_paths),
             self._current_batch_prompt_data,
             self,
+            local_batch_available=self.sam2_enabled and self.sam2_interface is not None,
         )
         if dialog.exec() == QDialog.DialogCode.Accepted:
             self.batch_object_data = dialog.objects
@@ -3312,7 +3405,11 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
                 for item in self.batch_object_data
             }
             self._apply_object_names_to_checkboxes()
-            self.label_status.setText(f"Batch Tracking jobs updated: {len(self.batch_object_data)} object(s).")
+            self.label_status.setText(
+                f"Batch Tracking jobs updated: {len(self.batch_object_data)} object(s)."
+            )
+            if dialog.run_local_requested:
+                self.run_batch_tracking()
 
 
     def _apply_object_names_to_checkboxes(self):
@@ -3368,7 +3465,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         output_path, _ = QFileDialog.getSaveFileName(
             self,
             "Create Seg Anything Input ZIP",
-            os.path.join(os.getcwd(), "segonweb_input.zip"),
+            os.path.join(os.getcwd(), f"{self.output_file_stem()}_segonweb_input.zip"),
             "ZIP Archives (*.zip)",
         )
         if not output_path:
@@ -3379,7 +3476,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
         source_names = sorted(set(self.original_image_filenames.values()))
         source = {
-            "project_name": Path(next(iter(self.image_paths.values()))).parent.name,
+            "project_name": self.output_file_stem(),
             "original_inputs": source_names,
             "exported_at": datetime.now().isoformat(timespec="seconds"),
         }
@@ -3439,11 +3536,20 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
 
     def _restore_result_images(self, archive, manifest):
+        project_name = (manifest.get("source") or {}).get("project_name")
+        if project_name:
+            self.source_dataset_name = self._safe_output_dataset_name(project_name)
+        elif not self.source_dataset_name:
+            self.source_dataset_name = "SegRef3D"
         now = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_dir = Path(os.getcwd()) / f"segonweb_result_images_{now}"
+        output_dir = Path(os.getcwd()) / self.timestamped_output_name(
+            "segonweb_result_images", now
+        )
         suffix = 1
         while output_dir.exists():
-            output_dir = Path(os.getcwd()) / f"segonweb_result_images_{now}_{suffix}"
+            output_dir = Path(os.getcwd()) / (
+                f"{self.timestamped_output_name('segonweb_result_images', now)}_{suffix}"
+            )
             suffix += 1
         output_dir.mkdir(parents=True)
 
@@ -3469,7 +3575,9 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         self.current_index = 0
         self.mask_paths.clear()
         now = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.output_mask_dir = os.path.join(os.getcwd(), f"masks_{now}")
+        self.output_mask_dir = os.path.join(
+            os.getcwd(), self.timestamped_output_name("masks", now)
+        )
         os.makedirs(self.output_mask_dir, exist_ok=True)
         for key, image_path in self.image_paths.items():
             svg_path = os.path.join(self.output_mask_dir, f"mask{key}.svg")
@@ -4141,6 +4249,9 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         if hasattr(self, "combo_delete_object"):
             with QSignalBlocker(self.combo_delete_object):
                 self.combo_delete_object.setCurrentIndex(object_index)
+        if hasattr(self, "combo_interpolation_object"):
+            with QSignalBlocker(self.combo_interpolation_object):
+                self.combo_interpolation_object.setCurrentIndex(object_index)
 
 
     def jump_to_slice(self, slice_number):
@@ -4167,6 +4278,19 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         self.btn_previous_slice.setEnabled(enabled and value > 1)
         self.btn_next_slice.setEnabled(enabled and value < frame_count)
         self.label_slice_count.setText(f"/ {frame_count}")
+        if hasattr(self, "spin_interpolation_start"):
+            previous_count = getattr(self, "_interpolation_frame_count", None)
+            for control in (self.spin_interpolation_start, self.spin_interpolation_end):
+                with QSignalBlocker(control):
+                    control.setRange(1, upper)
+                    control.setEnabled(frame_count >= 3)
+            if frame_count and previous_count != frame_count:
+                with QSignalBlocker(self.spin_interpolation_start):
+                    self.spin_interpolation_start.setValue(1)
+                with QSignalBlocker(self.spin_interpolation_end):
+                    self.spin_interpolation_end.setValue(frame_count)
+            self._interpolation_frame_count = frame_count
+            self.btn_interpolate_masks.setEnabled(frame_count >= 3)
         self._update_spatial_info()
 
 
@@ -4793,6 +4917,11 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
     def _load_nifti_volume(self, source_path):
         """Load a 3D NIfTI as editable axial slices while retaining its exact source geometry."""
         source_path = os.path.abspath(source_path)
+        if not self.source_dataset_name:
+            self.source_dataset_name = (
+                Path(source_path).parent.name
+                or self._safe_output_stem_from_name(Path(source_path).name)
+            )
         try:
             image = nib.load(source_path)
             if len(image.shape) != 3 or any(int(value) < 1 for value in image.shape):
@@ -4829,6 +4958,8 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             self.image_paths[key] = str(output_path)
             self.image_sizes[key] = (width, height)
             self.original_image_filenames[key] = f"{name}#slice={slice_index + 1}"
+
+        self.reset_autosave_label_dir()
 
         spacing = fingerprint["voxel_spacing_mm"]
         affine = np.asarray(fingerprint["affine"], dtype=float)
@@ -4875,6 +5006,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         self.batch_object_data.clear()
         self.object_label_names.clear()
         self.original_image_filenames.clear()
+        self.source_dataset_name = None
         self.source_nifti_path = None
         self.source_nifti_fingerprint = None
         self.volume_geometry = None
@@ -5014,6 +5146,8 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             folder = os.path.dirname(files[0])
             # selected_files = [os.path.basename(p) for p in files]
             selected_files = sorted((os.path.basename(p) for p in files), key=_natural_key)
+
+        self.source_dataset_name = pathlib.Path(folder).name or "SegRef3D"
 
         selected_paths = [os.path.join(folder, filename) for filename in selected_files]
         nifti_paths = [
@@ -5329,7 +5463,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
                     self.mm_per_px = float(sx) if sx is not None else None
                     self.z_spacing_mm = float(sz) if sz is not None else None
                 
-                    csv_filename = f"{input_folder.name}_volinf.csv"
+                    csv_filename = f"{self.output_file_stem()}_volinf.csv"
                     csv_path = os.path.join(os.getcwd(), csv_filename)
                     with open(csv_path, "w", newline="", encoding="utf-8") as f:
                         writer = csv.writer(f)
@@ -5466,6 +5600,8 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
                 "Files may be invalid/unsupported or all failed to parse."
             )
             return
+
+        self.reset_autosave_label_dir()
         
         
         
@@ -5475,7 +5611,9 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
  
         # 🔽 output_mask_dir を初期化
         now = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.output_mask_dir = os.path.join(os.getcwd(), f"masks_{now}")
+        self.output_mask_dir = os.path.join(
+            os.getcwd(), self.timestamped_output_name("masks", now)
+        )
         os.makedirs(self.output_mask_dir, exist_ok=True)
     
         # 🔽 空のSVGを生成して mask_paths に登録
@@ -5488,7 +5626,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         
         # === INSERT (ループの外) ===
         # 🔽 代表DICOMからボリューム情報をCSVに（可能なら）…を 1 回だけ書く
-        csv_filename = f"{input_folder.name}_volinf.csv"
+        csv_filename = f"{self.output_file_stem()}_volinf.csv"
         csv_path = os.path.join(os.getcwd(), csv_filename)
         
         
@@ -6234,53 +6372,31 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         if not root_folder:
             self.label_status.setText("Save canceled.")
             return
-    
-        label_folder = os.path.join(root_folder, "label_png")
-        preview_folder = os.path.join(root_folder, "preview_png")
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        label_folder = os.path.join(
+            root_folder, self.timestamped_output_name("label_png", timestamp)
+        )
         os.makedirs(label_folder, exist_ok=True)
-        os.makedirs(preview_folder, exist_ok=True)
-    
+
         count_label = 0
-        count_preview = 0
-    
+
         for key in sorted(self.image_paths.keys()):
             try:
                 label_mask = self.ensure_label_mask_exists(key)
-    
-                # 1) 正本の label PNG
+
                 label_dst_path = os.path.join(label_folder, f"mask{key}.png")
                 ok_label = cv2.imwrite(label_dst_path, label_mask)
                 if ok_label:
                     count_label += 1
                 else:
                     print(f"[WARN] Failed to save label PNG: {label_dst_path}")
-    
-                # 2) 閲覧用 color preview PNG
-                h, w = label_mask.shape
-                preview = np.zeros((h, w, 3), dtype=np.uint8)  # BGR
-    
-                for obj_id, (r, g, b) in enumerate(self.color_labels, start=1):
-                    mask = (label_mask == obj_id)
-                    if np.any(mask):
-                        preview[mask] = (b, g, r)
-    
-                preview_dst_path = os.path.join(preview_folder, f"preview_mask{key}.png")
-                ok_preview = cv2.imwrite(preview_dst_path, preview)
-                if ok_preview:
-                    count_preview += 1
-                else:
-                    print(f"[WARN] Failed to save preview PNG: {preview_dst_path}")
-    
+
             except Exception as e:
                 print(f"[WARN] Failed to save mask for {key}: {e}")
-    
-        # self.label_status.setText(
-        #     f"✅ Saved {count_label} label PNGs to '{label_folder}' and "
-        #     f"{count_preview} preview PNGs to '{preview_folder}'"
-        # )            
 
         self.label_status.setText(
-            f"✅ Saved {count_label} label PNGs and {count_preview} preview PNGs"
+            f"✅ Saved {count_label} label PNGs to: {label_folder}"
         )
 
 
@@ -6299,7 +6415,9 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             return
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_dir = os.path.join(root_folder, f"overlay_png_{timestamp}")
+        output_dir = os.path.join(
+            root_folder, self.timestamped_output_name("overlay_png", timestamp)
+        )
         os.makedirs(output_dir, exist_ok=True)
 
         alpha = 77 / 255.0
@@ -6517,6 +6635,17 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
     def eventFilter(self, source, event):
 
         if event.type() == event.Type.KeyPress:
+            focus = QApplication.focusWidget()
+            for candidate in (source, focus):
+                widget = candidate
+                while widget is not None:
+                    if isinstance(
+                        widget,
+                        (QLineEdit, QTextEdit, QPlainTextEdit, QAbstractSpinBox),
+                    ) or (isinstance(widget, QComboBox) and widget.isEditable()):
+                        return super().eventFilter(source, event)
+                    widget = widget.parentWidget() if hasattr(widget, "parentWidget") else None
+
             key = event.key()
         
             if key in (Qt.Key.Key_PageDown, Qt.Key.Key_F, Qt.Key.Key_J):
@@ -6958,15 +7087,15 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             )
         self._set_volume_geometry(geometry)
     
-        input_folder_name = Path(self.image_paths.get("0001") or list(self.image_paths.values())[0]).parent.name
-        csv_filename = f"{input_folder_name}_volinf.csv"
+        output_stem = self.output_file_stem()
+        csv_filename = f"{output_stem}_volinf.csv"
         csv_path = Path(self.output_mask_dir).parent / csv_filename
 
         try:
             self._write_volinfo_csv(csv_path, geometry)
         except PermissionError:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            fallback_filename = f"{input_folder_name}_volinf_{timestamp}.csv"
+            fallback_filename = f"{output_stem}_volinf_{timestamp}.csv"
             fallback_path = Path(self.output_mask_dir).parent / fallback_filename
             self._write_volinfo_csv(fallback_path, geometry)
             csv_path = fallback_path
@@ -8549,7 +8678,9 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             return
     
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_dir = os.path.join(os.getcwd(), f"tiff_output_{timestamp}")
+        output_dir = os.path.join(
+            os.getcwd(), self.timestamped_output_name("tiff_output", timestamp)
+        )
         os.makedirs(output_dir, exist_ok=True)
     
         exported_count = 0
@@ -8568,7 +8699,9 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
                 for obj_id, gray_value in enumerate(grayscale_values, start=1):
                     gray_img[label_mask == obj_id] = gray_value
     
-                save_path = os.path.join(output_dir, f"mask{key}.tiff")
+                save_path = os.path.join(
+                    output_dir, f"{self.output_file_stem()}_mask{key}.tiff"
+                )
                 ok = cv2.imwrite(save_path, gray_img)
                 if ok:
                     print(f"[SAVED] {save_path}")
@@ -8700,7 +8833,9 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         reversed_keys = list(reversed(keys))
     
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_dir = os.path.join(os.getcwd(), f"tiff_output_reversed_{timestamp}")
+        output_dir = os.path.join(
+            os.getcwd(), self.timestamped_output_name("tiff_output_reversed", timestamp)
+        )
         os.makedirs(output_dir, exist_ok=True)
     
         exported_count = 0
@@ -8719,7 +8854,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
                 for obj_id, gray_value in enumerate(grayscale_values, start=1):
                     gray_img[label_mask == obj_id] = gray_value
     
-                save_filename = f"mask{i+1:04}.tiff"
+                save_filename = f"{self.output_file_stem()}_mask{i+1:04}.tiff"
                 save_path = os.path.join(output_dir, save_filename)
     
                 ok = cv2.imwrite(save_path, gray_img)
@@ -8991,11 +9126,14 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             img_nii.header["descrip"] = description.encode("ascii")
 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            out_dir = os.path.join(os.getcwd(), f"nifti_output_{timestamp}")
+            out_dir = os.path.join(
+                os.getcwd(), self.timestamped_output_name("nifti_output", timestamp)
+            )
             os.makedirs(out_dir, exist_ok=True)
             factor_suffix = "" if factor == 1 else f"_{factor}x"
             out_path = os.path.join(
-                out_dir, f"segref3d_labelmap{factor_suffix}.nii.gz"
+                out_dir,
+                f"{self.output_file_stem()}_segref3d_labelmap{factor_suffix}.nii.gz",
             )
             nib.save(img_nii, out_path)
 
@@ -9244,9 +9382,13 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         hdr['descrip'] = b'SegRef3D labelmap (1-20); 0=background; Z reversed'
     
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        out_dir = os.path.join(os.getcwd(), f"nifti_output_{timestamp}")
+        out_dir = os.path.join(
+            os.getcwd(), self.timestamped_output_name("nifti_output", timestamp)
+        )
         os.makedirs(out_dir, exist_ok=True)
-        out_path = os.path.join(out_dir, "segref3d_labelmap_revZ.nii.gz")
+        out_path = os.path.join(
+            out_dir, f"{self.output_file_stem()}_segref3d_labelmap_revZ.nii.gz"
+        )
     
         nib.save(img_nii, out_path)
         # self.label_status.setText(
@@ -9279,6 +9421,13 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         self.mask_postprocessing_dialog.show()
         self.mask_postprocessing_dialog.raise_()
         self.mask_postprocessing_dialog.activateWindow()
+
+    def interpolate_masks_from_panel(self):
+        self.interpolate_masks_between_frames({
+            "object_id": int(self.combo_interpolation_object.currentData()),
+            "start_frame": self.spin_interpolation_start.value(),
+            "end_frame": self.spin_interpolation_end.value(),
+        })
 
     def _commit_mask_transaction(self, changes, status_text):
         if not changes:
@@ -10159,7 +10308,9 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         height, width = first_mask.shape
     
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_dir = os.path.join(os.getcwd(), f"stl_output_{timestamp}")
+        output_dir = os.path.join(
+            os.getcwd(), self.timestamped_output_name("stl_output", timestamp)
+        )
         os.makedirs(output_dir, exist_ok=True)
     
         # ✅ チェックされているオブジェクトだけ対象
@@ -10281,7 +10432,10 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             else:
                 print("[INFO] Mesh smoothing skipped")
     
-            stl_path = os.path.join(output_dir, f"object_{color_idx + 1:02}.stl")
+            stl_path = os.path.join(
+                output_dir,
+                f"{self.output_file_stem()}_object_{color_idx + 1:02}.stl",
+            )
             mesh.export(stl_path)
             print(f"[SAVED] {stl_path}")
     
@@ -10292,30 +10446,21 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
     
         # ========= プレビュー =========
         try:
-            base_dir = os.getcwd()
-            stl_dirs = [d for d in os.listdir(base_dir) if d.startswith("stl_output_")]
-            if stl_dirs:
-                latest_dir = max(stl_dirs, key=lambda d: os.path.getmtime(os.path.join(base_dir, d)))
-                stl_dir_path = os.path.join(base_dir, latest_dir)
-    
-                stl_files = [
-                    os.path.join(stl_dir_path, f)
-                    for f in os.listdir(stl_dir_path)
-                    if f.lower().endswith(".stl")
-                ]
-    
-                if stl_files:
-                    dlg = STLPreviewDialog(
-                        parent=self,
-                        stl_paths=stl_files,
-                        color_labels=self.color_labels
-                    )
-                    dlg.exec()
-                    self.label_status.setText(f"✅ Preview opened for {len(stl_files)} STL files")
-                else:
-                    self.label_status.setText("⚠ No STL files found in latest output folder.")
+            stl_files = [
+                os.path.join(output_dir, filename)
+                for filename in os.listdir(output_dir)
+                if filename.lower().endswith(".stl")
+            ]
+            if stl_files:
+                dlg = STLPreviewDialog(
+                    parent=self,
+                    stl_paths=stl_files,
+                    color_labels=self.color_labels
+                )
+                dlg.exec()
+                self.label_status.setText(f"✅ Preview opened for {len(stl_files)} STL files")
             else:
-                self.label_status.setText("⚠ No stl_output_* folder found.")
+                self.label_status.setText("⚠ No STL files were generated.")
         except Exception as e:
             self.label_status.setText(f"⚠ Failed to open preview: {e}")
 
@@ -10632,7 +10777,10 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         # 3. CSV output
         # =========================
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_csv = os.path.join(os.getcwd(), f"measurement_output_{timestamp}.csv")
+        output_csv = os.path.join(
+            os.getcwd(),
+            f"{self.output_file_stem()}_measurement_output_{timestamp}.csv",
+        )
     
         with open(output_csv, 'w', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)

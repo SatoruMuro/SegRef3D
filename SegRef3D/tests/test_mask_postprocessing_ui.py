@@ -3,6 +3,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 from PIL import Image
@@ -118,6 +119,25 @@ class MaskPostProcessingUiTests(unittest.TestCase):
         self.window.smart_undo()
         self.assertTrue(all(not np.any(self.window.label_masks[key] == 1) for key in ("0002", "0003", "0004")))
         self.assertEqual(self.window.label_masks["0003"][10, 14], 2)
+
+    def test_inline_interpolation_controls_follow_loaded_frames_and_target(self):
+        self.window._sync_slice_navigation()
+        self.assertEqual(self.window.spin_interpolation_start.maximum(), 5)
+        self.assertEqual(self.window.spin_interpolation_start.value(), 1)
+        self.assertEqual(self.window.spin_interpolation_end.value(), 5)
+        self.assertTrue(self.window.btn_interpolate_masks.isEnabled())
+
+        self.window.set_target_object(2)
+        self.assertEqual(self.window.combo_interpolation_object.currentData(), 3)
+        self.window.spin_interpolation_start.setValue(2)
+        self.window.spin_interpolation_end.setValue(4)
+        with patch.object(self.window, "interpolate_masks_between_frames") as interpolate:
+            self.window.interpolate_masks_from_panel()
+        interpolate.assert_called_once_with({
+            "object_id": 3,
+            "start_frame": 2,
+            "end_frame": 4,
+        })
 
 
 if __name__ == "__main__":
