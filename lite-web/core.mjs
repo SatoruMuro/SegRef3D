@@ -38,6 +38,21 @@ export function sanitizeFilename(name) {
   return cleaned || "untitled";
 }
 
+export function sourceFilenameStem(name) {
+  const source = String(name || "").split("#", 1)[0].replaceAll("\\", "/").split("/").at(-1) || "";
+  const withoutExtension = source.toLowerCase().endsWith(".nii.gz")
+    ? source.slice(0, -7)
+    : source.replace(/\.[^.]+$/, "");
+  if (!withoutExtension.trim()) return "SegRef3D";
+  const cleaned = sanitizeFilename(withoutExtension).replace(/[ .]+$/g, "").slice(0, 96);
+  return cleaned || "SegRef3D";
+}
+
+export function datasetNameStem(name) {
+  const cleaned = sanitizeFilename(String(name || "")).replace(/[ .]+$/g, "").slice(0, 96);
+  return !cleaned || cleaned === "untitled" || cleaned === "No project" ? "SegRef3D" : cleaned;
+}
+
 export function timestamp(date = new Date()) {
   const pad = (value) => String(value).padStart(2, "0");
   return [

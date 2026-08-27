@@ -171,8 +171,8 @@
             </span>
           </label>
           <div class="mode-control" aria-label="Draw mode">
-            <button type="button" data-mode="free" class="selected" disabled>Free</button>
-            <button type="button" data-mode="click" title="Left-click points, then right-click the final point to close" disabled>Click</button>
+            <button type="button" data-mode="free" disabled>Free</button>
+            <button type="button" data-mode="click" class="selected" title="Left-click points, then right-click the final point to close" disabled>Click</button>
             <button type="button" data-mode="snap" title="Left-click points, then right-click the final point to close" disabled>Snap</button>
           </div>
         </div>
@@ -289,7 +289,7 @@
           <div id="zoom-readout" class="zoom-readout" hidden>100%</div>
           <div id="editing-state" class="editing-state" hidden>
             <strong id="editing-object">Obj 1</strong>
-            <span id="editing-mode">FREE · ADD</span>
+            <span id="editing-mode">CLICK · ADD</span>
           </div>
           <div id="loading-overlay" class="loading-overlay" hidden>
             <div class="spinner"></div>
@@ -550,7 +550,7 @@
           </li>
           <li>
             <span class="workflow-step-number">2</span>
-            <div><strong>Create Input ZIP</strong><span><code>segonweb_input.zip</code> includes the working image sequence and Seg Anything job settings. It stays local until you upload it in Colab.</span></div>
+            <div><strong>Create Input ZIP</strong><span><code>&lt;source-folder&gt;_segonweb_input.zip</code> includes the working image sequence and Seg Anything job settings. It stays local until you upload it in Colab.</span></div>
             <button id="export-segonweb" class="command-button" type="button" disabled>Create Input ZIP</button>
           </li>
           <li>
@@ -595,7 +595,7 @@
             <a id="instant3d-open" class="command-button" href="https://satorumuro.github.io/SegRef3D/ColabNotebooks/segctmri.html" target="_blank" rel="noopener noreferrer">Open Seg CT/MRI</a>
             <button id="instant3d-import" class="command-button" type="button" disabled>Import Result ZIP</button>
           </div>
-          <p class="instant3d-privacy"><code>instant3d_request.zip</code> contains the source NIfTI volume and job settings. It stays in your browser until you explicitly upload it to your own Google Colab runtime.</p>
+          <p class="instant3d-privacy"><code>&lt;source-folder&gt;_instant3d_request.zip</code> contains the source NIfTI volume and job settings. It stays in your browser until you explicitly upload it to your own Google Colab runtime.</p>
           <input id="instant3d-result-input" class="visually-hidden" type="file" accept="application/zip,.zip" />
         </section>
         <input id="segonweb-result-input" class="visually-hidden" type="file" accept="application/zip,.zip" />
@@ -639,7 +639,7 @@
         </div>
         <div class="local-file-dialog-copy">
           <p>SegRef3D Lite Web normally processes images locally in your browser.</p>
-          <p>Seg Anything is different: <code>segonweb_input.zip</code> contains the working image sequence and must be uploaded to your Google Colab runtime for SAM-based processing.</p>
+          <p>Seg Anything is different: <code>&lt;source-folder&gt;_segonweb_input.zip</code> contains the working image sequence and must be uploaded to your Google Colab runtime for SAM-based processing.</p>
           <p>Your images are not uploaded to a SegRef3D-operated server.</p>
         </div>
         <div class="local-file-assurance cloud-assurance">
@@ -1081,7 +1081,7 @@
       });
     </script>
     <script type="module">
-      import("./app.mjs?v=33").catch((error) => {
+      import("./app.mjs?v=36").catch((error) => {
         console.error("Application module failed to load", error);
         const status = document.querySelector("#status-text");
         if (status) status.textContent = `Application startup failed: ${error.message}`;

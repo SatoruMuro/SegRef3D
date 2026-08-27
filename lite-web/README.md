@@ -2,6 +2,9 @@
 
 Browser-based, local-first image mask editor derived from the non-SAM2 workflow in SegRef3D.
 
+Generated export names use the loaded source folder name as their prefix, so datasets remain easy to
+distinguish after download. A directly loaded single-file volume uses its displayed project name instead.
+
 Public beta: <https://satorumuro.github.io/SegRef3D/lite-web/>
 
 ## Workspace
@@ -87,9 +90,9 @@ do not endorse SegRef3D. The approximately 20 MB demo volume is fetched only whe
 - Use the Objects panel as the current-target selector, with visibility, rename, relabel, merge,
   and object-only clear actions
 - Configure one tracking range and multiple box-prompt keyframes per Seg Anything object
-- Export `segonweb_input.zip` and import the complete `segref3d_result.zip` returned by Colab
+- Export `<source-folder>_segonweb_input.zip` and import the complete `segref3d_result.zip` returned by Colab
 - Select open-license TotalSegmentator structures, map them to Obj 1-20, and exchange validated
-  `instant3d_request.zip` / `instant3d_result.zip` archives with Seg CT/MRI
+  `<source-folder>_instant3d_request.zip` / `instant3d_result.zip` archives with Seg CT/MRI
 - Plain wheel image navigation, Ctrl/Command+wheel zoom, Shift+wheel horizontal pan
 - Middle-button drag and WASD/arrow-key canvas pan
 - Label visibility controls
@@ -115,12 +118,14 @@ do not endorse SegRef3D. The approximately 20 MB demo volume is fetched only whe
 - Mask autosave uses browser-local IndexedDB storage.
 - Label PNG, overlay, Project ZIP, NIfTI, TIFF, CSV, and STL exports are generated locally and
   downloaded directly to the user's device.
+- Download names use the first loaded image filename as a prefix. Standard sequence names such
+  as `mask0001.png` remain unchanged inside ZIP archives for import compatibility.
 - Lite Web does not operate an image-upload API, analytics pipeline, or telemetry service.
 
 Seg Anything and Seg CT/MRI are the explicit exceptions to this browser-local workflow. They are
 separate Google Colab workflows. Seg Anything provides SAM-based segmentation for user-specified
 structures. Seg CT/MRI provides automatic anatomical segmentation with TotalSegmentator.
-The generated `segonweb_input.zip` includes the working image sequence and Seg Anything job
+The generated `<source-folder>_segonweb_input.zip` includes the working image sequence and Seg Anything job
 settings. The Seg CT/MRI request ZIP includes the source NIfTI. The user explicitly uploads these
 files to their own Google Colab runtime; SegRef3D does not operate an intermediate image-upload
 server. Institutional research-data or privacy rules may restrict uploading research or medical
@@ -197,7 +202,7 @@ replacing masks.
 3. Search the shared open-license ROI catalog and map each selected structure to Obj 1-20.
 4. Choose **Create Request ZIP** and confirm the Google Colab data-flow notice.
 5. Open [Seg CT/MRI](https://satorumuro.github.io/SegRef3D/ColabNotebooks/segctmri.html).
-6. Upload `instant3d_request.zip` to your own Colab runtime and run the notebook.
+6. Upload `<source-folder>_instant3d_request.zip` to your own Colab runtime and run the notebook.
 7. Download `instant3d_result.zip`, then choose **Import Result ZIP** in Lite Web.
 8. Select Replace or Merge when target objects already contain labels, then refine the masks.
 

@@ -4,6 +4,7 @@ import {
   applyRasterToMask,
   combineLabelMasks,
   createProjectId,
+  datasetNameStem,
   fitViewport,
   maskFilename,
   naturalCompare,
@@ -11,10 +12,24 @@ import {
   rgbaToLabelMask,
   resizeLabelMaskNearest,
   screenToImage,
+  sourceFilenameStem,
   transferLabel,
   traceRegionPath,
   zoomAroundPoint,
 } from "../core.mjs";
+
+test("source filename stems are safe and preserve the first image identity", () => {
+  assert.equal(sourceFilenameStem("image0001.jpg"), "image0001");
+  assert.equal(sourceFilenameStem("Rabbit CT.nii.gz#slice=1"), "Rabbit CT");
+  assert.equal(sourceFilenameStem('bad:name?.png'), "bad_name_");
+  assert.equal(sourceFilenameStem(""), "SegRef3D");
+});
+
+test("dataset name stems preserve the loaded folder name", () => {
+  assert.equal(datasetNameStem("Study Folder.v1"), "Study Folder.v1");
+  assert.equal(datasetNameStem('bad:name?'), "bad_name_");
+  assert.equal(datasetNameStem("No project"), "SegRef3D");
+});
 
 test("smooth closed regions use a curve through every anchor point", () => {
   const calls = [];

@@ -22,6 +22,14 @@ test("top commands and drawing scope are simplified without removing legacy cont
   assert.match(ui, /legacy\.append\(undoLine, redoLine, undoEdit, redoEdit/);
 });
 
+test("Click is the default drawing mode", async () => {
+  const [html, app] = await Promise.all([read("index.html"), read("app.mjs")]);
+  assert.match(html, /data-mode="click" class="selected"/);
+  assert.doesNotMatch(html, /data-mode="free" class="selected"/);
+  assert.match(html, /id="editing-mode">CLICK · ADD</);
+  assert.match(app, /drawMode: "click"/);
+});
+
 test("slice navigation and unified history route through one public control set", async () => {
   const app = await read("app.mjs");
   assert.match(app, /function jumpToSlice\(sliceNumber\)/);

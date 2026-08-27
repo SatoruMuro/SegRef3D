@@ -5,6 +5,7 @@ import {
   colorToRgb,
   combineLabelMasks,
   createProjectId,
+  datasetNameStem,
   fitViewport,
   labelPixelCounts,
   maskFilename,
@@ -15,13 +16,12 @@ import {
   pointInsideImage,
   rgbaToLabelMask,
   resizeLabelMaskNearest,
-  sanitizeFilename,
   screenToImage,
   timestamp,
   traceRegionPath,
   transferLabel,
   zoomAroundPoint,
-} from "./core.mjs?v=25";
+} from "./core.mjs?v=27";
 import {
   decodeDicomSeries,
   groupDicomSeries,
@@ -353,7 +353,7 @@ const state = {
   penColor: "#808080",
   visibleLabels: Array.from({ length: 21 }, (_, index) => index === 1),
   objectNames: Array.from({ length: 21 }, (_, label) => label === 0 ? "" : `Object ${label}`),
-  drawMode: "free",
+  drawMode: "click",
   autoApplyMode: "off",
   viewport: { zoom: 1, panX: 0, panY: 0 },
   pointer: {
@@ -401,6 +401,10 @@ const context = elements.canvas.getContext("2d", { alpha: false });
 
 function currentImage() {
   return state.index >= 0 ? state.images[state.index] : null;
+}
+
+function outputFileStem() {
+  return datasetNameStem(state.projectName);
 }
 
 function setStatus(message) {
@@ -541,9 +545,10 @@ async function exportInstant3DRequest() {
       catalog: state.instant3dCatalog,
       fast: elements.instant3dFast.checked,
     });
-    downloadBlob(await createZip(entries), "instant3d_request.zip");
+    const filename = `${outputFileStem()}_instant3d_request.zip`;
+    downloadBlob(await createZip(entries), filename);
     setStatus(`Seg CT/MRI request created: ${manifest.objects.length} structure(s).`);
-    showToast("Downloaded instant3d_request.zip");
+    showToast(`Downloaded ${filename}`);
   } catch (error) {
     console.error(error);
     setStatus(`Seg CT/MRI export failed: ${error.message}`);
@@ -1780,7 +1785,7 @@ function exportVolInfoCsv({ automatic = false } = {}) {
   try {
     updateCalibrationFromControls();
     const info = currentVolInfo();
-    const filename = `${sanitizeFilename(state.projectName)}_volinf.csv`;
+    const filename = `${outputFileStem()}_volinf.csv`;
     downloadBlob(
       new Blob([createVolInfoCsv(info)], { type: "text/csv;charset=utf-8" }),
       filename,
@@ -1980,7 +1985,7 @@ async function renderVolumeStatistics() {
 function exportVolumeStatisticsCsv() {
   try {
     const statistics = statisticsForCurrentVolume();
-    const filename = `${sanitizeFilename(state.projectName)}_Volume_Statistics_${timestamp()}.csv`;
+    const filename = `${outputFileStem()}_Volume_Statistics_${timestamp()}.csv`;
     downloadBlob(new Blob([createVolumeStatisticsCsv(statistics)], { type: "text/csv;charset=utf-8" }), filename);
     setStatus(`Exported volume statistics for ${statistics.rows.length} object(s).`);
     showToast(`Downloaded ${filename}`);
@@ -2249,7 +2254,7 @@ async function exportSequence(kind) {
     elements.loadingDetail.textContent = "Creating ZIP";
     const zip = await createZip(entries);
     const prefix = kind === "labels" ? "label_png" : "overlay_png";
-    const filename = `${prefix}_${timestamp()}.zip`;
+    const filename = `${outputFileStem()}_${prefix}_${timestamp()}.zip`;
     downloadBlob(zip, filename);
     setStatus(`Exported ${entries.length} ${kind === "labels" ? "label" : "overlay"} PNGs.`);
     showToast(`Downloaded ${filename}`);
@@ -2315,7 +2320,7 @@ async function exportLabelVolume(format, factor = 1) {
     const mimeType = format === "nifti" ? "application/octet-stream" : "image/tiff";
     const factorSuffix = format === "nifti" && scale > 1 ? `_${scale}x` : "";
     const volumeName = format === "nifti" ? "labelmap" : "labels";
-    const filename = `${sanitizeFilename(state.projectName)}_${volumeName}${factorSuffix}_${timestamp()}.${extension}`;
+    const filename = `${outputFileStem()}_${volumeName}${factorSuffix}_${timestamp()}.${extension}`;
     downloadBlob(new Blob([bytes], { type: mimeType }), filename);
     const geometryNote = format === "nifti"
       ? ` with ${geometry.sourceKind === "axis-aligned-fallback" ? "axis-aligned fallback" : "source image"} geometry`
@@ -2391,7 +2396,7 @@ async function buildStlMeshData(progress = () => {}) {
       meshes.push({
         label,
         factor,
-        name: `obj${String(label).padStart(2, "0")}_${factor}x.stl`,
+        name: `${outputFileStem()}_obj${String(label).padStart(2, "0")}_${factor}x.stl`,
         triangles,
       });
     }
@@ -2489,7 +2494,7 @@ async function exportStlMeshes() {
       showToast(`Downloaded ${entries[0].name}`);
     } else {
       elements.loadingDetail.textContent = "Creating STL ZIP";
-      const filename = `${sanitizeFilename(state.projectName)}_STL_${factor}x_${timestamp()}.zip`;
+      const filename = `${outputFileStem()}_STL_${factor}x_${timestamp()}.zip`;
       downloadBlob(await createZip(entries), filename);
       showToast(`Downloaded ${filename}`);
     }
@@ -3015,7 +3020,7 @@ async function exportProjectZip() {
     }
     elements.loadingDetail.textContent = "Creating ZIP";
     const zip = await createZip(entries);
-    const filename = `${sanitizeFilename(state.projectName)}_SegRef3D_Project_${timestamp()}.zip`;
+    const filename = `${outputFileStem()}_SegRef3D_Project_${timestamp()}.zip`;
     downloadBlob(zip, filename);
     setStatus(`Exported project ZIP with ${state.images.length} label mask(s).`);
     showToast(`Downloaded ${filename}`);
@@ -3400,9 +3405,10 @@ async function exportSegmentationJob() {
       await new Promise((resolve) => setTimeout(resolve, 0));
     }
     elements.loadingDetail.textContent = "Creating ZIP";
-    downloadBlob(await createZip(entries), "segonweb_input.zip");
+    const filename = `${outputFileStem()}_segonweb_input.zip`;
+    downloadBlob(await createZip(entries), filename);
     setStatus(`Exported Seg Anything job: ${state.images.length} images, ${state.segmentationJobs.length} object(s).`);
-    showToast("Downloaded segonweb_input.zip");
+    showToast(`Downloaded ${filename}`);
   } catch (error) {
     console.error(error);
     setStatus(`Seg Anything export failed: ${error.message}`);
