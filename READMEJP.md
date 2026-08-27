@@ -31,6 +31,7 @@ SegRef3Dの基本的な操作手順をご覧いただける動画を掲載して
 * 🗈 間引き機能（N枚に1枚のみ保持）
 * 🧲 出力機能：
 
+  * 元画像geometryを保持するNIfTI Labelmap（Original / slice方向5x / 10x補間）
   * グレースケールTIFF（昇順／降順）
   * mmスケーリング済みオブジェクト別 3D STL 出力
   * オブジェクトごとの体積CSV出力
@@ -46,16 +47,18 @@ Lite版のマスク編集の主要ワークフローを、Windows、macOS、Linu
 - JPG/PNG、DICOM、NIfTIの読み込みと20オブジェクトのラベル編集
 - Free / Click / Snap描画、Auto Add / Erase / Transfer、Threshold / RGB抽出、Undo / Redo
 - Window/Level、明るさ・コントラスト、基準線キャリブレーション、VolInfo CSV
-- ラベルPNG、overlay PNG、NIfTI、TIFF、1x/5x/10x補間STLの出力
+- ラベルPNG、overlay PNG、Original/5x/10x NIfTI Labelmap、TIFF、補間STLの出力
 - DICOM/NIfTI由来のIJK→RAS physical geometryをNIfTIマスクへ保持（旧VolInfo CSVも読込可能）
 - 複数objectのSeg Anything job設定、`segonweb_input.zip`出力、`segref3d_result.zip`復元
 - ブラウザ自動保存、Project ZIP、マウス/キーボード操作、モバイル対応UI
 
 SAM2本体はブラウザ内では動作しません。Lite Webの**Seg Anything**でBox Prompt、Prompt Frame、Tracking Rangeを設定し、明示的にGoogle Colabへjob ZIPをuploadした場合だけ画像が外部へ送信されます。その他の編集・抽出・出力処理はブラウザ内で完結します。
 
-NIfTIマスク出力は、取得できる場合に元DICOM/NIfTIの患者座標geometryを保持します。TIFFは
-マスク画素を保持しますが、完全な3D患者座標を確実には保持できません。3D Slicer等で元画像へ
-位置合わせして使用する場合はNIfTIを利用してください。
+NIfTI Labelmap出力は、取得できる場合に元DICOM/NIfTIの患者座標geometryを保持します。
+5x/10xはslice方向のみsigned-distance補間し、元annotation sliceと最初/最後の物理位置を保持します。
+3D Slicerではファイル種類を **Segmentation** として読み込むと、ラベルを個別segmentとして
+取り込めます。TIFFはマスク画素を保持しますが完全な3D患者座標は保持しないため、
+元画像へ位置合わせして使用する場合はNIfTI Labelmapを利用してください。
 
 ## AI支援セグメンテーション
 

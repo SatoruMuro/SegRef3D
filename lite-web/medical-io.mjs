@@ -1,6 +1,6 @@
 import * as nifti from "./vendor/nifti-reader.js";
 import UTIF from "./vendor/utif.module.js";
-import { dicomSeriesGeometry, makeVolumeGeometry } from "./medical-geometry.mjs?v=1";
+import { dicomSeriesGeometry, makeVolumeGeometry } from "./medical-geometry.mjs?v=2";
 
 const DICOM_UID = Object.freeze({
   implicitLittle: "1.2.840.10008.1.2",

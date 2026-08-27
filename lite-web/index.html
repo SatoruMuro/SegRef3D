@@ -9,9 +9,10 @@
     />
     <meta name="theme-color" content="#f4f5f6" />
     <title>SegRef3D Lite Web</title>
-    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="./favicon.ico" sizes="any" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
     <link rel="manifest" href="./manifest.webmanifest" />
-    <link rel="stylesheet" href="./styles.css?v=31" />
+    <link rel="stylesheet" href="./styles.css?v=32" />
   </head>
   <body>
     <svg class="svg-defs" aria-hidden="true">
@@ -75,7 +76,7 @@
     <div id="app" class="app-shell">
       <header class="app-header">
         <div class="brand-lockup">
-          <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+          <img class="brand-icon" src="./icon-192.png" alt="" aria-hidden="true" />
           <div>
             <strong>SegRef3D</strong>
             <span>Lite Web <b>Beta</b></span>
@@ -242,7 +243,9 @@
               <span class="menu-heading">Project</span>
               <button id="export-project" type="button" role="menuitem" disabled>Project ZIP</button>
               <span class="menu-heading">Volumes</span>
-              <button id="export-menu-nifti" type="button" role="menuitem" disabled>NIfTI</button>
+              <button id="export-menu-nifti" type="button" role="menuitem" disabled>NIfTI Labelmap</button>
+              <button id="export-menu-nifti-5x" type="button" role="menuitem" disabled>NIfTI Labelmap (5x)</button>
+              <button id="export-menu-nifti-10x" type="button" role="menuitem" disabled>NIfTI Labelmap (10x)</button>
               <button id="export-menu-tiff" type="button" role="menuitem" disabled>TIFF</button>
               <button id="export-menu-statistics" type="button" role="menuitem" disabled>Volume Statistics CSV</button>
               <span class="menu-heading">3D</span>
@@ -989,9 +992,19 @@
           </div>
           <div class="volume-export-group">
             <h3>Label volume</h3>
+            <p class="volume-export-note">
+              Preserves source CT/MRI geometry. In 3D Slicer, load as
+              <strong>Segmentation</strong> to import labels as separate segments.
+            </p>
             <div class="tool-actions">
               <button id="export-nifti" class="command-button" type="button">
-                <svg><use href="#i-download"></use></svg><span>Export NIfTI</span>
+                <svg><use href="#i-download"></use></svg><span>Export NIfTI Labelmap</span>
+              </button>
+              <button id="export-nifti-5x" class="command-button" type="button">
+                <svg><use href="#i-download"></use></svg><span>NIfTI Labelmap (5x)</span>
+              </button>
+              <button id="export-nifti-10x" class="command-button" type="button">
+                <svg><use href="#i-download"></use></svg><span>NIfTI Labelmap (10x)</span>
               </button>
               <button id="export-tiff" class="command-button" type="button">
                 <svg><use href="#i-download"></use></svg><span>Export TIFF</span>
@@ -1068,7 +1081,7 @@
       });
     </script>
     <script type="module">
-      import("./app.mjs?v=32").catch((error) => {
+      import("./app.mjs?v=33").catch((error) => {
         console.error("Application module failed to load", error);
         const status = document.querySelector("#status-text");
         if (status) status.textContent = `Application startup failed: ${error.message}`;

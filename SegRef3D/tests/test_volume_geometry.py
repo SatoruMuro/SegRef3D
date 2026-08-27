@@ -17,6 +17,7 @@ from volume_geometry import (  # noqa: E402
     dicom_datasets_to_geometry,
     nifti_image_with_geometry,
     reverse_axis_affine,
+    upsample_geometry_along_k,
 )
 
 
@@ -141,6 +142,33 @@ class VolumeGeometryTests(unittest.TestCase):
             expected = affine @ [3, 4, original_k, 1]
             actual = reversed_affine @ [3, 4, new_k, 1]
             np.testing.assert_allclose(actual, expected, atol=1e-10)
+
+    def test_k_upsampling_preserves_oblique_physical_extent(self):
+        spacing = np.array([0.6875, 0.6875, 3.75])
+        direction = np.array([
+            [-0.9998, -0.0095, 0.0149],
+            [-0.0153, 0.0501, -0.9986],
+            [0.0087, -0.9987, -0.0502],
+        ])
+        direction /= np.linalg.norm(direction, axis=0, keepdims=True)
+        affine = np.eye(4)
+        affine[:3, :3] = direction * spacing[np.newaxis, :]
+        affine[:3, 3] = [100.076588, 23.749557, 137.329995]
+        source = VolumeGeometry((320, 320, 25), affine, "pelvic-mri")
+
+        five = upsample_geometry_along_k(source, 5)
+        ten = upsample_geometry_along_k(source, 10)
+
+        self.assertEqual(five.shape, (320, 320, 121))
+        self.assertEqual(ten.shape, (320, 320, 241))
+        np.testing.assert_allclose(five.spacing, [0.6875, 0.6875, 0.75], atol=1e-10)
+        np.testing.assert_allclose(ten.spacing, [0.6875, 0.6875, 0.375], atol=1e-10)
+        np.testing.assert_allclose(five.affine_ras[:3, :2], affine[:3, :2], atol=1e-12)
+        np.testing.assert_allclose(ten.affine_ras[:3, :2], affine[:3, :2], atol=1e-12)
+        for i, j, k in ((0, 0, 0), (17, 29, 12), (319, 319, 24)):
+            expected = affine @ [i, j, k, 1]
+            np.testing.assert_allclose(five.affine_ras @ [i, j, k * 5, 1], expected, atol=1e-10)
+            np.testing.assert_allclose(ten.affine_ras @ [i, j, k * 10, 1], expected, atol=1e-10)
 
 
 if __name__ == "__main__":

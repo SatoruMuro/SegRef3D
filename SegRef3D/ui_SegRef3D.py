@@ -50,8 +50,10 @@ class Ui_MainWindow:
         self.btn_load_masks = QPushButton("Load Masks")
         self.btn_save_svg_as = QPushButton("Save Masks")
         
-        self.btn_export_nifti = QPushButton("Export NIfTI")  # ← 新規追加！
-        self.btn_export_nifti_reversed = QPushButton("Export NIfTI (Reversed)")
+        self.btn_export_nifti = QPushButton("Export NIfTI Labelmap")
+        self.btn_export_nifti_5x = QPushButton("NIfTI Labelmap (5x)")
+        self.btn_export_nifti_10x = QPushButton("NIfTI Labelmap (10x)")
+        self.btn_export_nifti_reversed = QPushButton("NIfTI Labelmap (Reversed)")
         self.btn_export_tiff = QPushButton("Export TIFF")
         # self.btn_export_grayscale_png = QPushButton("Export PNG")   
         self.btn_export_tiff_reversed = QPushButton("Export TIFF (Reversed)")
@@ -100,7 +102,9 @@ class Ui_MainWindow:
         button_layout1.addWidget(self.btn_load_masks)
         button_layout1.addWidget(self.btn_save_svg_as)
         
-        button_layout1.addWidget(self.btn_export_nifti)          # ← TIFFの左隣に追加！
+        button_layout1.addWidget(self.btn_export_nifti)
+        button_layout1.addWidget(self.btn_export_nifti_5x)
+        button_layout1.addWidget(self.btn_export_nifti_10x)
         button_layout1.addWidget(self.btn_export_nifti_reversed)
         button_layout1.addWidget(self.btn_export_tiff)
         # button_layout1.addWidget(self.btn_export_grayscale_png)
@@ -743,6 +747,8 @@ class Ui_MainWindow:
             ],
             "Export NIfTI / TIFF": [
                 self.btn_export_nifti,
+                self.btn_export_nifti_5x,
+                self.btn_export_nifti_10x,
                 self.btn_export_nifti_reversed,
                 self.btn_export_tiff,
                 self.btn_export_tiff_reversed,
@@ -1274,6 +1280,8 @@ class Ui_MainWindow:
         self.btn_export_stl_colorwise.setProperty("primary", True)
         export_layout.addWidget(group("Data Export", [
             self.btn_export_nifti,
+            self.btn_export_nifti_5x,
+            self.btn_export_nifti_10x,
             self.btn_export_tiff,
             self.btn_export_overlay_png,
         ]))
@@ -1406,7 +1414,21 @@ class Ui_MainWindow:
         self.btn_run_tracking.setToolTip("Propagate the box-prompt mask through the selected range.")
         self.combo_smooth_mode.setToolTip("Choose Z interpolation, mesh smoothing, both, or neither.")
         self.combo_smooth_level.setToolTip("Set the mesh smoothing strength for 3D export.")
-        self.btn_export_nifti_reversed.setToolTip("Export the label volume with reversed slice order.")
+        self.btn_export_nifti.setToolTip(
+            "Preserves source CT/MRI geometry. In 3D Slicer, load as "
+            "'Segmentation' to import labels as separate segments."
+        )
+        self.btn_export_nifti_5x.setToolTip(
+            "Exports a 5x denser labelmap along the slice direction while preserving "
+            "the source CT/MRI physical geometry."
+        )
+        self.btn_export_nifti_10x.setToolTip(
+            "Exports a 10x denser labelmap along the slice direction while preserving "
+            "the source CT/MRI physical geometry."
+        )
+        self.btn_export_nifti_reversed.setToolTip(
+            "Export the NIfTI labelmap with reversed slice order."
+        )
         self.btn_export_tiff_reversed.setToolTip("Export the TIFF stack with reversed slice order.")
 
 

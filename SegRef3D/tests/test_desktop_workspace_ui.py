@@ -78,6 +78,14 @@ class DesktopWorkspaceUiTests(unittest.TestCase):
         self.assertTrue(self.window.btn_seg_on_web.isEnabled())
         self.assertFalse(self.window.btn_run_sam2.isEnabled())
 
+    def test_nifti_labelmap_ui_exposes_geometry_preserving_exports(self):
+        self.assertEqual(self.window.btn_export_nifti.text(), "Export NIfTI Labelmap")
+        self.assertEqual(self.window.btn_export_nifti_5x.text(), "NIfTI Labelmap (5x)")
+        self.assertEqual(self.window.btn_export_nifti_10x.text(), "NIfTI Labelmap (10x)")
+        self.assertIn("3D Slicer", self.window.btn_export_nifti.toolTip())
+        self.assertIn("slice direction", self.window.btn_export_nifti_5x.toolTip())
+        self.assertIn("physical geometry", self.window.btn_export_nifti_10x.toolTip())
+
     def test_gpu_panel_shows_local_execution_controls(self):
         self.window.sam2_enabled = True
         self.window._update_sam2_panel_visibility()

@@ -167,6 +167,69 @@ def interpolate_label_masks(
     return generated
 
 
+def interpolate_multilabel_volume(
+    masks: np.ndarray,
+    factor: int,
+    *,
+    progress_callback=None,
+) -> np.ndarray:
+    """Interpolate a D,H,W categorical label volume along K with exact key slices.
+
+    Intermediate collisions are resolved by the smallest signed distance (the
+    label whose voxel is most internal). Strict comparison and sorted IDs make
+    equal-distance ties deterministic in favor of the lower label ID.
+    """
+    source = np.asarray(masks)
+    if source.ndim != 3 or min(source.shape) < 1:
+        raise ValueError("Label volume must have shape D,H,W with positive dimensions.")
+    if not np.issubdtype(source.dtype, np.integer):
+        raise ValueError("Label volume must contain integer label IDs.")
+    if np.any(source < 0) or np.any(source > 255):
+        raise ValueError("Label IDs must be between 0 and 255.")
+    factor = int(factor)
+    if factor not in (1, 5, 10):
+        raise ValueError("Interpolation factor must be 1, 5, or 10.")
+
+    source = source.astype(np.uint8, copy=False)
+    depth, height, width = source.shape
+    if factor == 1 or depth == 1:
+        return source.copy()
+
+    output_depth = (depth - 1) * factor + 1
+    output = np.zeros((output_depth, height, width), dtype=np.uint8)
+    output[::factor] = source
+
+    for z_index in range(depth - 1):
+        left_mask = source[z_index]
+        right_mask = source[z_index + 1]
+        labels = np.union1d(left_mask, right_mask)
+        labels = labels[labels != 0]
+        generated = np.zeros((factor - 1, height, width), dtype=np.uint8)
+        best_distance = np.full(
+            (factor - 1, height, width), np.inf, dtype=np.float32
+        )
+
+        for label_value in labels:
+            label = int(label_value)
+            left_distance = signed_distance_for_label(left_mask, label)
+            right_distance = signed_distance_for_label(right_mask, label)
+            for step in range(1, factor):
+                ratio = step / factor
+                distance = left_distance * (1.0 - ratio) + right_distance * ratio
+                replace = (distance <= 0) & (distance < best_distance[step - 1])
+                generated[step - 1][replace] = label
+                best_distance[step - 1][replace] = distance[replace]
+
+        start = z_index * factor + 1
+        output[start:start + factor - 1] = generated
+        if progress_callback is not None:
+            keep_going = progress_callback(z_index + 1, depth - 1)
+            if keep_going is False:
+                raise InterruptedError("Labelmap interpolation was canceled.")
+
+    return output
+
+
 def merge_label_binary(mask: np.ndarray, binary: np.ndarray, label: int) -> np.ndarray:
     """Replace one label with a binary result while preserving every other label."""
     source = np.asarray(mask)
@@ -208,4 +271,3 @@ def apply_mask_volume_changes(
     for key, states in changes.items():
         output[key] = states[side].copy()
     return output
-

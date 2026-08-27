@@ -150,6 +150,21 @@ export function geometryWithSpacing(geometry, spacing, sourceKind = geometry?.so
   });
 }
 
+export function upsampleGeometryAlongK(geometry, factor) {
+  const scale = Number(factor);
+  if (![1, 5, 10].includes(scale)) {
+    throw new Error("K-axis interpolation factor must be 1, 5, or 10.");
+  }
+  const affine = normalizeAffine(geometry.affine);
+  for (let row = 0; row < 3; row += 1) affine[row][2] /= scale;
+  return makeVolumeGeometry({
+    shape: [geometry.shape[0], geometry.shape[1], (geometry.shape[2] - 1) * scale + 1],
+    affine,
+    sourceKind: scale === 1 ? geometry.sourceKind : `${geometry.sourceKind}:k-${scale}x`,
+    warnings: geometry.warnings,
+  });
+}
+
 export function transformGeometryForPreparedImage(
   geometry,
   {

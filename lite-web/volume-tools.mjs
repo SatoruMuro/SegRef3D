@@ -3,7 +3,7 @@ import {
   makeVolumeGeometry,
   normalizeAffine,
   spacingFromAffine,
-} from "./medical-geometry.mjs?v=1";
+} from "./medical-geometry.mjs?v=2";
 
 function validateVolume(masks, width, height) {
   if (!Array.isArray(masks) || masks.length === 0) throw new Error("The label volume is empty.");
@@ -422,6 +422,68 @@ export function interpolateLabelVolume(masks, width, height, label, factor) {
     output[lastStart + index] = lastMask[index] === label ? 1 : 0;
   }
   return { data: output, depth };
+}
+
+export async function interpolateMultiLabelVolume(
+  masks,
+  width,
+  height,
+  factor,
+  {
+    onProgress = () => {},
+    yieldControl = () => new Promise((resolve) => setTimeout(resolve, 0)),
+  } = {},
+) {
+  validateVolume(masks, width, height);
+  const scale = Number(factor);
+  if (![1, 5, 10].includes(scale)) throw new Error("Interpolation factor must be 1, 5, or 10.");
+  if (scale === 1 || masks.length === 1) {
+    return { masks: masks.map((mask) => mask.slice()), depth: masks.length };
+  }
+
+  const sliceSize = width * height;
+  const depth = (masks.length - 1) * scale + 1;
+  const output = Array.from({ length: depth }, () => new Uint8Array(sliceSize));
+  for (let z = 0; z < masks.length; z += 1) output[z * scale].set(masks[z]);
+
+  for (let z = 0; z < masks.length - 1; z += 1) {
+    const labels = new Set();
+    for (let index = 0; index < sliceSize; index += 1) {
+      if (masks[z][index] !== 0) labels.add(masks[z][index]);
+      if (masks[z + 1][index] !== 0) labels.add(masks[z + 1][index]);
+    }
+    const orderedLabels = [...labels].sort((left, right) => left - right);
+    const generated = Array.from({ length: scale - 1 }, () => new Uint8Array(sliceSize));
+    const bestDistances = Array.from(
+      { length: scale - 1 },
+      () => new Float32Array(sliceSize).fill(Infinity),
+    );
+
+    for (const label of orderedLabels) {
+      const leftDistance = signedDistanceForLabel(masks[z], width, height, label);
+      const rightDistance = signedDistanceForLabel(masks[z + 1], width, height, label);
+      for (let step = 1; step < scale; step += 1) {
+        const ratio = step / scale;
+        const target = generated[step - 1];
+        const best = bestDistances[step - 1];
+        for (let index = 0; index < sliceSize; index += 1) {
+          const distance = leftDistance[index] * (1 - ratio) + rightDistance[index] * ratio;
+          if (distance <= 0 && distance < best[index]) {
+            best[index] = distance;
+            target[index] = label;
+          }
+        }
+      }
+    }
+
+    for (let step = 1; step < scale; step += 1) {
+      output[z * scale + step] = generated[step - 1];
+    }
+    onProgress(z + 1, masks.length - 1);
+    await yieldControl();
+  }
+
+  return { masks: output, depth };
 }
 
 function triangleNormal(a, b, c) {

@@ -63,6 +63,7 @@ from mask_postprocessing import (
     cleanup_label_mask,
     frame_indices_for_scope,
     interpolate_label_masks,
+    interpolate_multilabel_volume,
     merge_label_binary,
 )
 from volume_geometry import (
@@ -72,6 +73,7 @@ from volume_geometry import (
     dicom_files_to_geometry,
     nifti_image_with_geometry,
     simpleitk_image_to_geometry,
+    upsample_geometry_along_k,
 )
 
 from svgpathtools import parse_path
@@ -838,7 +840,15 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
         
         # self.btn_export_grayscale_png.clicked.connect(self.export_all_svgs_to_grayscale_png)
-        self.btn_export_nifti.clicked.connect(self.export_nifti_labelmap)  # ← 新規追加！
+        self.btn_export_nifti.clicked.connect(
+            lambda checked=False: self.export_nifti_labelmap(1)
+        )
+        self.btn_export_nifti_5x.clicked.connect(
+            lambda checked=False: self.export_nifti_labelmap(5)
+        )
+        self.btn_export_nifti_10x.clicked.connect(
+            lambda checked=False: self.export_nifti_labelmap(10)
+        )
         self.btn_export_nifti_reversed.clicked.connect(self.export_nifti_labelmap_reversed)
         self.btn_export_tiff.clicked.connect(self.export_all_svgs_to_grayscale_tiff)
         self.btn_export_tiff_reversed.clicked.connect(self.export_all_svgs_to_grayscale_tiff_reversed)
@@ -8904,98 +8914,109 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         
 
     
-    def export_nifti_labelmap(self):
+    def _label_masks_for_volume_export(self):
+        """Return all current masks as one D,H,W uint8 volume in image order."""
+        import re
+
+        def natural_key(value):
+            numbers = re.findall(r"\d+", value)
+            return tuple(map(int, numbers)) if numbers else (value,)
+
+        keys = sorted(self.image_paths.keys(), key=natural_key)
+        if not keys:
+            raise ValueError("No image keys found.")
+        slices = []
+        expected_shape = None
+        for key in keys:
+            label_mask = np.asarray(self.ensure_label_mask_exists(key))
+            if label_mask.ndim != 2:
+                raise ValueError(f"Label mask for {key} is not two-dimensional.")
+            if expected_shape is None:
+                expected_shape = label_mask.shape
+            elif label_mask.shape != expected_shape:
+                raise ValueError(
+                    f"Label mask dimensions differ for {key}: "
+                    f"{label_mask.shape} != {expected_shape}."
+                )
+            slices.append(label_mask.astype(np.uint8, copy=True))
+        return np.stack(slices, axis=0)
+
+    def export_nifti_labelmap(self, factor=1):
         from datetime import datetime
-        import numpy as np
         import os
-    
+
+        factor = 1 if isinstance(factor, bool) else int(factor)
+        if factor not in (1, 5, 10):
+            self.label_status.setText("⚠ NIfTI interpolation factor must be 1, 5, or 10.")
+            return
         if not self.image_paths:
             self.label_status.setText("⚠ No images loaded.")
             return
-    
-        # # スケール（mm/px, z spacing）
-        # mm_per_px = self.mm_per_px if self.mm_per_px is not None else 1.0
-        # z_spacing = self.z_spacing_mm if self.z_spacing_mm is not None else 1.0
-        # if self.mm_per_px is None or self.z_spacing_mm is None:
-        #     self.label_status.setText("⚠ mm/px or z-spacing not set. Using 1.0 mm by default.")
-                
-        # 画像キーを数値順に並べる
-        def _nums(s):
-            import re
-            m = re.findall(r"\d+", s)
-            return tuple(map(int, m)) if m else (s,)
-    
-        keys = sorted(self.image_paths.keys(), key=_nums)
-        if not keys:
-            self.label_status.setText("⚠ No image keys found.")
-            return
-    
-        volume_slices = []
-    
-        first_shape = None
-        for key in keys:
-            try:
-                label_mask = self.ensure_label_mask_exists(key)
-    
-                if label_mask.ndim != 2:
-                    print(f"[WARN] Invalid label mask ndim for {key}: {label_mask.ndim}")
-                    continue
-    
-                if first_shape is None:
-                    first_shape = label_mask.shape
-                elif label_mask.shape != first_shape:
-                    print(f"[WARN] Skipping {key}: shape mismatch {label_mask.shape} != {first_shape}")
-                    continue
-    
-                volume_slices.append(label_mask.astype(np.uint8))
-    
-            except Exception as e:
-                print(f"[WARN] Failed to collect label mask for {key}: {e}")
-    
-        if not volume_slices:
-            self.label_status.setText("⚠ No valid slices to export.")
-            return
-    
-        H, W = first_shape
-    
-        # (H, W, Z) -> (X, Y, Z)
-        vol = np.stack(volume_slices, axis=-1)               # (H, W, Z)
-        vol = np.transpose(vol, (1, 0, 2)).astype(np.uint8)  # (W, H, Z)
-    
-        # # affine
-        # sx = float(mm_per_px)
-        # sy = float(mm_per_px)
-        # sz = float(z_spacing)
-    
-        # affine = np.array([
-        #     [ sx,  0.0, 0.0, 0.0          ],
-        #     [ 0.0, -sy, 0.0, (H - 1) * sy ],
-        #     [ 0.0,  0.0,  sz, 0.0         ],
-        #     [ 0.0,  0.0, 0.0, 1.0         ],
-        # ], dtype=float)
-                
-        geometry, source_geometry = self._volume_geometry_for_shape(vol.shape)
-        img_nii = nifti_image_with_geometry(vol, geometry)
-        hdr = img_nii.header
-        hdr['descrip'] = b'SegRef3D labelmap (1-20); 0=background'
-    
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        out_dir = os.path.join(os.getcwd(), f"nifti_output_{timestamp}")
-        os.makedirs(out_dir, exist_ok=True)
-        out_path = os.path.join(out_dir, "segref3d_labelmap.nii.gz")
-    
-        nib.save(img_nii, out_path)
-        # self.label_status.setText(
-        #     f"✅ NIfTI exported ({len(volume_slices)} slices, voxel {mm_per_px}×{mm_per_px}×{z_spacing} mm)"
-        # )
-        if source_geometry:
-            self.label_status.setText(
-                f"✅ NIfTI exported with source image geometry ({len(volume_slices)} slices)"
+
+        progress = None
+        try:
+            masks = self._label_masks_for_volume_export()
+            original_volume = np.transpose(masks, (2, 1, 0)).astype(np.uint8, copy=False)
+            geometry, source_geometry = self._volume_geometry_for_shape(original_volume.shape)
+
+            if factor > 1:
+                progress = QProgressDialog(
+                    "Interpolating labelmap along the slice direction...",
+                    "Cancel",
+                    0,
+                    max(1, masks.shape[0] - 1),
+                    self,
+                )
+                progress.setWindowTitle(f"Export NIfTI Labelmap ({factor}x)")
+                progress.setWindowModality(Qt.WindowModality.WindowModal)
+                progress.setMinimumDuration(0)
+                progress.show()
+
+                def update_progress(completed, total):
+                    progress.setMaximum(max(1, total))
+                    progress.setValue(completed)
+                    QApplication.processEvents()
+                    return not progress.wasCanceled()
+
+                masks = interpolate_multilabel_volume(
+                    masks, factor, progress_callback=update_progress
+                )
+                geometry = upsample_geometry_along_k(geometry, factor)
+
+            volume = np.transpose(masks, (2, 1, 0)).astype(np.uint8, copy=False)
+            img_nii = nifti_image_with_geometry(volume, geometry)
+            description = "SegRef3D labelmap (1-20); 0=background"
+            if factor > 1:
+                description += f"; K interpolated {factor}x"
+            img_nii.header["descrip"] = description.encode("ascii")
+
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            out_dir = os.path.join(os.getcwd(), f"nifti_output_{timestamp}")
+            os.makedirs(out_dir, exist_ok=True)
+            factor_suffix = "" if factor == 1 else f"_{factor}x"
+            out_path = os.path.join(
+                out_dir, f"segref3d_labelmap{factor_suffix}.nii.gz"
             )
-        else:
-            self.label_status.setText(
-                f"⚠ NIfTI exported with axis-aligned fallback geometry ({len(volume_slices)} slices)"
+            nib.save(img_nii, out_path)
+
+            geometry_label = (
+                "source image geometry" if source_geometry
+                else "axis-aligned fallback geometry"
             )
+            prefix = "✅" if source_geometry else "⚠"
+            factor_label = "" if factor == 1 else f" ({factor}x interpolated)"
+            self.label_status.setText(
+                f"{prefix} NIfTI Labelmap{factor_label} exported with {geometry_label} "
+                f"({masks.shape[0]} slices)"
+            )
+        except InterruptedError:
+            self.label_status.setText("NIfTI Labelmap export canceled.")
+        except Exception as exc:
+            print(f"[ERROR] NIfTI Labelmap export failed: {exc}")
+            self.label_status.setText(f"⚠ NIfTI Labelmap export failed: {exc}")
+        finally:
+            if progress is not None:
+                progress.close()
 
         
 

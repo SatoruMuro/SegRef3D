@@ -15,6 +15,7 @@ import {
   createVolInfoCsv,
   cropLabelVolume,
   interpolateLabelVolume,
+  interpolateMultiLabelVolume,
   marchingTetrahedra,
   parseVolInfoCsv,
   signedDistanceForLabel,
@@ -188,6 +189,24 @@ test("signed-distance interpolation bridges moving shapes between slices", () =>
   assert.equal(tenfold.depth, 11);
   assert.deepEqual([...tenfold.data.slice(0, 25)], [...left].map((value) => (value ? 1 : 0)));
   assert.deepEqual([...tenfold.data.slice(-25)], [...right].map((value) => (value ? 1 : 0)));
+});
+
+test("multi-label NIfTI interpolation preserves original slices and label IDs", async () => {
+  const masks = Array.from({ length: 3 }, () => new Uint8Array(7 * 7));
+  for (let y = 1; y < 4; y += 1) for (let x = 1; x < 4; x += 1) masks[0][y * 7 + x] = 1;
+  for (let y = 2; y < 5; y += 1) for (let x = 2; x < 5; x += 1) masks[1][y * 7 + x] = 2;
+  for (let y = 3; y < 6; y += 1) for (let x = 3; x < 6; x += 1) masks[2][y * 7 + x] = 3;
+
+  for (const [factor, depth] of [[5, 11], [10, 21]]) {
+    const result = await interpolateMultiLabelVolume(masks, 7, 7, factor, {
+      yieldControl: async () => {},
+    });
+    assert.equal(result.depth, depth);
+    masks.forEach((mask, index) => assert.deepEqual([...result.masks[index * factor]], [...mask]));
+    const labels = new Set(result.masks.flatMap((mask) => [...mask]));
+    assert.ok([0, 1, 2, 3].every((label) => labels.has(label)));
+    assert.ok([...labels].every((label) => [0, 1, 2, 3].includes(label)));
+  }
 });
 
 test("label-volume cropping preserves masks and reports the original XY offset", () => {

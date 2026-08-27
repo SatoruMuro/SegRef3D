@@ -15,6 +15,7 @@ from mask_postprocessing import (  # noqa: E402
     cleanup_label_mask,
     frame_indices_for_scope,
     interpolate_label_masks,
+    interpolate_multilabel_volume,
     merge_label_binary,
 )
 
@@ -78,6 +79,28 @@ class MaskCleanupTests(unittest.TestCase):
 
 
 class MaskInterpolationTests(unittest.TestCase):
+    def test_multilabel_volume_upsampling_preserves_every_source_slice(self):
+        source = np.zeros((3, 7, 7), dtype=np.uint8)
+        source[0, 1:4, 1:4] = 1
+        source[1, 2:5, 2:5] = 2
+        source[2, 3:6, 3:6] = 3
+        source_before = source.copy()
+
+        for factor, expected_depth in ((5, 11), (10, 21)):
+            output = interpolate_multilabel_volume(source, factor)
+            self.assertEqual(output.shape, (expected_depth, 7, 7))
+            np.testing.assert_array_equal(output[::factor], source)
+            self.assertTrue({1, 2, 3}.issubset(set(np.unique(output))))
+            self.assertTrue(set(np.unique(output)).issubset({0, 1, 2, 3}))
+
+        np.testing.assert_array_equal(source, source_before)
+
+    def test_multilabel_factor_one_is_an_unchanged_copy(self):
+        source = np.array([[[0, 1], [2, 3]]], dtype=np.uint8)
+        output = interpolate_multilabel_volume(source, 1)
+        np.testing.assert_array_equal(output, source)
+        self.assertIsNot(output, source)
+
     def test_interpolation_preserves_endpoints_and_other_labels(self):
         start = np.zeros((5, 5), dtype=np.uint8)
         end = np.zeros((5, 5), dtype=np.uint8)

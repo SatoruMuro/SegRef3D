@@ -1298,6 +1298,14 @@ svg {
   margin-top: 18px;
 }
 
+.volume-export-note {
+  max-width: 680px;
+  margin: -6px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
 .cleanup-section > .command-button {
   margin-top: 18px;
 }
@@ -1440,25 +1448,12 @@ svg {
   text-transform: uppercase;
 }
 
-.brand-mark {
-  display: grid;
-  gap: 3px;
+.brand-icon {
   width: 27px;
+  height: 27px;
   flex: 0 0 auto;
-}
-
-.brand-mark span {
-  display: block;
-  height: 4px;
-  background: var(--teal);
-}
-
-.brand-mark span:nth-child(2) {
-  width: 20px;
-}
-
-.brand-mark span:nth-child(3) {
-  width: 13px;
+  border-radius: 6px;
+  object-fit: contain;
 }
 
 .project-summary {

@@ -282,7 +282,9 @@ export function upgradeWorkspaceLayout() {
     [document.querySelector("#auto-apply-mode"), "Apply Add, Erase, or Transfer when a drawing closes"],
     [document.querySelector("#cleanup-scope"), "Choose the current slice, a frame range, or all slices"],
     [document.querySelector("#apply-interpolation"), "Interpolate the selected object between endpoint masks using signed distances"],
-    [document.querySelector("#export-nifti"), "Export the editable label masks as a NIfTI volume"],
+    [document.querySelector("#export-nifti"), "Preserves source CT/MRI geometry. In 3D Slicer, load as Segmentation to import labels as separate segments"],
+    [document.querySelector("#export-nifti-5x"), "Exports a 5x denser labelmap along the slice direction while preserving source CT/MRI physical geometry"],
+    [document.querySelector("#export-nifti-10x"), "Exports a 10x denser labelmap along the slice direction while preserving source CT/MRI physical geometry"],
     [document.querySelector("#export-project"), "Download images, masks, settings, and spatial information as a Project ZIP"],
   ]);
   for (const [control, title] of tooltipMap) {

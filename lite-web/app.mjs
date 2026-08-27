@@ -31,13 +31,14 @@ import {
   parseNiftiLabelVolume,
   parseNiftiVolume,
   parseTiffStack,
-} from "./medical-io.mjs?v=19";
+} from "./medical-io.mjs?v=20";
 import {
   axisAlignedAffine,
   geometryWithSpacing,
   makeVolumeGeometry,
   transformGeometryForPreparedImage,
-} from "./medical-geometry.mjs?v=1";
+  upsampleGeometryAlongK,
+} from "./medical-geometry.mjs?v=2";
 import { demoDatasetById } from "./demo-datasets.mjs?v=3";
 import { clearProjectMasks, loadMask, saveMask } from "./storage.mjs?v=25";
 import { createZip, parseZip } from "./zip.mjs?v=25";
@@ -67,9 +68,10 @@ import {
   createVolInfoCsv,
   cropLabelVolume,
   interpolateLabelVolume,
+  interpolateMultiLabelVolume,
   marchingTetrahedra,
   parseVolInfoCsv,
-} from "./volume-tools.mjs?v=16";
+} from "./volume-tools.mjs?v=17";
 import {
   applyMaskVolumeChanges,
   buildMaskVolumeChanges,
@@ -83,7 +85,7 @@ import {
   relabelVolume,
   volumeStatistics,
   volumeStatisticsAsync,
-} from "./mask-tools.mjs?v=19";
+} from "./mask-tools.mjs?v=20";
 import { upgradeWorkspaceLayout } from "./workspace-ui.mjs?v=30";
 
 try {
@@ -136,6 +138,8 @@ const elements = {
   imageTools: document.querySelector("#image-tools"),
   exportMenu: document.querySelector("#export-menu"),
   exportMenuNifti: document.querySelector("#export-menu-nifti"),
+  exportMenuNifti5x: document.querySelector("#export-menu-nifti-5x"),
+  exportMenuNifti10x: document.querySelector("#export-menu-nifti-10x"),
   exportMenuTiff: document.querySelector("#export-menu-tiff"),
   exportMenuStatistics: document.querySelector("#export-menu-statistics"),
   exportMenuStl: document.querySelector("#export-menu-stl"),
@@ -299,6 +303,8 @@ const elements = {
   demoSourceLink: document.querySelector("#demo-source-link"),
   demoLicenseLink: document.querySelector("#demo-license-link"),
   exportNifti: document.querySelector("#export-nifti"),
+  exportNifti5x: document.querySelector("#export-nifti-5x"),
+  exportNifti10x: document.querySelector("#export-nifti-10x"),
   exportTiff: document.querySelector("#export-tiff"),
   stlFactor: document.querySelector("#stl-factor"),
   stlScope: document.querySelector("#stl-scope"),
@@ -738,7 +744,13 @@ function setControlsEnabled(enabled) {
     elements.exportLabels,
     elements.exportOverlays,
     elements.exportProject,
+    elements.exportNifti,
+    elements.exportNifti5x,
+    elements.exportNifti10x,
+    elements.exportTiff,
     elements.exportMenuNifti,
+    elements.exportMenuNifti5x,
+    elements.exportMenuNifti10x,
     elements.exportMenuTiff,
     elements.exportMenuStatistics,
     elements.exportMenuStl,
@@ -2272,24 +2284,44 @@ function labelVolumeGeometry() {
   };
 }
 
-async function exportLabelVolume(format) {
+async function exportLabelVolume(format, factor = 1) {
   if (state.loading) return;
+  const scale = format === "nifti" ? Number(factor) : 1;
   closeToolsDockOnNarrow();
   setLoading(true, `Exporting ${format.toUpperCase()}`, "Preparing label volume");
   try {
     const { masks, width, height, geometry } = labelVolumeGeometry();
+    let exportMasks = masks;
+    let exportGeometry = geometry;
+    if (format === "nifti" && scale > 1) {
+      const interpolated = await interpolateMultiLabelVolume(masks, width, height, scale, {
+        onProgress(completed, total) {
+          setLoading(
+            true,
+            `Exporting NIfTI Labelmap (${scale}x)`,
+            `Interpolating slice interval ${completed} of ${total}`,
+          );
+        },
+      });
+      exportMasks = interpolated.masks;
+      exportGeometry = upsampleGeometryAlongK(geometry, scale);
+      setLoading(true, `Exporting NIfTI Labelmap (${scale}x)`, "Building NIfTI labelmap");
+    }
     const bytes =
       format === "nifti"
-        ? createNiftiLabelVolume(masks, width, height, geometry)
-        : createTiffLabelStack(masks, width, height);
+        ? createNiftiLabelVolume(exportMasks, width, height, exportGeometry)
+        : createTiffLabelStack(exportMasks, width, height);
     const extension = format === "nifti" ? "nii" : "tiff";
     const mimeType = format === "nifti" ? "application/octet-stream" : "image/tiff";
-    const filename = `${sanitizeFilename(state.projectName)}_labels_${timestamp()}.${extension}`;
+    const factorSuffix = format === "nifti" && scale > 1 ? `_${scale}x` : "";
+    const volumeName = format === "nifti" ? "labelmap" : "labels";
+    const filename = `${sanitizeFilename(state.projectName)}_${volumeName}${factorSuffix}_${timestamp()}.${extension}`;
     downloadBlob(new Blob([bytes], { type: mimeType }), filename);
     const geometryNote = format === "nifti"
       ? ` with ${geometry.sourceKind === "axis-aligned-fallback" ? "axis-aligned fallback" : "source image"} geometry`
       : " (pixel stack only; patient-space geometry is not embedded)";
-    setStatus(`Exported ${masks.length}-slice label volume as ${extension.toUpperCase()}${geometryNote}.`);
+    const factorNote = format === "nifti" && scale > 1 ? ` (${scale}x slice interpolation)` : "";
+    setStatus(`Exported ${exportMasks.length}-slice label volume as ${extension.toUpperCase()}${factorNote}${geometryNote}.`);
     showToast(`Downloaded ${filename}`);
   } catch (error) {
     console.error(error);
@@ -4823,7 +4855,9 @@ function bindEvents() {
   elements.volInfoInput.addEventListener("change", () =>
     importVolInfoCsv(elements.volInfoInput.files[0]),
   );
-  elements.exportNifti.addEventListener("click", () => exportLabelVolume("nifti"));
+  elements.exportNifti.addEventListener("click", () => exportLabelVolume("nifti", 1));
+  elements.exportNifti5x.addEventListener("click", () => exportLabelVolume("nifti", 5));
+  elements.exportNifti10x.addEventListener("click", () => exportLabelVolume("nifti", 10));
   elements.exportTiff.addEventListener("click", () => exportLabelVolume("tiff"));
   elements.previewStl.addEventListener("click", openStlPreview);
   elements.exportStl.addEventListener("click", exportStlMeshes);
@@ -4838,7 +4872,9 @@ function bindEvents() {
   elements.applyCleanup.addEventListener("click", applyMaskCleanup);
   elements.applyInterpolation.addEventListener("click", applySliceInterpolation);
   elements.exportVolumeStatistics.addEventListener("click", exportVolumeStatisticsCsv);
-  elements.exportMenuNifti.addEventListener("click", () => exportLabelVolume("nifti"));
+  elements.exportMenuNifti.addEventListener("click", () => exportLabelVolume("nifti", 1));
+  elements.exportMenuNifti5x.addEventListener("click", () => exportLabelVolume("nifti", 5));
+  elements.exportMenuNifti10x.addEventListener("click", () => exportLabelVolume("nifti", 10));
   elements.exportMenuTiff.addEventListener("click", () => exportLabelVolume("tiff"));
   elements.exportMenuStatistics.addEventListener("click", exportVolumeStatisticsCsv);
   elements.exportMenuStl.addEventListener("click", exportStlMeshes);

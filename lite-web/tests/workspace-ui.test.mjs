@@ -39,3 +39,14 @@ test("responsive UI uses canvas-first drawers on narrow screens", async () => {
   assert.match(css, /\.tools-dock\.open\s*\{\s*transform: translateX\(0\)/s);
   assert.match(css, /\.image-workspace\s*\{[^}]*width: 100%/s);
 });
+
+test("NIfTI Labelmap exports expose original, 5x, and 10x geometry-preserving choices", async () => {
+  const [html, app, ui] = await Promise.all([read("index.html"), read("app.mjs"), read("workspace-ui.mjs")]);
+  assert.match(html, /Export NIfTI Labelmap/);
+  assert.match(html, /NIfTI Labelmap \(5x\)/);
+  assert.match(html, /NIfTI Labelmap \(10x\)/);
+  assert.match(html, /load as\s+<strong>Segmentation<\/strong>/s);
+  assert.match(app, /exportLabelVolume\("nifti", 5\)/);
+  assert.match(app, /exportLabelVolume\("nifti", 10\)/);
+  assert.match(ui, /preserving source CT\/MRI physical geometry/);
+});

@@ -94,7 +94,8 @@ do not endorse SegRef3D. The approximately 20 MB demo volume is fetched only whe
 - Middle-button drag and WASD/arrow-key canvas pan
 - Label visibility controls
 - Label PNG and visible-overlay PNG sequence export as ZIP
-- NIfTI label-volume and multi-page TIFF stack export
+- NIfTI Labelmap export in Original, 5x, and 10x slice-interpolated forms, plus multi-page TIFF
+  stack export
 - Multi-page TIFF and naturally sorted TIFF-folder import for 8-bit grayscale, 16-bit grayscale,
   and RGB data
 - 1x/5x/10x signed-distance slice interpolation and binary STL export
@@ -135,9 +136,12 @@ their source orientation and physical origin through NIfTI label export. A CSV i
 automatically after DICOM/NIfTI loading and after reference-line calibration; the Calibration tab
 also provides manual Import/Export controls.
 
-NIfTI label export preserves full 3D patient-space geometry when it is available. TIFF exports
-preserve mask pixels but do not reliably preserve full 3D patient-space geometry. For spatially
-registered use with 3D Slicer or other medical-image software, use NIfTI.
+NIfTI Labelmap export preserves full 3D patient-space geometry when it is available. The 5x and
+10x options use deterministic multi-label signed-distance interpolation along K only. Output depth
+is `(D - 1) * factor + 1`; every source slice is copied unchanged to `k * factor`, and the affine K
+vector is divided by the factor so the first and last physical positions remain unchanged. In
+3D Slicer, load the result as **Segmentation** to import label IDs as separate segments. TIFF
+exports preserve mask pixels but do not reliably preserve full patient-space geometry.
 
 **Replace** replaces each matched image mask. **Merge** treats imported label `0` as transparent,
 keeps existing labels outside imported regions, and lets imported non-zero labels win on overlap.

@@ -92,6 +92,22 @@ def reverse_axis_affine(affine, axis: int, length: int) -> np.ndarray:
     return _as_affine(affine) @ transform
 
 
+def upsample_geometry_along_k(geometry: "VolumeGeometry", factor: int) -> "VolumeGeometry":
+    """Increase only K-axis sampling while preserving both endpoint positions."""
+    factor = int(factor)
+    if factor not in (1, 5, 10):
+        raise VolumeGeometryError("K-axis interpolation factor must be 1, 5, or 10.")
+    affine = geometry.affine_ras.copy()
+    affine[:3, 2] /= factor
+    depth = (geometry.shape[2] - 1) * factor + 1
+    return VolumeGeometry(
+        (geometry.shape[0], geometry.shape[1], depth),
+        affine,
+        geometry.source_kind if factor == 1 else f"{geometry.source_kind}:k-{factor}x",
+        geometry.warnings,
+    )
+
+
 def qform_can_represent(affine, *, atol: float = 1e-5) -> bool:
     direction = direction_from_affine(affine)
     gram = direction.T @ direction
@@ -141,6 +157,9 @@ class VolumeGeometry:
             f"{self.source_kind}:reversed-axis-{axis}",
             self.warnings,
         )
+
+    def upsampled_k(self, factor: int):
+        return upsample_geometry_along_k(self, factor)
 
 
 def _finite_vector(value, length: int, name: str) -> np.ndarray:

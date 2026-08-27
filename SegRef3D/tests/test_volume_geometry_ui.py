@@ -64,6 +64,23 @@ class VolumeGeometryUiTests(unittest.TestCase):
         self.assertEqual(image.shape, (6, 5, 3))
         self.assertIn("source image geometry", self.window.label_status.text())
 
+    def test_desktop_5x_export_preserves_key_slices_and_updates_affine(self):
+        self.window.export_nifti_labelmap(5)
+        output = next(Path(self.temp.name).glob("nifti_output_*/segref3d_labelmap_5x.nii.gz"))
+        image = nib.load(output)
+        data = np.asarray(image.dataobj)
+        self.assertEqual(image.shape, (6, 5, 11))
+        np.testing.assert_allclose(image.affine[:3, 2], self.affine[:3, 2] / 5, atol=1e-5)
+        for source_k in range(3):
+            expected = self.window.label_masks[f"{source_k + 1:04d}"].T
+            np.testing.assert_array_equal(data[:, :, source_k * 5], expected)
+            np.testing.assert_allclose(
+                image.affine @ [2, 1, source_k * 5, 1],
+                self.affine @ [2, 1, source_k, 1],
+                atol=1e-5,
+            )
+
+
     def test_reversed_export_preserves_physical_label_location(self):
         self.window.export_nifti_labelmap_reversed()
         output = next(Path(self.temp.name).glob("nifti_output_*/segref3d_labelmap_revZ.nii.gz"))

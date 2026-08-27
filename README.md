@@ -41,6 +41,7 @@ Watch the **Basic Workflow** video to learn how to use SegRef3D, from loading im
 * 🔺 Threshold-based region extraction (CT/MRI presets or manual)
 * 🗈 Thinning: reduce number of images by keeping every N-th
 * 🧲 Export:
+  * NIfTI Labelmaps with source geometry (Original, 5x, or 10x slice interpolation)
   * Mask images as grayscale TIFF (ascending/descending order)
   * 3D STL models by color (with mm/px and z-spacing calibration)
   * Volume statistics per object as CSV
@@ -62,7 +63,8 @@ masks stay on the device and are not uploaded to a server.
 - Project ZIP export/import for restoring label masks and editor settings
 - Window/level, brightness/contrast, reference-line calibration, threshold extraction, and RGB extraction
 - Windows-compatible VolInfo CSV import/export, including automatic export after medical-volume loading and calibration
-- NIfTI/TIFF label-volume export and 1x/5x/10x signed-distance interpolation with STL export
+- NIfTI Labelmap export in Original, 5x, and 10x slice-interpolated forms; TIFF stack and
+  1x/5x/10x signed-distance STL export
 - Full DICOM/NIfTI IJK-to-RAS geometry preservation in NIfTI masks; legacy VolInfo CSV remains readable
 - Multi-object Seg Anything job setup, job ZIP export, and complete result ZIP restoration
 - Mouse-wheel image switching, zoom, pan, and a responsive touch-friendly layout
@@ -73,9 +75,11 @@ Colab backend, and restore `segref3d_result.zip` with **Import Result**. Display
 calibration, label-volume export, and STL generation run locally in the browser. Images are
 uploaded only when the user explicitly sends the job ZIP to Google Colab.
 
-NIfTI mask export preserves the source DICOM/NIfTI physical geometry when available. TIFF mask
-export preserves pixels, but not a reliable full patient-space transform; use NIfTI for registered
-workflows in 3D Slicer or other medical-image software.
+NIfTI Labelmap export preserves the source DICOM/NIfTI physical geometry when available. The 5x
+and 10x choices densify only the slice direction with signed-distance interpolation. They preserve
+every original annotated slice and the first/last physical positions. In 3D Slicer, load the NIfTI
+as **Segmentation** to import label IDs as separate segments. TIFF mask export preserves pixels,
+but not a reliable full patient-space transform; use NIfTI Labelmap for registered workflows.
 
 ## AI-assisted segmentation
 
