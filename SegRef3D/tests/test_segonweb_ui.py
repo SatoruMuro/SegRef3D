@@ -47,6 +47,12 @@ class SegOnWebUiTests(unittest.TestCase):
         os.chdir(self.previous_cwd)
         self.temp_dir.cleanup()
 
+    def test_public_product_names_follow_build_edition(self):
+        with patch.dict(os.environ, {"SEGREF3D_EDITION": "local-gpu"}, clear=False):
+            self.assertEqual(app_module.segref3d_product_name(), "SegRef3D Local GPU")
+        with patch.dict(os.environ, {"SEGREF3D_EDITION": "local-cpu"}, clear=False):
+            self.assertEqual(app_module.segref3d_product_name(), "SegRef3D Local CPU")
+
     def _images(self, count=3):
         records = []
         for index in range(count):
@@ -132,6 +138,7 @@ class SegOnWebUiTests(unittest.TestCase):
         self.assertEqual(manifest["source"]["project_name"], "Test Images")
 
     def test_lite_mode_keeps_segonweb_job_tools_enabled(self):
+        self.assertEqual(self.window.windowTitle(), "SegRef3D Local CPU")
         for button in self.window.local_sam2_execution_buttons():
             self.assertFalse(button.isEnabled(), button.text())
         for button in self.window.segonweb_job_buttons():

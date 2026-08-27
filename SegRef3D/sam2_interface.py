@@ -70,7 +70,7 @@ class SAM2Interface:
             from build_sam import build_sam2_video_predictor
         except Exception as exc:
             raise RuntimeError(
-                "SAM2 could not be imported. Ensure sam2pkg is included in the GPU build."
+                "SAM2 could not be imported. Ensure sam2pkg is included in the Local GPU build."
             ) from exc
 
         self._torch = torch

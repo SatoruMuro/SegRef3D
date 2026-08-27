@@ -5,7 +5,7 @@ is performed in SegRef3D; there is no separate Gradio interface.
 
 ## 1. Configure Objects In SegRef3D
 
-1. Load the image sequence in SegRef3D GPU or Lite.
+1. Load the image sequence in SegRef3D Local GPU, Local CPU, or SegRef3D Lite.
 2. Select an object ID under **Target Object**.
 3. Move to a frame where the object is clear and choose **Set Box Prompt**.
 4. Draw the box around the object. This frame becomes its Prompt Frame.
@@ -46,7 +46,7 @@ SegRef3D validates the image sequence and masks before applying them. If no imag
 are currently loaded, the JPG sequence in the result ZIP is restored automatically.
 Imported masks are immediately written to a new `[autosave]` label PNG folder.
 
-### Lite Web controls
+### SegRef3D Lite controls
 
 The browser app uses the same manifest and ZIP formats. Open **Batch Jobs**, set each
 object's prompt and range, choose **Create Input ZIP**, then restore the Colab output with

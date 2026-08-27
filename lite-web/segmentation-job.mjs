@@ -202,7 +202,7 @@ export function createSegmentationJobManifest({ images, objects, source = {}, cr
     kind: SEGMENTATION_JOB_KIND,
     frame_index_base: 0,
     created_by: {
-      application: String(createdBy.application || "SegRef3D Lite Web"),
+      application: String(createdBy.application || "SegRef3D Lite"),
       version: String(createdBy.version || "web"),
     },
     source: structuredClone(source),

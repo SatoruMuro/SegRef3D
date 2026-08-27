@@ -1,4 +1,4 @@
-"""Batch tracking job editor used by the SegRef3D GPU workflow."""
+"""Batch tracking job editor used by the SegRef3D Local GPU workflow."""
 
 from __future__ import annotations
 

@@ -126,7 +126,7 @@ def choose_sam2_mode(cuda_info: dict[str, Any], allow_cpu_fallback: bool = False
 
 
 def print_cuda_diagnostics(cuda_info: dict[str, Any], sam2_mode: str | None = None) -> None:
-    print("=== SegRef3D GPU Diagnostic ===")
+    print("=== SegRef3D Local GPU Diagnostic ===")
     print(f"Python: {cuda_info.get('python_executable')}")
     print(f"Torch: {cuda_info.get('torch_version')}")
     print(f"Torch CUDA: {cuda_info.get('torch_cuda')}")

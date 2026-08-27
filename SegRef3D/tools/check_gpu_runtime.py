@@ -19,7 +19,7 @@ def main() -> int:
     info = get_cuda_diagnostics()
     optional = get_optional_attention_status()
 
-    print("=== SegRef3D GPU Runtime Check ===")
+    print("=== SegRef3D Local GPU Runtime Check ===")
     print(f"Python: {info.get('python_executable')}")
     print(f"Torch: {info.get('torch_version')}")
     print(f"Torch CUDA: {info.get('torch_cuda')}")

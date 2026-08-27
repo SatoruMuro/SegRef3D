@@ -1,4 +1,4 @@
-name: SegRef3D Lite Web CI
+name: SegRef3D Lite CI
 
 on:
   pull_request:

@@ -4,5 +4,5 @@
 - `nifti-reader-js` 0.8.0 (MIT): NIfTI-1/NIfTI-2 header and image parsing
 - `fflate` 0.8.3 (MIT): gzip decompression used by `nifti-reader-js`
 
-The fixed browser files are stored locally so SegRef3D Lite Web continues to
+The fixed browser files are stored locally so SegRef3D Lite continues to
 work without a CDN connection. See the adjacent `*.LICENSE.txt` files.

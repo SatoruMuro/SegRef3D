@@ -8,6 +8,18 @@ import io
 import zipfile
 from pathlib import Path
 
+
+def segref3d_product_name() -> str:
+    edition = os.environ.get("SEGREF3D_EDITION", "").strip().lower()
+    if edition == "local-gpu":
+        return "SegRef3D Local GPU"
+    if edition == "local-cpu":
+        return "SegRef3D Local CPU"
+    disable_sam2 = os.environ.get("SEGREF3D_DISABLE_SAM2", "").strip().lower()
+    if disable_sam2 in ("1", "true", "yes", "on"):
+        return "SegRef3D Local CPU"
+    return "SegRef3D"
+
 from PyQt6.QtWidgets import (
     QApplication,
     QMainWindow,
@@ -38,7 +50,7 @@ from PyQt6.QtGui import (
     QBrush
 )
 
-from PyQt6.QtCore import Qt, QPointF, QSignalBlocker
+from PyQt6.QtCore import Qt, QPointF, QSignalBlocker, QTimer
 from PyQt6.QtSvg import QSvgRenderer
 
 from PyQt6.QtWidgets import QFileDialog, QDialogButtonBox, QPushButton, QProgressDialog
@@ -733,6 +745,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
         
         self.setupUi(self)
+        self.setWindowTitle(segref3d_product_name())
     
         self.installEventFilter(self)
 
@@ -1696,14 +1709,14 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
     def show_version_info(self):
         month_str = datetime.now().strftime("%B %Y")
         version_text = (
-            f"SegRef3D\n"
+            f"{segref3d_product_name()}\n"
             f"Version {__version__} ({month_str})\n\n"
             "Developed by: Satoru Muro, M.D., Ph.D.\n"
             "Institute of Science Tokyo\n\n"
             "Python: 3.12\n"
             "PyQt6 GUI for AI-based segmentation and refinement"
         )
-        QMessageBox.information(self, "Version Information", version_text)
+        QMessageBox.information(self, f"{segref3d_product_name()} Version", version_text)
 
 
     def local_sam2_execution_buttons(self):
@@ -1733,8 +1746,8 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         self.sam2_enabled = False
         self.sam2_disabled_reason = reason
         message = reason or (
-            "SAM2 is not included in this lightweight build. "
-            "Use Seg Anything or the GPU build for SAM-based segmentation."
+            "Local SAM2 is not included in SegRef3D Local CPU. "
+            "Use Seg Anything or SegRef3D Local GPU for SAM-based segmentation."
         )
 
         for btn in self.local_sam2_execution_buttons():
@@ -1767,8 +1780,8 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
     def initialize_sam2(self):
         lite_reason = (
-            "SAM2 is not included in this lightweight build. "
-            "Use Seg Anything or the GPU build for SAM-based segmentation."
+            "Local SAM2 is not included in SegRef3D Local CPU. "
+            "Use Seg Anything or SegRef3D Local GPU for SAM-based segmentation."
         )
 
         disable_flag = os.environ.get("SEGREF3D_DISABLE_SAM2", "").strip().lower()
@@ -10890,14 +10903,23 @@ if __name__ == "__main__":
                 else 2
             )
         except Exception as exc:
-            print("=== SegRef3D GPU Diagnostic ===")
+            print("=== SegRef3D Local GPU Diagnostic ===")
             print(f"GPU diagnostic failed: {exc}")
             print("===============================")
             sys.exit(2)
 
     app = QApplication(sys.argv)
     window = SegRefMain()
+    print(f"[INFO] Product edition: {segref3d_product_name()} v{__version__}")
     app.installEventFilter(window)  # ← ここでアプリケーション全体にフィルターを適用
     window.show()
+    if "--startup-smoke-test" in sys.argv:
+        print(
+            "[SMOKE] "
+            f"title={window.windowTitle()!r}; "
+            f"sam2_enabled={getattr(window, 'sam2_enabled', False)!r}",
+            flush=True,
+        )
+        QTimer.singleShot(1000, lambda: os._exit(0))
     sys.exit(app.exec())
 

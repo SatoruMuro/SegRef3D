@@ -1,6 +1,6 @@
 import sys, torch, warnings
 
-print("=== SegRef3D GPU Diagnostic ===")
+print("=== SegRef3D Local GPU Diagnostic ===")
 print("Python:", sys.executable)
 print("Torch:", torch.__version__, "CUDA", torch.version.cuda)
 print("ARCH:", torch.cuda.get_arch_list())

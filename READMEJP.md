@@ -1,11 +1,40 @@
 # SegRef3D
 
 **SegRef3D** は、画像のセグメンテーションおよび修正をインタラクティブに行える PyQt6 ベースのGUIツールです。Meta社の Segment Anything Model 2（SAM2）を統合し、AIによる自動セグメンテーション、複数フレームにわたるオブジェクト追跡、編集、3D STL出力までをサポートします。  
-👉 [使用方法チュートリアル（日本語）](https://github.com/SatoruMuro/SAM2GUIfor3Drecon/blob/main/Tutorial/TutorialSegRef3DJP.md)
+👉 [使用方法チュートリアル（日本語）](Tutorial/TutorialSegRef3DJP.md)
+
+## どのSegRef3Dを使えばよいですか？
+
+| 環境 | 推奨版 |
+| --- | --- |
+| Windows | **SegRef3D Lite** |
+| macOS | **SegRef3D Lite** |
+| Linux／モダンブラウザ | **SegRef3D Lite** |
+| Windows + NVIDIA CUDA GPU | **SegRef3D Lite** または **SegRef3D Local GPU** |
+
+### SegRef3D Lite
+
+**ほとんどのユーザーに推奨します。** Windows、macOS、Linuxのモダンブラウザで動作し、
+インストールは不要です。[SegRef3D Liteを開く](https://satorumuro.github.io/SegRef3D/lite-web/)。
+
+### SegRef3D Local GPU
+
+NVIDIA CUDA GPUを搭載したWindows PC向けです。SAM2 segmentation／trackingをローカル実行します。
+
+### SegRef3D Local CPU
+
+Legacy／offlineデスクトップ版です。ローカルSAM2を必要とせず、Windowsデスクトップworkflowを
+明示的に必要とするユーザー向けに提供します。新規ユーザーにはSegRef3D Liteを推奨します。
+
+### プライバシーと処理場所
+
+**通常のSegRef3D Lite利用中、画像はユーザーの端末内に留まります。** 画像表示、mask編集、計測、
+NIfTI出力、STL生成はブラウザ内で処理されます。Seg AnythingまたはSeg CT/MRIのjobを、ユーザー自身が
+Google Colab runtimeへ明示的に送信した場合だけデータがアップロードされます。
 
 ---
 
-<img src="https://github.com/SatoruMuro/SAM2GUIfor3Drecon/blob/main/images/SegRef3D-v1.2.0-GUI.png" alt="image" width="100%">
+<img src="images/SegRef3D-v1.2.0-GUI.png" alt="image" width="100%">
 
 ---
 
@@ -38,11 +67,11 @@ SegRef3Dの基本的な操作手順をご覧いただける動画を掲載して
 
 ---
 
-## SegRef3D Lite Web（Beta）
+## SegRef3D Lite
 
-**[ブラウザで SegRef3D Lite Web を開く](https://satorumuro.github.io/SegRef3D/lite-web/)**
+**[SegRef3D Liteを開く](https://satorumuro.github.io/SegRef3D/lite-web/)**
 
-Lite版のマスク編集の主要ワークフローを、Windows、macOS、Linux、iPadOS などのモダンブラウザで利用できます。画像とマスクはサーバーへ送信されず、デバイス内で処理されます。
+マスク編集の主要ワークフローを、Windows、macOS、Linux、iPadOSなどのモダンブラウザで利用できます。
 
 - JPG/PNG、DICOM、NIfTIの読み込みと20オブジェクトのラベル編集
 - Free / Click / Snap描画、Auto Add / Erase / Transfer、Threshold / RGB抽出、Undo / Redo
@@ -52,7 +81,7 @@ Lite版のマスク編集の主要ワークフローを、Windows、macOS、Linu
 - 複数objectのSeg Anything job設定、`segonweb_input.zip`出力、`segref3d_result.zip`復元
 - ブラウザ自動保存、Project ZIP、マウス/キーボード操作、モバイル対応UI
 
-SAM2本体はブラウザ内では動作しません。Lite Webの**Seg Anything**でBox Prompt、Prompt Frame、Tracking Rangeを設定し、明示的にGoogle Colabへjob ZIPをuploadした場合だけ画像が外部へ送信されます。その他の編集・抽出・出力処理はブラウザ内で完結します。
+SAM2本体はブラウザ内では動作しません。SegRef3D Liteの**Seg Anything**でBox Prompt、Prompt Frame、Tracking Rangeを設定し、明示的にGoogle Colabへjob ZIPをuploadした場合だけ画像が外部へ送信されます。その他の編集・抽出・出力処理はブラウザ内で完結します。
 
 NIfTI Labelmap出力は、取得できる場合に元DICOM/NIfTIの患者座標geometryを保持します。
 5x/10xはslice方向のみsigned-distance補間し、元annotation sliceと最初/最後の物理位置を保持します。
@@ -106,11 +135,10 @@ SegRef3Dから出力したNIfTIラベルマップの輪郭間に空白スライ�
 
 ## ⚙️ 動作環境
 
-* **OS:** Windows 10/11 (64-bit)  
-* **ハードウェア:** CUDA 対応の NVIDIA GPU（SAM ベースのセグメンテーションとトラッキングを使用する場合）  
-  - CPU 環境: SegRef3D は起動できますが、**SAM 機能は無効化**されます。  
-    その他の機能（ファイル操作、可視化、基本ツールなど）は利用可能です。  
-* **ソフトウェア:** Python や PyTorch のインストールは不要です。SegRef3D に同梱されています。  
+* **SegRef3D Lite:** Windows、macOS、Linuxのモダンブラウザ。インストール不要。
+* **SegRef3D Local GPU:** Windows 10/11（64-bit）、NVIDIA CUDA GPU、互換ドライバ。
+* **SegRef3D Local CPU:** Windows 10/11（64-bit）。ローカルSAM2は含みません。
+* **Local配布版:** PythonやPyTorchを別途インストールする必要はありません。
 
 ---
 
@@ -118,17 +146,26 @@ SegRef3Dから出力したNIfTIラベルマップの輪郭間に空白スライ�
 
 ### 1. ダウンロード
 
-#### **最新版 — ver.1.2.3**
+#### 推奨：SegRef3D Lite
 
-CUDA 12.8 / RTX 50シリーズ対応、SAM2を含まないLite版、トラッキングとマスク編集の安全性向上、3D出力用の5x/10xスライス補間、画像前処理、キャンバス操作改善を含む最新版のWindowsビルドです。
+Windows／macOS／Linux。インストール不要です。
 
-用途に応じて2種類のビルドを用意しています。
+* **[SegRef3D Liteを開く](https://satorumuro.github.io/SegRef3D/lite-web/)**
 
-* **GPU版** — ローカル環境でSAM2によるAI支援セグメンテーションを使用できます。NVIDIA GPU環境での使用を推奨します。
-  * [`SegRef3D-GPU-v1.2.3-Windows.zip`](https://www.dropbox.com/scl/fi/aixgd0a7lyp45tcye3x3e/SegRef3D-GPU-v1.2.3-Windows.zip?rlkey=0mgnxeb3afovi60ln4q9uo156&st=tbh8qvrf&dl=1)
+#### 高度なローカルAI：SegRef3D Local GPU v1.2.6
 
-* **Lite版** — SAM2を同梱していない軽量版です。ローカルAIセグメンテーションが不要な場合や、まずSegRef3Dを試したい場合に推奨します。
-  * [`SegRef3D-Lite-v1.2.3-Windows.zip`](https://www.dropbox.com/scl/fi/2bbm6byzi3tme547e2beb/SegRef3D-Lite-v1.2.3-Windows.zip?rlkey=4u3njpty6ggm37oa04cqx12kn&st=95sqew99&dl=1)
+Windows + NVIDIA CUDA GPU向け。ローカルSAM2 segmentation／trackingを含みます。
+`SegRef3D-Local-GPU-v1.2.6-Windows.zip`はローカルで作成済みで、公開先へのupload待ちです。
+
+#### Legacy／offline：SegRef3D Local CPU v1.2.6
+
+ローカルSAM2を含まないWindowsデスクトップ版です。
+`SegRef3D-Local-CPU-v1.2.6-Windows.zip`はローカルで作成済みで、公開先へのupload待ちです。
+
+#### 以前のデスクトップ配布版 — v1.2.3
+
+* [旧GPU版（`SegRef3D-GPU-v1.2.3-Windows.zip`）](https://www.dropbox.com/scl/fi/aixgd0a7lyp45tcye3x3e/SegRef3D-GPU-v1.2.3-Windows.zip?rlkey=0mgnxeb3afovi60ln4q9uo156&st=tbh8qvrf&dl=1)
+* [旧Liteデスクトップ版（`SegRef3D-Lite-v1.2.3-Windows.zip`）](https://www.dropbox.com/scl/fi/2bbm6byzi3tme547e2beb/SegRef3D-Lite-v1.2.3-Windows.zip?rlkey=4u3njpty6ggm37oa04cqx12kn&st=95sqew99&dl=1)
 
 #### **旧安定版 — ver.1.1.0**
 
@@ -161,8 +198,8 @@ SegRef3D を動かすのに必要なものはすべてアプリケーション�
 **SAM ベースのセグメンテーションとトラッキング** を使用するには、  
 **CUDA 対応の NVIDIA GPU と互換ドライバ** が必要です。  
 
-- **GPU 環境:** SAM を含むすべての機能が利用可能  
-- **CPU 環境:** SAM 機能は無効化されますが、その他のツールは利用可能  
+- **SegRef3D Local GPU:** ローカルSAM2を含む全機能を利用可能
+- **SegRef3D Local CPU:** ローカルSAM2は無効ですが、その他のツールは利用可能
 
 ---
 
@@ -182,7 +219,7 @@ SegRef3D を動かすのに必要なものはすべてアプリケーション�
 ## 📘 詳細チュートリアル
 
 詳しい操作手順はこちら：  
-👉 [使用方法チュートリアル（日本語）](https://github.com/SatoruMuro/SAM2GUIfor3Drecon/blob/main/Tutorial/TutorialSegRef3DJP.md)
+👉 [使用方法チュートリアル（日本語）](Tutorial/TutorialSegRef3DJP.md)
 
 ---
 
@@ -241,7 +278,7 @@ SegRef3D を動かすのに必要なものはすべてアプリケーション�
 
 ## 🖥️ GPU非搭載環境での活用法
 
-CUDA非対応環境でも、Windows Lite版またはLite Webの**Seg Anything**でobjectごとのBox Prompt、Prompt Frame、Tracking Rangeを設定し、**Create Input ZIP**で`segonweb_input.zip`を作成できます。Colabで全セルを実行してZIPを1つuploadすると、複数objectを自動処理した`segref3d_result.zip`が生成されます。**Import Result ZIP**で戻すと、そのままmask修正と3D構築へ進めます。Colab側でGradio操作は行いません。
+CUDA非対応環境でも、SegRef3D Local CPUまたはSegRef3D Liteの**Seg Anything**でobjectごとのBox Prompt、Prompt Frame、Tracking Rangeを設定し、**Create Input ZIP**で`segonweb_input.zip`を作成できます。Colabで全セルを実行してZIPを1つuploadすると、複数objectを自動処理した`segref3d_result.zip`が生成されます。**Import Result ZIP**で戻すと、そのままmask修正と3D構築へ進めます。Colab側でGradio操作は行いません。
 
 ### 🔗 Webベースのセグメンテーション手順
 
@@ -250,13 +287,13 @@ CUDA非対応環境でも、Windows Lite版またはLite Webの**Seg Anything**�
 
 ### 📷 Web処理用画像の注意点
 
-* Desktop版とLite Webは作業画像をJPG化し、元の順序・ファイル名・寸法を`manifest.json`へ記録します
+* SegRef3D LocalとSegRef3D Liteは作業画像をJPG化し、元の順序・ファイル名・寸法を`manifest.json`へ記録します
 * Colabへuploadするのは、SegRef3Dが生成した`segonweb_input.zip`です
 * Result ZIP読込時に画像枚数・順序・寸法・mask形式を検証し、不一致なら現在のmaskを変更しません
 
 ### 🔁 統合ワークフロー
 
-* `segref3d_result.zip`をDesktop版またはLite Webへ一括で読み込み
+* `segref3d_result.zip`をSegRef3D LocalまたはSegRef3D Liteへ一括で読み込み
 * Result内の正本 PNG は single-channel label image です
   * `0` = background
   * `1–20` = object labels

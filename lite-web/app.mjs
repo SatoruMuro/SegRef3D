@@ -2839,7 +2839,7 @@ function applyProjectSettings(settings = {}) {
 
 function validateProjectManifest(manifest) {
   if (!manifest || manifest.format !== PROJECT_FORMAT || manifest.version !== PROJECT_VERSION) {
-    throw new Error("This is not a supported SegRef3D Lite Web project ZIP.");
+    throw new Error("This is not a supported SegRef3D Lite project ZIP.");
   }
   if (!Array.isArray(manifest.images) || manifest.images.length === 0) {
     throw new Error("The project manifest has no image sequence.");
@@ -2852,7 +2852,7 @@ function validateProjectManifest(manifest) {
   const savedJobs = manifest.settings?.segmentationJobs;
   if (Array.isArray(savedJobs) && savedJobs.length > 0) {
     if (savedJobs.some((job) => Number(job.id) > 20)) {
-      throw new Error("A saved Seg Anything object ID exceeds the Lite Web label limit of 20.");
+      throw new Error("A saved Seg Anything object ID exceeds the SegRef3D Lite label limit of 20.");
     }
     createSegmentationJobManifest({
       images: state.images.map((image, index) => ({
@@ -3491,7 +3491,7 @@ async function importSegmentationResult(file) {
     const entries = await parseZip(file);
     const { manifest, entriesByPath } = validateSegmentationArchive(entries, SEGMENTATION_RESULT_KIND);
     if (manifest.objects.some((object) => object.id > 20)) {
-      throw new Error("SegRef3D Lite Web supports object IDs 1-20.");
+      throw new Error("SegRef3D Lite supports object IDs 1-20.");
     }
     validateCurrentImagesForSegmentationResult(manifest);
     const resultImages = await decodeSegmentationResultImages(manifest, entriesByPath);
@@ -4173,7 +4173,7 @@ async function loadImageSequenceDemo(dataset) {
 async function downloadDemoVolume(dataset) {
   const url = new URL(dataset.volumePath, document.baseURI);
   if (url.origin !== window.location.origin) {
-    throw new Error("Demo volumes must be loaded from the SegRef3D Lite Web origin.");
+    throw new Error("Demo volumes must be loaded from the SegRef3D Lite origin.");
   }
   const response = await fetch(url, { credentials: "same-origin" });
   if (!response.ok) throw new Error(`Volume download failed with HTTP ${response.status}.`);

@@ -4,7 +4,7 @@ Seg Anythingは、Google ColabのGPUを計算backendとして利用します。B
 
 ## 1. SegRef3Dでobjectを設定
 
-1. SegRef3D GPU版またはLite版で画像系列を読み込みます。
+1. SegRef3D Local GPU、Local CPU、またはSegRef3D Liteで画像系列を読み込みます。
 2. **Target Object**でobject IDを選びます。
 3. 対象が明瞭な画像へ移動し、**Set Box Prompt**を押します。
 4. 対象を囲むboxを描きます。この画像がPrompt Frameになります。
@@ -39,7 +39,7 @@ Seg Anythingは、Google ColabのGPUを計算backendとして利用します。B
 
 SegRef3Dは画像系列とmaskを検証してから反映します。画像を開いていない場合は、result ZIP内のJPG系列も自動復元します。読み込んだmaskは新しい`[autosave]` label PNGフォルダへ直ちに保存されます。
 
-### Lite Webでの操作
+### SegRef3D Liteでの操作
 
 ブラウザ版も同じmanifest/ZIP形式を使用します。**Batch Jobs**を開いたままmouse wheelまたはF/Rで画像を移動し、**Use current**で現在画像をTracking Start/Endとして取り込みます。**Set Box on Canvas**ではcrosshair補助線を使ってBox Promptを設定できます。**Create Input ZIP**で出力し、Colabの結果を**Import Result**で復元します。jobの準備にはローカルSAM2やNVIDIA GPUは不要です。
 

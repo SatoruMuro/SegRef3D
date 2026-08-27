@@ -4,9 +4,9 @@ setlocal
 cd /d "%~dp0"
 
 set "VENV_DIR=.venv-gpu-cu128"
-if "%PYTHON_EXE%"=="" set "PYTHON_EXE=C:\Users\sator\AppData\Local\Programs\Python\Python312\python.exe"
+if "%PYTHON_EXE%"=="" set "PYTHON_EXE=python"
 
-echo === SegRef3D CUDA 12.8 GPU Build ===
+echo === SegRef3D Local GPU CUDA 12.8 Build ===
 echo Python: %PYTHON_EXE%
 echo Venv: %CD%\%VENV_DIR%
 
@@ -21,10 +21,10 @@ if errorlevel 1 exit /b 1
 python -m pip install --upgrade pip setuptools wheel
 if errorlevel 1 exit /b 1
 
-pip install --force-reinstall torch==2.11.0+cu128 torchvision==0.26.0+cu128 torchaudio==2.11.0+cu128 --index-url https://download.pytorch.org/whl/cu128
+python -m pip install --force-reinstall torch==2.11.0+cu128 torchvision==0.26.0+cu128 torchaudio==2.11.0+cu128 --index-url https://download.pytorch.org/whl/cu128
 if errorlevel 1 exit /b 1
 
-pip install -r requirements\requirements-gpu-cu128.txt
+python -m pip install -r requirements\requirements-gpu-cu128.txt
 if errorlevel 1 exit /b 1
 
 for /f "tokens=2 delims==" %%i in ('findstr /b "__version__" SegRef3D.py') do set "VERSION=%%i"
@@ -36,15 +36,17 @@ if "%VERSION%"=="" (
     exit /b 1
 )
 
-set "APP_NAME=SegRef3D-GPU-v%VERSION%"
+set "APP_NAME=SegRef3D-Local-GPU-v%VERSION%-Windows"
+set "PYINSTALLER_NAME=SegRef3D"
 set "SEGREF3D_APP_NAME=%APP_NAME%"
+set "SEGREF3D_EDITION=local-gpu"
 set "SEGREF3D_DISABLE_SAM2=0"
 set "SEGREF3D_FORCE_SAFE_SDPA=1"
 
 echo.
 echo === Optional attention packages ===
-pip show xformers || echo xformers: not installed
-pip show flash-attn || echo flash-attn: not installed
+python -m pip show xformers || echo xformers: not installed
+python -m pip show flash-attn || echo flash-attn: not installed
 
 echo.
 python tools\check_gpu_runtime.py
@@ -63,13 +65,14 @@ if errorlevel 3 (
 
 echo.
 echo === Building %APP_NAME% with PyInstaller onedir ===
-pyinstaller SegRef3D.py ^
-    --name "%APP_NAME%" ^
+python -m PyInstaller SegRef3D.py ^
+    --name "%PYINSTALLER_NAME%" ^
     --noconfirm ^
     --clean ^
     --onedir ^
     --console ^
     --icon "SegRef3D.ico" ^
+    --runtime-hook "tools\pyi_local_gpu.py" ^
     --paths "sam2pkg" ^
     --paths "sam2pkg\sam2" ^
     --add-data "ffmpeg_bin\ffmpeg.exe;ffmpeg_bin" ^
@@ -121,18 +124,22 @@ pyinstaller SegRef3D.py ^
     --exclude-module flash_attn
 if errorlevel 1 exit /b 1
 
+if exist "dist\%APP_NAME%" rmdir /s /q "dist\%APP_NAME%"
+move "dist\%PYINSTALLER_NAME%" "dist\%APP_NAME%"
+if errorlevel 1 exit /b 1
+
 echo.
 echo === Creating zip ===
-powershell -NoProfile -ExecutionPolicy Bypass -Command "Compress-Archive -LiteralPath 'dist\%APP_NAME%' -DestinationPath 'dist\%APP_NAME%-Windows.zip' -Force"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Compress-Archive -LiteralPath 'dist\%APP_NAME%' -DestinationPath 'dist\%APP_NAME%.zip' -Force"
 if errorlevel 1 exit /b 1
 
 echo.
 echo Build complete:
-echo %CD%\dist\%APP_NAME%\%APP_NAME%.exe
-echo %CD%\dist\%APP_NAME%-Windows.zip
+echo %CD%\dist\%APP_NAME%\SegRef3D.exe
+echo %CD%\dist\%APP_NAME%.zip
 echo.
 echo To verify startup diagnostics:
-echo "%CD%\dist\%APP_NAME%\%APP_NAME%.exe"
-echo "%CD%\dist\%APP_NAME%\%APP_NAME%.exe" --gpu-check
+echo "%CD%\dist\%APP_NAME%\SegRef3D.exe"
+echo "%CD%\dist\%APP_NAME%\SegRef3D.exe" --gpu-check
 
 endlocal

@@ -76,7 +76,7 @@ export const DEMO_DATASETS = Object.freeze([
       licenseName: "CC BY 4.0",
       licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
       adaptation:
-        "The original reference volume was converted to NIfTI and reoriented for SegRef3D Lite Web demo use.",
+        "The original reference volume was converted to NIfTI and reoriented for SegRef3D Lite demo use.",
     }),
   }),
 ]);

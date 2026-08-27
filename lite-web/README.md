@@ -1,11 +1,11 @@
-# SegRef3D Lite Web
+# SegRef3D Lite
 
 Browser-based, local-first image mask editor derived from the non-SAM2 workflow in SegRef3D.
 
 Generated export names use the loaded source folder name as their prefix, so datasets remain easy to
 distinguish after download. A directly loaded single-file volume uses its displayed project name instead.
 
-Public beta: <https://satorumuro.github.io/SegRef3D/lite-web/>
+Public app: <https://satorumuro.github.io/SegRef3D/lite-web/>
 
 ## Workspace
 
@@ -26,7 +26,7 @@ Objects | Image View | Tools
 
 ## Try SegRef3D without preparing your own data
 
-Lite Web includes two demos that use the same loading, mask-editing, and export pipelines as user data:
+SegRef3D Lite includes two demos that use the same loading, mask-editing, and export pipelines as user data:
 
 - **Apple Demo**: serial slice photographs and a calibration tutorial.
 - **RabbitCT Demo**: a volumetric CT tutorial with 1.0 mm isotropic voxel spacing.
@@ -62,7 +62,7 @@ Try Threshold or drawing tools on the skull or body contour, refine the mask, th
 The RabbitCT demo is adapted from the
 [RabbitCT benchmark dataset](https://zenodo.org/records/21267885), licensed under
 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). The original `reference_256.vol`
-was converted to NIfTI and reoriented for SegRef3D Lite Web demo use; the original data providers
+was converted to NIfTI and reoriented for SegRef3D Lite demo use; the original data providers
 do not endorse SegRef3D. The approximately 20 MB demo volume is fetched only when
 **Load RabbitCT Demo** is selected.
 
@@ -113,14 +113,14 @@ do not endorse SegRef3D. The approximately 20 MB demo volume is fetched only whe
 
 ### Local processing and data flow
 
-- Source images loaded into Lite Web are processed locally in the browser and are not uploaded
+- Source images loaded into SegRef3D Lite are processed locally in the browser and are not uploaded
   to SegRef3D servers.
 - Mask autosave uses browser-local IndexedDB storage.
 - Label PNG, overlay, Project ZIP, NIfTI, TIFF, CSV, and STL exports are generated locally and
   downloaded directly to the user's device.
 - Download names use the first loaded image filename as a prefix. Standard sequence names such
   as `mask0001.png` remain unchanged inside ZIP archives for import compatibility.
-- Lite Web does not operate an image-upload API, analytics pipeline, or telemetry service.
+- SegRef3D Lite does not operate an image-upload API, analytics pipeline, or telemetry service.
 
 Seg Anything and Seg CT/MRI are the explicit exceptions to this browser-local workflow. They are
 separate Google Colab workflows. Seg Anything provides SAM-based segmentation for user-specified
@@ -167,14 +167,14 @@ currently rejected with a clear error instead of being rendered incorrectly.
 
 ### Seg Anything workflow
 
-1. Load an image sequence in SegRef3D Lite Web.
+1. Load an image sequence in SegRef3D Lite.
 2. Open **AI Segmentation > Edit Setup** in the Tools dock.
 3. Define the tracking range for each object.
 4. Move to useful keyframes and add one or more box prompts with **Add Box Prompt Here**.
 5. Return to **AI Segmentation** and choose **Create Input ZIP**.
 6. Choose **Open Seg Anything**, run all Colab cells, and upload the ZIP in the first upload cell.
 7. Download the generated `segref3d_result.zip`.
-8. Choose **AI Segmentation > Import AI Result** in Lite Web.
+8. Choose **AI Segmentation > Import AI Result** in SegRef3D Lite.
 9. Refine the returned masks, run **Tools > Check Project**, and export measurements or 3D data.
 
 Opening Seg Anything displays a confirmation before leaving the browser-local workflow. Creating
@@ -192,18 +192,18 @@ sequence for backward propagation. Forward results win where the two directions 
 objects overwrite earlier objects in the final single-label mask, preserving the existing policy.
 
 The result ZIP can restore its working JPG sequence when no images are loaded. When the source
-sequence is already open, Lite Web verifies frame count, order, dimensions, and filenames before
+sequence is already open, SegRef3D Lite verifies frame count, order, dimensions, and filenames before
 replacing masks.
 
 ### Seg CT/MRI workflow
 
-1. Load a CT NIfTI `.nii` or `.nii.gz` volume. Lite Web retains the original bytes and full affine.
+1. Load a CT NIfTI `.nii` or `.nii.gz` volume. SegRef3D Lite retains the original bytes and full affine.
 2. Open **AI Segmentation > Seg CT/MRI**.
 3. Search the shared open-license ROI catalog and map each selected structure to Obj 1-20.
 4. Choose **Create Request ZIP** and confirm the Google Colab data-flow notice.
 5. Open [Seg CT/MRI](https://satorumuro.github.io/SegRef3D/ColabNotebooks/segctmri.html).
 6. Upload `<source-folder>_instant3d_request.zip` to your own Colab runtime and run the notebook.
-7. Download `instant3d_result.zip`, then choose **Import Result ZIP** in Lite Web.
+7. Download `instant3d_result.zip`, then choose **Import Result ZIP** in SegRef3D Lite.
 8. Select Replace or Merge when target objects already contain labels, then refine the masks.
 
 The request contains the exact source NIfTI, selected structures, Obj mappings, and a geometry
@@ -213,7 +213,7 @@ transaction. Binary per-ROI NIfTI files remain the backend source of truth; wher
 overlap in the combined single-label map, the lower Obj ID has priority and the overlap is reported.
 
 Seg CT/MRI uses TotalSegmentator in Google Colab; it does not run in the browser and is not
-bundled with Lite Web. The selectable catalog contains only supported open-license tasks. Users
+bundled with SegRef3D Lite. The selectable catalog contains only supported open-license tasks. Users
 must confirm that uploading research or medical data to Google Colab is permitted by their
 institution. Results are algorithmic segmentations intended for review and refinement, not an
 independent clinical diagnosis.
@@ -234,8 +234,8 @@ node --test "lite-web/tests/*.test.mjs"
 
 ## Browser limits
 
-Lite Web processing and export are browser-local. Seg Anything and Seg CT/MRI are separate and
+SegRef3D Lite processing and export are browser-local. Seg Anything and Seg CT/MRI are separate and
 require the user to explicitly upload their image-containing input ZIP to Google Colab. Very large TIFF stacks, all-frame
-cleanup, interpolation, and mesh generation can require substantial browser memory. Lite Web warns
+cleanup, interpolation, and mesh generation can require substantial browser memory. SegRef3D Lite warns
 before unusually large TIFF imports and uses progress states and yielded processing for long
 operations. Use the Windows build for datasets that exceed the browser's available memory.

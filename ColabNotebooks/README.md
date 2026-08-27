@@ -6,7 +6,7 @@
 Use `SegOnWebJob_v1_0.ipynb` for the Gradio-free Seg Anything workflow.
 The public redirect is `segonweb.html`.
 
-1. Configure **AI Tracking Setup** objects in SegRef3D Lite Web or Batch Tracking in Desktop.
+1. Configure **AI Tracking Setup** objects in SegRef3D Lite or Batch Tracking in SegRef3D Local.
 2. Export `segonweb_input.zip`.
 3. Open the notebook and select a T4 GPU.
 4. Run all cells and upload the input ZIP in the first executable cell.
@@ -55,7 +55,7 @@ Use `Instant3DWeb2.ipynb` for the Gradio-free CT structure workflow. The public 
 `instant3dweb2_backend.py` contains request validation, task grouping,
 TotalSegmentator invocation, geometry-aware output handling, and result ZIP generation.
 
-1. Create `instant3d_request.zip` in SegRef3D Desktop or Lite Web.
+1. Create `instant3d_request.zip` in SegRef3D Local or SegRef3D Lite.
 2. Open the Seg CT/MRI launcher and select a T4 GPU runtime when available.
 3. Upload the request ZIP in the first executable upload cell.
 4. Run validation before TotalSegmentator is installed or invoked.

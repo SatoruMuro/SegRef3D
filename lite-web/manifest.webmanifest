@@ -1,5 +1,5 @@
 {
-  "name": "SegRef3D Lite Web",
+  "name": "SegRef3D Lite",
   "short_name": "SegRef3D Lite",
   "description": "Local-first JPG, PNG, DICOM, and NIfTI segmentation mask editor",
   "start_url": "./",

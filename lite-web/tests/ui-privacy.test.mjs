@@ -17,6 +17,8 @@ test("local-processing UI and Seg Anything confirmation are wired into the app",
   assert.match(html, /id="local-processing-status"/);
   assert.match(html, /id="local-processing-dialog"/);
   assert.match(html, /id="segonweb-warning-dialog"/);
+  assert.match(html, /<title>SegRef3D Lite<\/title>/);
+  assert.doesNotMatch(html, /SegRef3D Lite Web/);
   assert.match(html, />Seg Anything</);
   assert.match(html, />Seg CT\/MRI</);
   assert.match(html, /ColabNotebooks\/segctmri\.html/);
@@ -37,8 +39,9 @@ test("offline cache uses the current UI asset generation", async () => {
   assert.match(html, /favicon\.ico/);
   assert.match(html, /apple-touch-icon\.png/);
   assert.match(html, /class="brand-icon" src="\.\/icon-192\.png"/);
-  assert.match(html, /app\.mjs\?v=36/);
-  assert.match(worker, /segref3d-lite-web-v37/);
+  assert.match(html, /app\.mjs\?v=37/);
+  assert.match(html, /<script type="module" src="\.\/app\.mjs\?v=37"><\/script>/);
+  assert.match(worker, /segref3d-lite-web-v39/);
   assert.match(worker, /medical-geometry\.mjs\?v=2/);
   assert.match(worker, /mask-tools\.mjs\?v=20/);
   assert.match(worker, /styles\.css\?v=32/);
@@ -46,13 +49,13 @@ test("offline cache uses the current UI asset generation", async () => {
   assert.match(worker, /apple-touch-icon\.png/);
   assert.match(worker, /icon-192\.png/);
   assert.match(worker, /icon-512\.png/);
-  assert.match(worker, /app\.mjs\?v=36/);
+  assert.match(worker, /app\.mjs\?v=37/);
   assert.match(worker, /workspace-ui\.mjs\?v=30/);
   assert.match(worker, /instant3d-bridge\.mjs\?v=3/);
   assert.match(worker, /totalsegmentator_roi_catalog\.json/);
 });
 
-test("Lite Web runtime has no image-upload or telemetry transport", async () => {
+test("SegRef3D Lite runtime has no image-upload or telemetry transport", async () => {
   const names = (await readdir(liteWebRoot)).filter((name) => name.endsWith(".mjs"));
   const forbiddenTransports = [
     ["XMLHttpRequest", /\bXMLHttpRequest\b/],

@@ -1,4 +1,4 @@
-# SegRef3D Windows GPU Build Notes
+# SegRef3D Local GPU Build Notes
 
 This build profile is for NVIDIA GPU compatibility, including RTX 50-series /
 Blackwell GPUs such as RTX 5080 Laptop GPU (`sm_120`).
@@ -15,7 +15,7 @@ SAM2 failure such as:
 This is a build/runtime compatibility problem, not a SegRef3D label-mask logic
 bug.
 
-## GPU build environment
+## SegRef3D Local GPU environment
 
 Use a fresh Windows virtual environment. The provided build script uses Python
 3.12 by default:
@@ -39,7 +39,7 @@ pip install --force-reinstall torch==2.11.0+cu128 torchvision==0.26.0+cu128 torc
 pip install -r requirements-gpu-cu128.txt
 ```
 
-Do not use CUDA 11.8 for the GPU build.
+Do not use CUDA 11.8 for SegRef3D Local GPU.
 
 ## Runtime diagnostics
 
@@ -105,23 +105,25 @@ CPU SAM2 may be very slow and is not the default distributable behavior.
 
 ## PyInstaller
 
-The GPU build uses onedir packaging:
+SegRef3D Local GPU uses onedir packaging. The build script invokes PyInstaller
+and then creates the versioned distribution directory and ZIP.
 
 ```bat
-pyinstaller --noconfirm --clean SegRef3D_gpu.spec
+build_windows_gpu.bat
 ```
 
 Output:
 
 ```text
-dist\SegRef3D-GPU-v<version>\SegRef3D-GPU-v<version>.exe
+dist\SegRef3D-Local-GPU-v<version>-Windows\SegRef3D.exe
+dist\SegRef3D-Local-GPU-v<version>-Windows.zip
 ```
 
 Run the executable from a terminal to keep startup diagnostics visible:
 
 ```bat
-dist\SegRef3D-GPU-v<version>\SegRef3D-GPU-v<version>.exe
-dist\SegRef3D-GPU-v<version>\SegRef3D-GPU-v<version>.exe --gpu-check
+dist\SegRef3D-Local-GPU-v<version>-Windows\SegRef3D.exe --startup-smoke-test
+dist\SegRef3D-Local-GPU-v<version>-Windows\SegRef3D.exe --gpu-check
 ```
 
 ## Test matrix

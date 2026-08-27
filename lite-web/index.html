@@ -5,10 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="SegRef3D Lite Web - ブラウザだけで動くローカル画像マスク編集ツール"
+      content="SegRef3D Lite - ブラウザだけで動くローカル画像マスク編集ツール"
     />
     <meta name="theme-color" content="#f4f5f6" />
-    <title>SegRef3D Lite Web</title>
+    <title>SegRef3D Lite</title>
     <link rel="icon" href="./favicon.ico" sizes="any" />
     <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
     <link rel="manifest" href="./manifest.webmanifest" />
@@ -79,7 +79,7 @@
           <img class="brand-icon" src="./icon-192.png" alt="" aria-hidden="true" />
           <div>
             <strong>SegRef3D</strong>
-            <span>Lite Web <b>Beta</b></span>
+            <span>Lite</span>
           </div>
         </div>
         <div class="project-summary" aria-live="polite">
@@ -260,7 +260,7 @@
           <canvas id="editor-canvas" tabindex="0"></canvas>
           <div id="empty-state" class="empty-state">
             <div class="empty-icon"><svg><use href="#i-image"></use></svg></div>
-            <h1>SegRef3D Lite Web</h1>
+            <h1>SegRef3D Lite</h1>
             <p>Browser-based image segmentation, mask refinement &amp; 3D reconstruction</p>
             <div class="empty-actions">
               <button id="empty-load" class="command-button accent" type="button">
@@ -284,7 +284,7 @@
                 · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>
               </small>
             </div>
-            <small class="empty-privacy">Source images stay in your browser during normal Lite Web processing.</small>
+            <small class="empty-privacy">Your images stay on your device during normal SegRef3D Lite use.</small>
           </div>
           <div id="zoom-readout" class="zoom-readout" hidden>100%</div>
           <div id="editing-state" class="editing-state" hidden>
@@ -327,7 +327,7 @@
           type="button"
           aria-haspopup="dialog"
           aria-controls="local-processing-dialog"
-          title="How Lite Web handles your images"
+          title="How SegRef3D Lite handles your images"
         >
           <span class="local-processing-icon" aria-hidden="true"><svg><use href="#i-check"></use></svg></span>
           <span class="local-processing-copy">
@@ -355,8 +355,8 @@
           </div>
         </div>
         <div class="local-file-dialog-copy">
-          <p>Images loaded into SegRef3D Lite Web are processed locally in your browser.</p>
-          <p>SegRef3D Lite Web does not upload your source images to SegRef3D servers.</p>
+          <p>Images loaded into SegRef3D Lite are processed locally in your browser.</p>
+          <p>SegRef3D Lite does not upload your source images to SegRef3D servers.</p>
           <p>Masks and autosave data are stored locally in your browser. Exported files are downloaded directly to your device.</p>
         </div>
         <div class="local-file-assurance dialog-exception">
@@ -365,7 +365,7 @@
         </div>
         <section class="dialog-language-block" lang="ja" aria-labelledby="local-processing-ja-title">
           <h3 id="local-processing-ja-title">ローカル処理について</h3>
-          <p>SegRef3D Lite Web に読み込んだ画像は、通常ブラウザ内で処理され、元画像が SegRef3D のサーバーへ自動的にアップロードされることはありません。</p>
+          <p>SegRef3D Lite に読み込んだ画像は、通常ブラウザ内で処理され、元画像が SegRef3D のサーバーへ自動的にアップロードされることはありません。</p>
           <p>マスクや自動保存データもブラウザ内に保存され、Exportしたファイルは端末へ直接保存されます。</p>
           <p><strong>例外：Seg Anything／Seg CT/MRI</strong><br />これらのAI機能は Google Colab を使用します。作成された入力ZIP（作業用画像または元NIfTIを含む）は、ユーザー自身が Google Colab ランタイムへ明示的にアップロードします。</p>
         </section>
@@ -638,7 +638,7 @@
           </div>
         </div>
         <div class="local-file-dialog-copy">
-          <p>SegRef3D Lite Web normally processes images locally in your browser.</p>
+          <p>SegRef3D Lite normally processes images locally in your browser.</p>
           <p>Seg Anything is different: <code>&lt;source-folder&gt;_segonweb_input.zip</code> contains the working image sequence and must be uploaded to your Google Colab runtime for SAM-based processing.</p>
           <p>Your images are not uploaded to a SegRef3D-operated server.</p>
         </div>
@@ -648,7 +648,7 @@
         </div>
         <section class="dialog-language-block" lang="ja" aria-labelledby="segonweb-warning-ja-title">
           <h3 id="segonweb-warning-ja-title">Seg Anything は Google Colab を使用します</h3>
-          <p>SegRef3D Lite Webでは通常、画像はブラウザ内で処理されます。ただし Seg Anything では、作業画像を含む入力ZIPをユーザー自身の Google Colab ランタイムへアップロードする必要があります。</p>
+          <p>SegRef3D Liteでは通常、画像はブラウザ内で処理されます。ただし Seg Anything では、作業画像を含む入力ZIPをユーザー自身の Google Colab ランタイムへアップロードする必要があります。</p>
           <p>画像が SegRef3D の運営するサーバーへアップロードされることはありません。研究データ・医用画像を使用する場合は、所属機関の規定上、Google Colabへのアップロードが許可されていることを確認してください。</p>
         </section>
         <div class="local-file-dialog-actions">
@@ -1071,6 +1071,7 @@
     <script src="./vendor/dicom-parser.min.js"></script>
     <script>
       window.addEventListener("error", (event) => {
+        console.error("Application startup error", event.error || event.message);
         const status = document.querySelector("#status-text");
         if (status) status.textContent = `Application startup failed: ${event.message}`;
       });
@@ -1080,12 +1081,6 @@
         if (status) status.textContent = `Application operation failed: ${message}`;
       });
     </script>
-    <script type="module">
-      import("./app.mjs?v=36").catch((error) => {
-        console.error("Application module failed to load", error);
-        const status = document.querySelector("#status-text");
-        if (status) status.textContent = `Application startup failed: ${error.message}`;
-      });
-    </script>
+    <script type="module" src="./app.mjs?v=37"></script>
   </body>
 </html>

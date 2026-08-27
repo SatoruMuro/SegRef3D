@@ -9,15 +9,44 @@ It provides a practical, lightweight alternative workflow for researchers workin
 連続組織切片、顕微鏡画像、その他の形態学画像データを扱う研究者に対して、特にAmira/Avizoなどの商用総合プラットフォームを利用しにくい環境でも実践可能な、軽量な代替ワークフローを提供します。
 
 
-👉 [Read the full usage tutorial here](https://github.com/SatoruMuro/SAM2GUIfor3Drecon/blob/main/Tutorial/TutorialSegRef3DEN.md)    
+👉 [Read the full usage tutorial here](Tutorial/TutorialSegRef3DEN.md)
   
-日本語は[こちら](https://github.com/SatoruMuro/SAM2GUIfor3Drecon/blob/main/READMEJP.md)  
+日本語は[こちら](READMEJP.md)
 
 This repository was formerly named SAM2GUIfor3Drecon.  
-The software is now distributed as SegRef3D.  
+The software is now distributed as SegRef3D.
+
+## Which SegRef3D should I use?
+
+| Environment | Recommended version |
+| --- | --- |
+| Windows | **SegRef3D Lite** |
+| macOS | **SegRef3D Lite** |
+| Linux / modern browser | **SegRef3D Lite** |
+| Windows + NVIDIA CUDA GPU | **SegRef3D Lite** or **SegRef3D Local GPU** |
+
+### SegRef3D Lite
+
+**Recommended for most users.** Runs locally in a modern browser on Windows, macOS, and Linux,
+with no installation required. [Open SegRef3D Lite](https://satorumuro.github.io/SegRef3D/lite-web/).
+
+### SegRef3D Local GPU
+
+For Windows PCs with NVIDIA CUDA GPUs. Runs SAM2 segmentation and tracking locally.
+
+### SegRef3D Local CPU
+
+Legacy / offline desktop option. It remains available for users who specifically require a Windows
+desktop workflow without local SAM2. SegRef3D Lite is recommended for most new users.
+
+### Privacy and processing location
+
+**Your images stay on your device during normal SegRef3D Lite use.** Image display, mask editing,
+measurement, NIfTI export, and STL generation run locally in your browser. Data is uploaded only
+when you explicitly send a Seg Anything or Seg CT/MRI job to your own Google Colab runtime.
 
 ---
-<img src="https://github.com/SatoruMuro/SAM2GUIfor3Drecon/blob/main/images/SegRef3D-v1.2.0-GUI.png" alt="image"  width="100%">
+<img src="images/SegRef3D-v1.2.0-GUI.png" alt="image"  width="100%">
 
 ---
 
@@ -48,13 +77,12 @@ Watch the **Basic Workflow** video to learn how to use SegRef3D, from loading im
 
 ---
 
-## SegRef3D Lite Web (Beta)
+## SegRef3D Lite
 
-**[Open SegRef3D Lite Web](https://satorumuro.github.io/SegRef3D/lite-web/)**
+**[Open SegRef3D Lite](https://satorumuro.github.io/SegRef3D/lite-web/)**
 
 The lightweight mask-editing workflow is also available as a browser app on
-Windows, macOS, Linux, iPadOS, and other modern browser platforms. Images and
-masks stay on the device and are not uploaded to a server.
+Windows, macOS, Linux, iPadOS, and other modern browser platforms.
 
 - Load JPG/PNG image folders and edit up to 20 single-label objects
 - Load DICOM folders (`.dcm` or extensionless) and NIfTI `.nii` / `.nii.gz` volumes
@@ -69,8 +97,8 @@ masks stay on the device and are not uploaded to a server.
 - Multi-object Seg Anything job setup, job ZIP export, and complete result ZIP restoration
 - Mouse-wheel image switching, zoom, pan, and a responsive touch-friendly layout
 
-The Web Beta does not run SAM2 inside the browser. Configure Box Prompts, Prompt Frames,
-and Tracking Ranges in Lite Web, export `segonweb_input.zip`, process it in the Seg Anything
+SegRef3D Lite does not run SAM2 inside the browser. Configure Box Prompts, Prompt Frames,
+and Tracking Ranges in SegRef3D Lite, export `segonweb_input.zip`, process it in the Seg Anything
 Colab backend, and restore `segref3d_result.zip` with **Import Result**. Display, extraction,
 calibration, label-volume export, and STL generation run locally in the browser. Images are
 uploaded only when the user explicitly sends the job ZIP to Google Colab.
@@ -111,7 +139,7 @@ The request ZIP contains the exact source NIfTI volume, selected structures, Obj
 geometry fingerprint. Import rejects a result whose dimensions, spacing, affine/orientation, or
 source checksum differs. Only structures in the bundled open-license catalog can be requested;
 license-restricted TotalSegmentator tasks are rejected. TotalSegmentator is not bundled into the
-Desktop or Lite Web application and runs only after an explicit upload to Google Colab. Confirm
+SegRef3D Local or SegRef3D Lite application and runs only after an explicit upload to Google Colab. Confirm
 that this use is permitted by your institution before uploading research or medical data.
 
 ```text
@@ -122,11 +150,10 @@ SegRef3D → select anatomy and export → TotalSegmentator / Colab → import �
 
 ## ⚙️ System Requirements
 
-* **Operating System:** Windows 10/11 (64-bit)  
-* **Hardware:** NVIDIA GPU with CUDA support (for using SAM-based segmentation and tracking)  
-  - CPU-only environment: SegRef3D can run, but **SAM features are disabled**.  
-    Other functions (e.g., file handling, visualization, basic utilities) remain available.  
-* **Software:** No need to install Python or PyTorch — they are already bundled with SegRef3D  
+* **SegRef3D Lite:** Windows, macOS, or Linux with a modern browser. No installation required.
+* **SegRef3D Local GPU:** Windows 10/11 (64-bit), NVIDIA CUDA GPU, and a compatible driver.
+* **SegRef3D Local CPU:** Windows 10/11 (64-bit). Local SAM2 is not included.
+* **Local packages:** Python and PyTorch do not need to be installed separately.
 
 
 
@@ -136,17 +163,26 @@ SegRef3D → select anatomy and export → TotalSegmentator / Colab → import �
 
 ### 1. Download
 
-#### **Latest Version — ver.1.2.3**
+#### Recommended: SegRef3D Lite
 
-Newest Windows builds with CUDA 12.8 / RTX 50-series support, a SAM2-free Lite edition, safer tracking and mask editing, 5x/10x slice interpolation for 3D export, image preprocessing, and improved canvas navigation.
+Windows / macOS / Linux. No installation required.
 
-Two builds are available:
+* **[Open SegRef3D Lite](https://satorumuro.github.io/SegRef3D/lite-web/)**
 
-* **GPU build** — includes local SAM2-based AI segmentation. Recommended for NVIDIA GPU environments.
-  * [`SegRef3D-GPU-v1.2.3-Windows.zip`](https://www.dropbox.com/scl/fi/aixgd0a7lyp45tcye3x3e/SegRef3D-GPU-v1.2.3-Windows.zip?rlkey=0mgnxeb3afovi60ln4q9uo156&st=tbh8qvrf&dl=1)
+#### Advanced local AI: SegRef3D Local GPU v1.2.6
 
-* **Lite build** — lightweight build without bundled SAM2. Recommended for general use when local AI segmentation is not required.
-  * [`SegRef3D-Lite-v1.2.3-Windows.zip`](https://www.dropbox.com/scl/fi/2bbm6byzi3tme547e2beb/SegRef3D-Lite-v1.2.3-Windows.zip?rlkey=4u3njpty6ggm37oa04cqx12kn&st=95sqew99&dl=1)
+Windows + NVIDIA CUDA GPU. Includes local SAM2 segmentation and tracking. The current
+`SegRef3D-Local-GPU-v1.2.6-Windows.zip` package has been built locally; public upload is pending.
+
+#### Legacy / offline: SegRef3D Local CPU v1.2.6
+
+Windows desktop package without local SAM2. The current
+`SegRef3D-Local-CPU-v1.2.6-Windows.zip` package has been built locally; public upload is pending.
+
+#### Previous desktop packages — v1.2.3
+
+* [Previous GPU package (`SegRef3D-GPU-v1.2.3-Windows.zip`)](https://www.dropbox.com/scl/fi/aixgd0a7lyp45tcye3x3e/SegRef3D-GPU-v1.2.3-Windows.zip?rlkey=0mgnxeb3afovi60ln4q9uo156&st=tbh8qvrf&dl=1)
+* [Previous Lite desktop package (`SegRef3D-Lite-v1.2.3-Windows.zip`)](https://www.dropbox.com/scl/fi/2bbm6byzi3tme547e2beb/SegRef3D-Lite-v1.2.3-Windows.zip?rlkey=4u3njpty6ggm37oa04cqx12kn&st=95sqew99&dl=1)
 
 #### **Previous Stable Version — ver.1.1.0**
 
@@ -174,8 +210,8 @@ Everything required to run SegRef3D is already bundled inside the application.
 ⚠️ **Requirement:**  
 If you want to use **SAM-based segmentation and tracking**, make sure the PC has an **NVIDIA GPU with a compatible driver installed**.  
 
-- **GPU environment:** Full functionality (including SAM)  
-- **CPU environment:** SAM features are disabled, but other tools remain usable  
+- **SegRef3D Local GPU:** Full functionality, including local SAM2.
+- **SegRef3D Local CPU:** Local SAM2 is disabled; non-SAM2 tools remain usable.
 
 
 ### 3. Run
@@ -260,7 +296,7 @@ If you do not have a CUDA-compatible GPU, you can still use SegRef3D through a h
 
 ### Seg Anything Job Workflow
 
-The GPU desktop, Lite desktop, and Lite Web workflows move every prompt operation into
+SegRef3D Local GPU, SegRef3D Local CPU, and SegRef3D Lite move every prompt operation into
 SegRef3D and use Google Colab only as a SAM2 computation backend:
 
 1. Configure each object's Box Prompt, Prompt Frame, and Tracking Range in SegRef3D.
@@ -280,7 +316,7 @@ progress, and returns standard single-label PNG masks with the working JPG seque
 
 ### 📷 Notes for Web-based Workflow
 
-* Lite Web accepts JPG, PNG, DICOM, and NIfTI input.
+* SegRef3D Lite accepts JPG, PNG, DICOM, and NIfTI input.
 * Configure object jobs in **Batch Jobs**, then export one `segonweb_input.zip` file.
 * Run Seg Anything on a Colab GPU and restore the returned `segref3d_result.zip` with **Import Result**.
 * The web version outputs **standard PNG label masks** with the same image size as the original input images.
