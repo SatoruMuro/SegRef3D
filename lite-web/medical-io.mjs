@@ -1,5 +1,6 @@
 import * as nifti from "./vendor/nifti-reader.js";
 import UTIF from "./vendor/utif.module.js";
+import { dicomSeriesGeometry, makeVolumeGeometry } from "./medical-geometry.mjs?v=1";
 
 const DICOM_UID = Object.freeze({
   implicitLittle: "1.2.840.10008.1.2",
@@ -460,6 +461,11 @@ export function parseNiftiVolume(input, fileName = "volume.nii") {
     spacing,
     origin,
     affine,
+    geometry: makeVolumeGeometry({
+      shape: [width, height, depth],
+      affine,
+      sourceKind: "nifti",
+    }),
     orientation,
     datatype,
     frames,
@@ -644,14 +650,27 @@ export function decodeDicomSeries(instances, parser = globalThis.dicomParser) {
     }
   }
   const first = ordered[0];
+  let geometry = null;
+  const geometryWarnings = [];
+  try {
+    geometry = dicomSeriesGeometry(ordered);
+    geometryWarnings.push(...geometry.warnings);
+  } catch (error) {
+    geometryWarnings.push(`Physical DICOM geometry unavailable: ${error.message}`);
+  }
+  const fallbackOriginLps = first.imagePosition.length >= 3 ? first.imagePosition.slice(0, 3) : [0, 0, 0];
+  const fallbackOriginRas = [-fallbackOriginLps[0], -fallbackOriginLps[1], fallbackOriginLps[2]];
   return {
     format: "dicom",
     seriesUid: first.seriesUid,
     width: first.columns,
     height: first.rows,
     depth: frames.length,
-    spacing: [first.pixelSpacing[1] || 1, first.pixelSpacing[0] || 1, first.sliceSpacing || 1],
-    origin: first.imagePosition.length >= 3 ? first.imagePosition.slice(0, 3) : [0, 0, 0],
+    spacing: geometry?.spacing || [first.pixelSpacing[1] || 1, first.pixelSpacing[0] || 1, first.sliceSpacing || 1],
+    origin: geometry?.origin || fallbackOriginRas,
+    affine: geometry?.affine || null,
+    geometry,
+    geometryWarnings,
     frames,
   };
 }

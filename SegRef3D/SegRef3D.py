@@ -65,6 +65,14 @@ from mask_postprocessing import (
     interpolate_label_masks,
     merge_label_binary,
 )
+from volume_geometry import (
+    VolumeGeometry,
+    VolumeGeometryError,
+    axis_aligned_affine,
+    dicom_files_to_geometry,
+    nifti_image_with_geometry,
+    simpleitk_image_to_geometry,
+)
 
 from svgpathtools import parse_path
 
@@ -700,6 +708,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         self.original_image_filenames = {}
         self.source_nifti_path = None
         self.source_nifti_fingerprint = None
+        self.volume_geometry = None
         self.instant3d_mappings = []
         self.instant3d_dialog = None
 
@@ -1395,7 +1404,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         self.label_masks[key] = label
         self.label_mask_paths[key] = self.get_label_png_path(key)
         self.save_label_mask_png(key)
-    
+
         print(
             f"[INFO] Loaded SVG as label mask: {os.path.basename(svg_path)} | "
             f"elements={loaded_elements}, pixels={loaded_pixels}, "
@@ -4213,12 +4222,95 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
 
     
+    def _set_volume_geometry(self, geometry):
+        self.volume_geometry = geometry
+        if geometry is None:
+            return
+        sx, sy, sz = geometry.spacing
+        ox, oy, oz = geometry.origin
+        width, height, depth = geometry.shape
+        self.mm_per_px = float(sx)
+        self.z_spacing_mm = float(sz)
+        self.volinf = {
+            "width": width,
+            "height": height,
+            "depth": depth,
+            "x_spacing": float(sx),
+            "y_spacing": float(sy),
+            "z_spacing": float(sz),
+            "x_origin": float(ox),
+            "y_origin": float(oy),
+            "z_origin": float(oz),
+            "affine_ras": geometry.affine_ras.tolist(),
+            "source_kind": geometry.source_kind,
+        }
+        if hasattr(self, "spin_z_interval"):
+            self.spin_z_interval.setValue(float(sz))
+        print(f"[INFO] Canonical volume geometry: {geometry.source_kind}")
+        print(f"[INFO] Shape: {geometry.shape}; spacing: {geometry.spacing}; origin RAS: {geometry.origin}")
+        print(f"[INFO] IJK-to-RAS affine:\n{geometry.affine_ras}")
+        for warning in geometry.warnings:
+            print(f"[WARN] {warning}")
+
+    def _volume_geometry_for_shape(self, shape):
+        expected = tuple(int(value) for value in shape)
+        if self.volume_geometry is not None and self.volume_geometry.shape == expected:
+            return self.volume_geometry, True
+        sx, sy, sz, ox, oy, oz = self.get_nifti_spacing_origin()
+        fallback = VolumeGeometry(
+            expected,
+            axis_aligned_affine(expected, (sx, sy, sz), (ox, oy, oz)),
+            "axis-aligned-fallback",
+            ("Source physical geometry was unavailable; an axis-aligned fallback was used.",),
+        )
+        return fallback, False
+
+    @staticmethod
+    def _affine_from_volinfo_rows(rows):
+        affine_rows = []
+        lowered = [[cell.strip().lower() for cell in row] for row in rows]
+        for row_number in range(1, 5):
+            label = f"ijk to ras row {row_number}"
+            index = next((i for i, row in enumerate(lowered) if row and row[0] == label), -1)
+            if index < 0:
+                return None
+            if index + 1 >= len(rows) or len(rows[index + 1]) < 4:
+                raise ValueError(f"{label.title()} values are missing.")
+            affine_rows.append([float(value) for value in rows[index + 1][:4]])
+        return np.asarray(affine_rows, dtype=float)
+
+    @staticmethod
+    def _write_volinfo_csv(path, geometry):
+        def _fstr(value):
+            return format(float(value), ".10g")
+
+        width, height, depth = geometry.shape
+        sx, sy, sz = geometry.spacing
+        ox, oy, oz = geometry.origin
+        rows = [
+            ["Width", "Height", "Depth"],
+            [str(width), str(height), str(depth)],
+            ["X Spacing", "Y Spacing", "Z Spacing"],
+            [_fstr(sx), _fstr(sy), _fstr(sz)],
+            ["X Origin", "Y Origin", "Z Origin"],
+            [_fstr(ox), _fstr(oy), _fstr(oz)],
+        ]
+        for index, row in enumerate(geometry.affine_ras, start=1):
+            rows.extend([[f"IJK to RAS Row {index}"], [_fstr(value) for value in row]])
+        rows.extend([["Geometry Source"], [geometry.source_kind]])
+        with open(path, "w", newline="", encoding="utf-8") as stream:
+            csv.writer(stream).writerows(rows)
+        print(f"[INFO] Volume info saved to: {path}")
+
     def get_nifti_spacing_origin(self):
         """
         NIfTI出力用に X/Y/Z spacing と origin を取得する。
         volinf があればそれを優先し、なければ mm_per_px / z_spacing_mm を使う。
         """
-        if hasattr(self, "volinf") and isinstance(self.volinf, dict):
+        if self.volume_geometry is not None:
+            sx, sy, sz = self.volume_geometry.spacing
+            ox, oy, oz = self.volume_geometry.origin
+        elif hasattr(self, "volinf") and isinstance(self.volinf, dict):
             sx = float(self.volinf.get("x_spacing", self.mm_per_px if self.mm_per_px is not None else 1.0))
             sy = float(self.volinf.get("y_spacing", self.mm_per_px if self.mm_per_px is not None else sx))
             sz = float(self.volinf.get("z_spacing", self.z_spacing_mm if self.z_spacing_mm is not None else 1.0))
@@ -4304,19 +4396,29 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             if hasattr(self, "spin_z_interval"):
                 self.spin_z_interval.setValue(float(z_spacing))
     
-            # optional: volinf情報も保持
-            self.volinf = {
-                "width": int(float(rows[1][0])) if len(rows) > 1 and len(rows[1]) >= 1 else None,
-                "height": int(float(rows[1][1])) if len(rows) > 1 and len(rows[1]) >= 2 else None,
-                "depth": int(float(rows[1][2])) if len(rows) > 1 and len(rows[1]) >= 3 else None,
-                "x_spacing": x_spacing,
-                "y_spacing": y_spacing,
-                "z_spacing": z_spacing,
-                "x_origin": float(rows[5][0]) if len(rows) > 5 and len(rows[5]) >= 1 else 0.0,
-                "y_origin": float(rows[5][1]) if len(rows) > 5 and len(rows[5]) >= 2 else 0.0,
-                "z_origin": float(rows[5][2]) if len(rows) > 5 and len(rows[5]) >= 3 else 0.0,
-                "source": file_path,
-            }
+            width = int(float(rows[1][0])) if len(rows) > 1 and len(rows[1]) >= 1 else 0
+            height = int(float(rows[1][1])) if len(rows) > 1 and len(rows[1]) >= 2 else 0
+            depth = int(float(rows[1][2])) if len(rows) > 1 and len(rows[1]) >= 3 else 0
+            origin = (
+                float(rows[5][0]) if len(rows) > 5 and len(rows[5]) >= 1 else 0.0,
+                float(rows[5][1]) if len(rows) > 5 and len(rows[5]) >= 2 else 0.0,
+                float(rows[5][2]) if len(rows) > 5 and len(rows[5]) >= 3 else 0.0,
+            )
+            affine = self._affine_from_volinfo_rows(rows)
+            if affine is None:
+                affine = axis_aligned_affine(
+                    (width, height, depth),
+                    (x_spacing, y_spacing, z_spacing),
+                    origin,
+                )
+                warnings = ("Legacy VolInfo CSV has no affine; using the axis-aligned fallback.",)
+                source_kind = "volinfo-legacy-fallback"
+            else:
+                warnings = ()
+                source_kind = "volinfo-affine"
+            geometry = VolumeGeometry((width, height, depth), affine, source_kind, warnings)
+            self._set_volume_geometry(geometry)
+            self.volinf["source"] = file_path
     
             self.label_status.setText(
                 f"✅ VolInfo loaded: XY={self.mm_per_px:.6f} mm/px, Z={self.z_spacing_mm:.6f} mm"
@@ -4369,6 +4471,9 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             print(f"  Size:   {width} x {height} x {depth}")
             print(f"  Spacing: X={sx}, Y={sy}, Z={sz}")
             print(f"  Origin:  X={ox}, Y={oy}, Z={oz}")
+            if self.volume_geometry is not None:
+                print(f"  Direction IJK->RAS:\n{self.volume_geometry.direction}")
+                print(f"  Affine IJK->RAS:\n{self.volume_geometry.affine_ras}")
             print(f"  Source:  {self.volinf.get('source', 'N/A')}")
             return
     
@@ -4719,19 +4824,12 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         affine = np.asarray(fingerprint["affine"], dtype=float)
         self.source_nifti_path = source_path
         self.source_nifti_fingerprint = fingerprint
-        self.mm_per_px = float(spacing[0])
-        self.z_spacing_mm = float(spacing[2])
-        self.volinf = {
-            "width": width,
-            "height": height,
-            "depth": depth,
-            "x_spacing": float(spacing[0]),
-            "y_spacing": float(spacing[1]),
-            "z_spacing": float(spacing[2]),
-            "x_origin": float(affine[0, 3]),
-            "y_origin": float(affine[1, 3]),
-            "z_origin": float(affine[2, 3]),
-        }
+        self._set_volume_geometry(VolumeGeometry((width, height, depth), affine, "nifti"))
+        self.volinf["source"] = source_path
+        self._write_volinfo_csv(
+            os.path.join(os.getcwd(), f"{base}_volinf.csv"),
+            self.volume_geometry,
+        )
         self.current_index = 0
         self.image_pristine = True
         self.display_current_image()
@@ -4769,6 +4867,10 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         self.original_image_filenames.clear()
         self.source_nifti_path = None
         self.source_nifti_fingerprint = None
+        self.volume_geometry = None
+        self.volinf = None
+        self.mm_per_px = None
+        self.z_spacing_mm = None
         self.instant3d_mappings = []
         self._apply_object_names_to_checkboxes()
         
@@ -5000,6 +5102,30 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
                     return (buf[128:132] == b"DICM") or (buf[0:2] in (b"\x02\x00", b"\x08\x00", b"\x10\x00"))
                 except Exception:
                     return False
+
+
+        dicom_geometry = None
+        dicom_candidate_paths = []
+        non_dicom_image_paths = []
+        for filename in selected_files:
+            candidate_path = os.path.join(folder, filename)
+            extension = pathlib.Path(filename).suffix.lower()
+            if extension == ".dcm" or _looks_like_dicom(candidate_path):
+                dicom_candidate_paths.append(candidate_path)
+            elif extension in valid_exts:
+                non_dicom_image_paths.append(candidate_path)
+        if dicom_candidate_paths and not non_dicom_image_paths:
+            try:
+                dicom_geometry, ordered_paths = dicom_files_to_geometry(dicom_candidate_paths)
+                selected_files = [os.path.basename(path) for path in ordered_paths]
+                self._set_volume_geometry(dicom_geometry)
+                print("[INFO] DICOM display order follows the canonical affine K axis.")
+            except VolumeGeometryError as exc:
+                print(f"[WARN] DICOM physical geometry unavailable: {exc}")
+                self.label_status.setText(
+                    "DICOM geometry could not be represented as one regular volume; "
+                    "NIfTI export will use an axis-aligned fallback."
+                )
 
 
         for i, filename in enumerate(selected_files):
@@ -5314,8 +5440,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
                     # spacing / origin を保存（CSVは後段の代表DICOMブロックで出力される）
                     sx, sy, sz = image.GetSpacing()   # (sx, sy, sz)
                     ox, oy, oz = image.GetOrigin()
-                    self.mm_per_px = float(sx)
-                    self.z_spacing_mm = float(sz)
+                    self._set_volume_geometry(simpleitk_image_to_geometry(image))
                     total = len(self.image_paths)
                     self.label_status.setText(f"Loaded {total} images via SimpleITK fallback (converted {num_converted} to JPG).")
                 else:
@@ -5387,18 +5512,18 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         #     with open(csv_path, "w", newline="", encoding="utf-8") as f:
         #         csv.writer(f).writerows(table)
         def _write_vol_csv(width, height, depth, sx, sy, sz, ox, oy, oz):
-            table = [
-                ["Width", "Height", "Depth"], [str(width), str(height), str(depth)],
-                ["X Spacing", "Y Spacing", "Z Spacing"], [_fstr(sx), _fstr(sy), _fstr(sz)],
-                ["X Origin", "Y Origin", "Z Origin"], [_fstr(ox), _fstr(oy), _fstr(oz)]
-            ]
-            with open(csv_path, "w", newline="", encoding="utf-8") as f:
-                csv.writer(f).writerows(table)
-            print(f"[INFO] Volume info saved to: {csv_path}")                
-                
-                
-                
-            print(f"[INFO] Volume info saved to: {csv_path}")
+            shape = (int(width), int(height), int(depth))
+            if self.volume_geometry is not None and self.volume_geometry.shape == shape:
+                geometry = self.volume_geometry
+            else:
+                geometry = VolumeGeometry(
+                    shape,
+                    axis_aligned_affine(shape, (sx, sy, sz), (ox, oy, oz)),
+                    "axis-aligned-fallback",
+                    ("Physical source geometry was unavailable.",),
+                )
+                self._set_volume_geometry(geometry)
+            self._write_volinfo_csv(csv_path, geometry)
         
         w = h = d = 0
         sx = sy = sz = None
@@ -5428,11 +5553,13 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
                     h = int(getattr(ds0, "Rows", 0) or 0)
                     d = len(dcm_like_paths)
                     px = getattr(ds0, "PixelSpacing", [1.0, 1.0])
-                    sx = float(px[0]) if px else 1.0
-                    sy = float(px[1]) if px else 1.0
+                    # DICOM PixelSpacing is [row, column], while I/J here are x/y.
+                    sy = float(px[0]) if px else 1.0
+                    sx = float(px[1]) if px and len(px) > 1 else sy
                     sz = float(getattr(ds0, "SliceThickness", 1.0) or 1.0)
                     ipp = getattr(ds0, "ImagePositionPatient", [0.0, 0.0, 0.0])
-                    ox, oy, oz = float(ipp[0]), float(ipp[1]), float(ipp[2])
+                    # Even the orientation-free fallback stores its origin in canonical RAS.
+                    ox, oy, oz = -float(ipp[0]), -float(ipp[1]), float(ipp[2])
                     self.mm_per_px = sx
                     self.z_spacing_mm = sz
                                         
@@ -5460,8 +5587,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
                             w, h, d = W, H, Z
                             sx, sy, sz = image.GetSpacing()
                             ox, oy, oz = image.GetOrigin()
-                            self.mm_per_px = float(sx)
-                            self.z_spacing_mm = float(sz)
+                            self._set_volume_geometry(simpleitk_image_to_geometry(image))
                                                         
                             # === INSERT: z spacing を再推定して上書き（SITK後） ===
                             try:
@@ -6782,7 +6908,6 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
     #     print(f"[INFO] Calibration info saved to: {csv_path}")
     
     def save_calibration_to_csv(self):
-        import csv
         from pathlib import Path
         from datetime import datetime
     
@@ -6792,41 +6917,48 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
     
         try:
             first_img_path = self.image_paths.get("0001") or list(self.image_paths.values())[0]
-            img = Image.open(first_img_path)
-            width, height = img.width, img.height
+            with Image.open(first_img_path) as img:
+                width, height = img.width, img.height
         except Exception as e:
             print(f"[WARN] Failed to get image size: {e}")
             width, height = 0, 0
     
         depth = len(self.image_paths)
     
-        volume_table = [
-            ["Width", "Height", "Depth"],
-            [str(width), str(height), str(depth)],
-            ["X Spacing", "Y Spacing", "Z Spacing"],
-            [str(self.mm_per_px), str(self.mm_per_px), str(self.z_spacing_mm)],
-            ["X Origin", "Y Origin", "Z Origin"],
-            ["0", "0", "0"]
-        ]
+        shape = (width, height, depth)
+        spacing = (self.mm_per_px, self.mm_per_px, self.z_spacing_mm)
+        if self.volume_geometry is not None and self.volume_geometry.shape == shape:
+            geometry = self.volume_geometry.with_spacing(
+                spacing,
+                source_kind=f"{self.volume_geometry.source_kind}:calibrated",
+            )
+        else:
+            origin = (0.0, 0.0, 0.0)
+            if isinstance(self.volinf, dict):
+                origin = (
+                    float(self.volinf.get("x_origin", 0.0)),
+                    float(self.volinf.get("y_origin", 0.0)),
+                    float(self.volinf.get("z_origin", 0.0)),
+                )
+            geometry = VolumeGeometry(
+                shape,
+                axis_aligned_affine(shape, spacing, origin),
+                "calibration-axis-aligned-fallback",
+                ("No source affine was available during calibration.",),
+            )
+        self._set_volume_geometry(geometry)
     
         input_folder_name = Path(self.image_paths.get("0001") or list(self.image_paths.values())[0]).parent.name
         csv_filename = f"{input_folder_name}_volinf.csv"
         csv_path = Path(self.output_mask_dir).parent / csv_filename
-    
+
         try:
-            with open(csv_path, "w", newline="", encoding="utf-8") as f:
-                writer = csv.writer(f)
-                writer.writerows(volume_table)
-    
+            self._write_volinfo_csv(csv_path, geometry)
         except PermissionError:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             fallback_filename = f"{input_folder_name}_volinf_{timestamp}.csv"
             fallback_path = Path(self.output_mask_dir).parent / fallback_filename
-    
-            with open(fallback_path, "w", newline="", encoding="utf-8") as f:
-                writer = csv.writer(f)
-                writer.writerows(volume_table)
-    
+            self._write_volinfo_csv(fallback_path, geometry)
             csv_path = fallback_path
             print(f"[WARN] Original volinf CSV was locked. Saved as: {csv_path}")
     
@@ -8787,12 +8919,6 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         # if self.mm_per_px is None or self.z_spacing_mm is None:
         #     self.label_status.setText("⚠ mm/px or z-spacing not set. Using 1.0 mm by default.")
                 
-        # スケール・原点
-        sx, sy, sz, ox, oy, oz = self.get_nifti_spacing_origin()
-        
-        if self.mm_per_px is None or self.z_spacing_mm is None:
-            self.label_status.setText("⚠ spacing not set. Using 1.0 mm by default.")        
-    
         # 画像キーを数値順に並べる
         def _nums(s):
             import re
@@ -8848,26 +8974,9 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         #     [ 0.0,  0.0, 0.0, 1.0         ],
         # ], dtype=float)
                 
-        # affine
-        if (
-            self.source_nifti_fingerprint
-            and list(self.source_nifti_fingerprint.get("shape", [])) == list(vol.shape)
-        ):
-            affine = np.asarray(self.source_nifti_fingerprint["affine"], dtype=float)
-        else:
-            affine = np.array([
-                [ sx,  0.0, 0.0,              ox ],
-                [ 0.0, -sy, 0.0,  oy + (H - 1) * sy ],
-                [ 0.0,  0.0, sz,              oz ],
-                [ 0.0,  0.0, 0.0,             1.0 ],
-            ], dtype=float)
-    
-        img_nii = nib.Nifti1Image(vol, affine)
-        img_nii.set_sform(affine, code=1)
-        img_nii.set_qform(affine, code=1)
-    
+        geometry, source_geometry = self._volume_geometry_for_shape(vol.shape)
+        img_nii = nifti_image_with_geometry(vol, geometry)
         hdr = img_nii.header
-        hdr.set_xyzt_units('mm', 'sec')
         hdr['descrip'] = b'SegRef3D labelmap (1-20); 0=background'
     
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -8879,9 +8988,14 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         # self.label_status.setText(
         #     f"✅ NIfTI exported ({len(volume_slices)} slices, voxel {mm_per_px}×{mm_per_px}×{z_spacing} mm)"
         # )
-        self.label_status.setText(
-            f"✅ NIfTI exported ({len(volume_slices)} slices)"
-        )
+        if source_geometry:
+            self.label_status.setText(
+                f"✅ NIfTI exported with source image geometry ({len(volume_slices)} slices)"
+            )
+        else:
+            self.label_status.setText(
+                f"⚠ NIfTI exported with axis-aligned fallback geometry ({len(volume_slices)} slices)"
+            )
 
         
 
@@ -9025,8 +9139,8 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
     
     def export_nifti_labelmap_reversed(self):
         """
-        Z 軸（上下）を反転して NIfTI 出力
-        vol は通常順のまま、アフィンで Z を反転
+        Z軸のvoxel dataとaffineを同時に反転してNIfTI出力する。
+        reverse後も元画像と同じphysical anatomyを表す。
         """
         from datetime import datetime
         import numpy as np
@@ -9042,12 +9156,6 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         # if self.mm_per_px is None or self.z_spacing_mm is None:
         #     self.label_status.setText("⚠ mm/px or z-spacing not set. Using 1.0 mm by default.")
             
-        # スケール・原点
-        sx, sy, sz, ox, oy, oz = self.get_nifti_spacing_origin()
-        
-        if self.mm_per_px is None or self.z_spacing_mm is None:
-            self.label_status.setText("⚠ spacing not set. Using 1.0 mm by default.")    
-    
         # 画像キーを数値順に並べる
         def _nums(s):
             import re
@@ -9105,19 +9213,13 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         # ], dtype=float)
         
         # Z反転アフィン
-        affine = np.array([
-            [ sx,  0.0,  0.0,              ox ],
-            [ 0.0, -sy,  0.0,  oy + (H - 1) * sy ],
-            [ 0.0,  0.0, -sz,  oz + (D - 1) * sz ],
-            [ 0.0,  0.0,  0.0,             1.0 ],
-        ], dtype=float)
+        source, source_geometry = self._volume_geometry_for_shape(vol.shape)
+        geometry = source.reversed(2)
+        vol = np.flip(vol, axis=2).copy()
     
-        img_nii = nib.Nifti1Image(vol, affine)
-        img_nii.set_sform(affine, code=1)
-        img_nii.set_qform(affine, code=1)
+        img_nii = nifti_image_with_geometry(vol, geometry)
     
         hdr = img_nii.header
-        hdr.set_xyzt_units('mm', 'sec')
         hdr['descrip'] = b'SegRef3D labelmap (1-20); 0=background; Z reversed'
     
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -9129,8 +9231,9 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         # self.label_status.setText(
         #     f"✅ NIfTI (Z reversed) exported ({len(volume_slices)} slices, voxel {sx}×{sy}×{sz} mm)"
         # )
+        suffix = "source image geometry" if source_geometry else "axis-aligned fallback geometry"
         self.label_status.setText(
-            f"✅ NIfTI (Z reversed) exported ({len(volume_slices)} slices)"
+            f"✅ NIfTI (Z reversed) exported with {suffix} ({len(volume_slices)} slices)"
         )
 
 

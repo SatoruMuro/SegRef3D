@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { readFile, readdir, stat } from "node:fs/promises";
 import test from "node:test";
 import { DEMO_DATASETS, demoDatasetById } from "../demo-datasets.mjs";
-import { parseNiftiVolume } from "../medical-io.mjs";
+import { parseNiftiLabelVolume, parseNiftiVolume } from "../medical-io.mjs";
+import { createNiftiLabelVolume } from "../volume-tools.mjs";
 
 test("Apple demo declares ordered images, calibration guidance, and attribution", () => {
   const dataset = demoDatasetById("apple-kanzi-84");
@@ -39,6 +40,18 @@ test("RabbitCT demo declares a lazy NIfTI volume with known physical spacing", a
   assert.equal(volume.height, 256);
   assert.equal(volume.frames.length, 256);
   assert.deepEqual(volume.spacing, [1, 1, 1]);
+
+  const emptySlice = new Uint8Array(volume.width * volume.height);
+  const exported = createNiftiLabelVolume(
+    Array.from({ length: volume.frames.length }, () => emptySlice),
+    volume.width,
+    volume.height,
+    volume.geometry,
+  );
+  const reopened = parseNiftiLabelVolume(exported.buffer, "rabbit-labels.nii");
+  reopened.affine.forEach((row, y) => row.forEach((value, x) => {
+    assert.ok(Math.abs(value - volume.affine[y][x]) < 1e-6);
+  }));
 });
 
 test("Apple demo assets are complete and remain practical for web delivery", async () => {

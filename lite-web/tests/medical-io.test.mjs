@@ -13,7 +13,7 @@ import {
   parseTiffStack,
   sortDicomInstances,
 } from "../medical-io.mjs";
-import { createTiffLabelStack } from "../volume-tools.mjs";
+import { createNiftiLabelVolume, createTiffLabelStack } from "../volume-tools.mjs";
 
 const require = createRequire(import.meta.url);
 const dicomParser = require("../vendor/dicom-parser.min.js");
@@ -100,7 +100,12 @@ function joinBytes(parts) {
   return output;
 }
 
-function syntheticDicom(instanceNumber, pixelValues) {
+function syntheticDicom(instanceNumber, pixelValues, {
+  position = [10, 20, 30],
+  orientation = [1, 0, 0, 0, 1, 0],
+  pixelSpacing = [0.5, 0.75],
+  sliceSpacing = 2,
+} = {}) {
   const transferSyntax = explicitElement(0x0002, 0x0010, "UI", "1.2.840.10008.1.2.1");
   const metaLength = explicitElement(0x0002, 0x0000, "UL", uint32Bytes(transferSyntax.length));
   const pixelBytes = new Uint8Array(pixelValues.length * 2);
@@ -109,13 +114,14 @@ function syntheticDicom(instanceNumber, pixelValues) {
   const dataSet = joinBytes([
     explicitElement(0x0020, 0x000e, "UI", "1.2.3.4.5"),
     explicitElement(0x0020, 0x0013, "IS", String(instanceNumber)),
-    explicitElement(0x0020, 0x0032, "DS", "10\\20\\30"),
-    explicitElement(0x0018, 0x0050, "DS", "2"),
+    explicitElement(0x0020, 0x0032, "DS", position.join("\\")),
+    explicitElement(0x0020, 0x0037, "DS", orientation.join("\\")),
+    explicitElement(0x0018, 0x0050, "DS", String(sliceSpacing)),
     explicitElement(0x0028, 0x0002, "US", uint16Bytes(1)),
     explicitElement(0x0028, 0x0004, "CS", "MONOCHROME2"),
     explicitElement(0x0028, 0x0010, "US", uint16Bytes(2)),
     explicitElement(0x0028, 0x0011, "US", uint16Bytes(2)),
-    explicitElement(0x0028, 0x0030, "DS", "0.5\\0.75"),
+    explicitElement(0x0028, 0x0030, "DS", pixelSpacing.join("\\")),
     explicitElement(0x0028, 0x0100, "US", uint16Bytes(16)),
     explicitElement(0x0028, 0x0101, "US", uint16Bytes(12)),
     explicitElement(0x0028, 0x0102, "US", uint16Bytes(11)),
@@ -218,6 +224,24 @@ test("decodes NIfTI-1 int16 volumes and applies scaling", () => {
   assert.equal(volume.frames[1].pixels.at(-1), 255);
 });
 
+test("NIfTI input retains off-diagonal sform and nonzero origin", () => {
+  const bytes = new Uint8Array(syntheticNifti());
+  const view = new DataView(bytes.buffer);
+  const affine = [
+    [-0.5, 0.02, 0.1, 100.076588],
+    [-0.01, 0.75, -0.2, 23.749557],
+    [0.03, -0.04, 2.5, 137.329995],
+  ];
+  affine.forEach((row, y) => row.forEach((value, x) => {
+    view.setFloat32(280 + y * 16 + x * 4, value, true);
+  }));
+  const volume = parseNiftiVolume(bytes.buffer, "oblique.nii");
+  affine.forEach((row, y) => row.forEach((value, x) => {
+    assert.ok(Math.abs(volume.affine[y][x] - value) < 1e-4);
+  }));
+  assert.deepEqual(volume.geometry.affine, volume.affine);
+});
+
 test("decodes gzip-compressed NIfTI and rejects 4D input", () => {
   const compressed = gzipSync(new Uint8Array(syntheticNifti()));
   const compressedBuffer = compressed.buffer.slice(
@@ -240,8 +264,65 @@ test("parses extensionless uncompressed DICOM and windows grayscale pixels", () 
   const series = decodeDicomSeries([instance], dicomParser);
   assert.equal(series.frames.length, 1);
   assert.deepEqual(series.spacing, [0.75, 0.5, 2]);
-  assert.deepEqual(series.origin, [10, 20, 30]);
+  assert.deepEqual(series.origin, [-10, -20, 30]);
+  assert.deepEqual(series.affine, [
+    [-0.75, 0, 0, -10],
+    [0, -0.5, 0, -20],
+    [0, 0, 2, 30],
+    [0, 0, 0, 1],
+  ]);
   assert.deepEqual([...series.frames[0].pixels], [0, 85, 170, 255]);
+});
+
+test("DICOM coronal and oblique metadata produce full IJK-to-RAS geometry", () => {
+  const coronal = [0, 1, 2].map((index) => parseDicomInstance(
+    syntheticDicom(index + 1, [1, 2, 3, 4], {
+      position: [100.076588, 23.749557 + index * 3.75, 137.329995],
+      orientation: [1, 0, 0, 0, 0, -1],
+      pixelSpacing: [0.6875, 0.6875],
+      sliceSpacing: 3.75,
+    }),
+    `COR${index + 1}`,
+    dicomParser,
+  ));
+  const volume = decodeDicomSeries(coronal, dicomParser);
+  assert.deepEqual(volume.spacing, [0.6875, 0.6875, 3.75]);
+  volume.origin.forEach((value, index) => assert.ok(Math.abs(value - [-100.076588, -23.749557, 137.329995][index]) < 1e-5));
+  const expectedDirection = [[-1, 0, 0], [0, 0, -1], [0, -1, 0]];
+  volume.geometry.direction.forEach((row, y) => row.forEach((value, x) => {
+    assert.ok(Math.abs(value - expectedDirection[y][x]) < 1e-6);
+  }));
+
+  const orientation = [0.8, 0.6, 0, -0.3, 0.4, 0.866025403784];
+  const step = [0.25, -0.15, 2.4];
+  const oblique = [0, 1, 2].map((index) => parseDicomInstance(
+    syntheticDicom(index + 1, [1, 2, 3, 4], {
+      position: [45 + index * step[0], -22 + index * step[1], 81 + index * step[2]],
+      orientation,
+    }),
+    `OBL${index + 1}`,
+    dicomParser,
+  ));
+  const obliqueVolume = decodeDicomSeries(oblique, dicomParser);
+  [-0.25, 0.15, 2.4].forEach((value, index) => {
+    assert.ok(Math.abs(obliqueVolume.affine[index][2] - value) < 1e-6);
+  });
+
+  const masks = obliqueVolume.frames.map((frame, index) => {
+    const mask = new Uint8Array(frame.width * frame.height);
+    mask[index] = index + 1;
+    return mask;
+  });
+  const exported = createNiftiLabelVolume(
+    masks,
+    obliqueVolume.width,
+    obliqueVolume.height,
+    obliqueVolume.geometry,
+  );
+  const reopened = parseNiftiVolume(exported.buffer, "dicom-derived-labels.nii");
+  reopened.affine.forEach((row, y) => row.forEach((value, x) => {
+    assert.ok(Math.abs(value - obliqueVolume.affine[y][x]) < 1e-5);
+  }));
 });
 
 test("groups DICOM series and sorts slices by instance number", () => {

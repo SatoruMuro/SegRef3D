@@ -31,7 +31,13 @@ import {
   parseNiftiLabelVolume,
   parseNiftiVolume,
   parseTiffStack,
-} from "./medical-io.mjs?v=18";
+} from "./medical-io.mjs?v=19";
+import {
+  axisAlignedAffine,
+  geometryWithSpacing,
+  makeVolumeGeometry,
+  transformGeometryForPreparedImage,
+} from "./medical-geometry.mjs?v=1";
 import { demoDatasetById } from "./demo-datasets.mjs?v=3";
 import { clearProjectMasks, loadMask, saveMask } from "./storage.mjs?v=25";
 import { createZip, parseZip } from "./zip.mjs?v=25";
@@ -63,7 +69,7 @@ import {
   interpolateLabelVolume,
   marchingTetrahedra,
   parseVolInfoCsv,
-} from "./volume-tools.mjs?v=15";
+} from "./volume-tools.mjs?v=16";
 import {
   applyMaskVolumeChanges,
   buildMaskVolumeChanges,
@@ -77,7 +83,7 @@ import {
   relabelVolume,
   volumeStatistics,
   volumeStatisticsAsync,
-} from "./mask-tools.mjs?v=18";
+} from "./mask-tools.mjs?v=19";
 import { upgradeWorkspaceLayout } from "./workspace-ui.mjs?v=30";
 
 try {
@@ -361,6 +367,7 @@ const state = {
   displayVersion: 0,
   calibration: { xSpacing: 1, ySpacing: 1, zSpacing: 1, referenceLength: 10 },
   volumeOrigin: [0, 0, 0],
+  volumeGeometry: null,
   volumeInfoSource: "Default spacing",
   calibrationMode: false,
   calibrationPoints: [],
@@ -1677,17 +1684,23 @@ function updateCalibrationFromControls() {
 
 function initializeCalibrationFromImages() {
   const image = state.images[0];
-  const xSpacing = Number(image?.pixelSpacing?.[0]);
-  const ySpacing = Number(image?.pixelSpacing?.[1]);
-  const zSpacing = Number(image?.sliceSpacing);
+  const sourceSpacing = state.volumeGeometry?.spacing || [
+    image?.pixelSpacing?.[0],
+    image?.pixelSpacing?.[1],
+    image?.sliceSpacing,
+  ];
+  const xSpacing = Number(sourceSpacing[0]);
+  const ySpacing = Number(sourceSpacing[1]);
+  const zSpacing = Number(sourceSpacing[2]);
   state.calibration = {
     xSpacing: Number.isFinite(xSpacing) && xSpacing > 0 ? xSpacing : 1,
     ySpacing: Number.isFinite(ySpacing) && ySpacing > 0 ? ySpacing : 1,
     zSpacing: Number.isFinite(zSpacing) && zSpacing > 0 ? zSpacing : 1,
     referenceLength: 10,
   };
+  const sourceOrigin = state.volumeGeometry?.origin || image?.volumeOrigin;
   state.volumeOrigin = [0, 1, 2].map((index) => {
-    const value = Number(image?.volumeOrigin?.[index]);
+    const value = Number(sourceOrigin?.[index]);
     return Number.isFinite(value) ? value : 0;
   });
   state.volumeInfoSource = image?.sourceFormat === "dicom"
@@ -1709,16 +1722,27 @@ function currentVolInfo() {
       "VolInfo requires equal image dimensions. Reload the sequence on a shared canvas.",
     );
   }
+  const spacing = [
+    state.calibration.xSpacing,
+    state.calibration.ySpacing,
+    state.calibration.zSpacing,
+  ];
+  const geometry = state.volumeGeometry
+    ? geometryWithSpacing(state.volumeGeometry, spacing)
+    : makeVolumeGeometry({
+        shape: [width, height, state.images.length],
+        affine: axisAlignedAffine(spacing, state.volumeOrigin.slice(0, 3)),
+        sourceKind: "axis-aligned-fallback",
+      });
   return {
     width,
     height,
     depth: state.images.length,
-    spacing: [
-      state.calibration.xSpacing,
-      state.calibration.ySpacing,
-      state.calibration.zSpacing,
-    ],
-    origin: state.volumeOrigin.slice(0, 3),
+    spacing: geometry.spacing,
+    origin: geometry.origin,
+    affine: geometry.affine,
+    sourceKind: geometry.sourceKind,
+    geometry,
   };
 }
 
@@ -1780,18 +1804,24 @@ async function importVolInfoCsv(file) {
       setStatus("VolInfo import canceled. Calibration was not changed.");
       return;
     }
+    state.volumeGeometry = makeVolumeGeometry({
+      shape: [current.width, current.height, current.depth],
+      affine: imported.affine || axisAlignedAffine(imported.spacing, imported.origin),
+      sourceKind: imported.affine ? "volinfo-affine" : "volinfo-legacy-fallback",
+      warnings: imported.affine ? [] : ["Legacy VolInfo CSV has no affine."],
+    });
     state.calibration = {
       ...state.calibration,
-      xSpacing: imported.spacing[0],
-      ySpacing: imported.spacing[1],
-      zSpacing: imported.spacing[2],
+      xSpacing: state.volumeGeometry.spacing[0],
+      ySpacing: state.volumeGeometry.spacing[1],
+      zSpacing: state.volumeGeometry.spacing[2],
     };
-    state.volumeOrigin = imported.origin.slice();
+    state.volumeOrigin = [...state.volumeGeometry.origin];
     state.volumeInfoSource = file.name;
     syncCalibrationControls();
     syncVolInfoSummary();
     setStatus(
-      `VolInfo loaded: spacing ${imported.spacing.map((value) => value.toPrecision(6)).join(" × ")} mm.`,
+      `VolInfo loaded: spacing ${state.volumeGeometry.spacing.map((value) => value.toPrecision(6)).join(" × ")} mm.`,
     );
     showToast(`Loaded ${file.name}`);
     openImageTools("calibration");
@@ -2231,16 +2261,14 @@ function labelVolumeGeometry() {
     );
   }
   updateCalibrationFromControls();
+  const info = currentVolInfo();
   return {
     width,
     height,
     masks: state.images.map((image) => image.mask),
-    spacing: [
-      state.calibration.xSpacing,
-      state.calibration.ySpacing,
-      state.calibration.zSpacing,
-    ],
-    origin: state.volumeOrigin.slice(0, 3),
+    spacing: info.spacing,
+    origin: info.origin,
+    geometry: info.geometry,
   };
 }
 
@@ -2249,16 +2277,19 @@ async function exportLabelVolume(format) {
   closeToolsDockOnNarrow();
   setLoading(true, `Exporting ${format.toUpperCase()}`, "Preparing label volume");
   try {
-    const { masks, width, height, spacing, origin } = labelVolumeGeometry();
+    const { masks, width, height, geometry } = labelVolumeGeometry();
     const bytes =
       format === "nifti"
-        ? createNiftiLabelVolume(masks, width, height, spacing, origin)
+        ? createNiftiLabelVolume(masks, width, height, geometry)
         : createTiffLabelStack(masks, width, height);
     const extension = format === "nifti" ? "nii" : "tiff";
     const mimeType = format === "nifti" ? "application/octet-stream" : "image/tiff";
     const filename = `${sanitizeFilename(state.projectName)}_labels_${timestamp()}.${extension}`;
     downloadBlob(new Blob([bytes], { type: mimeType }), filename);
-    setStatus(`Exported ${masks.length}-slice label volume as ${extension.toUpperCase()}.`);
+    const geometryNote = format === "nifti"
+      ? ` with ${geometry.sourceKind === "axis-aligned-fallback" ? "axis-aligned fallback" : "source image"} geometry`
+      : " (pixel stack only; patient-space geometry is not embedded)";
+    setStatus(`Exported ${masks.length}-slice label volume as ${extension.toUpperCase()}${geometryNote}.`);
     showToast(`Downloaded ${filename}`);
   } catch (error) {
     console.error(error);
@@ -3559,7 +3590,12 @@ async function prepareImageSequence(
   projectFiles,
   projectName,
   sourceDescription,
-  { autoExportVolInfo = false, preserveDimensions = false, demoDataset = null } = {},
+  {
+    autoExportVolInfo = false,
+    preserveDimensions = false,
+    demoDataset = null,
+    volumeGeometry = null,
+  } = {},
 ) {
   if (sources.length === 0) throw new Error("No readable image slices were found.");
   const largeCount = sources.filter(
@@ -3657,7 +3693,25 @@ async function prepareImageSequence(
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
 
+  let preparedVolumeGeometry = null;
+  if (volumeGeometry) {
+    if (volumeGeometry.shape[2] !== prepared.length) {
+      throw new Error("Source volume geometry depth does not match the prepared image sequence.");
+    }
+    const first = prepared[0];
+    preparedVolumeGeometry = transformGeometryForPreparedImage(volumeGeometry, {
+      sourceWidth: first.originalWidth,
+      sourceHeight: first.originalHeight,
+      contentWidth: first.contentWidth,
+      contentHeight: first.contentHeight,
+      outputWidth: first.width,
+      outputHeight: first.height,
+      contentX: first.contentX,
+      contentY: first.contentY,
+    });
+  }
   state.images = prepared;
+  state.volumeGeometry = preparedVolumeGeometry;
   state.sourceVolume = null;
   state.instant3dMappings = [];
   state.instant3dPendingImport = null;
@@ -3799,6 +3853,8 @@ async function decodeDicomSources(files) {
     sources,
     files: selected.items.map((instance) => instance.file),
     description: selected.description || "DICOM series",
+    geometry: decoded.geometry,
+    geometryWarnings: decoded.geometryWarnings,
   };
 }
 
@@ -3834,7 +3890,7 @@ async function prepareNiftiFile(file) {
       [file],
       file.name.replace(/\.nii(?:\.gz)?$/i, "") || "NIfTI volume",
       "NIfTI slice(s)",
-      { autoExportVolInfo: true },
+      { autoExportVolInfo: true, volumeGeometry: volume.geometry },
     );
     if (loaded) {
       state.sourceVolume = {
@@ -3991,8 +4047,16 @@ async function prepareFiles(files) {
         decoded.files,
         projectFolder === "Image sequence" ? decoded.description : projectFolder,
         "DICOM frame(s)",
-        { autoExportVolInfo: true },
+        { autoExportVolInfo: true, volumeGeometry: decoded.geometry },
       );
+      if (decoded.geometryWarnings.length > 0) {
+        console.warn(...decoded.geometryWarnings);
+        if (!decoded.geometry) {
+          setStatus(
+            `DICOM loaded. Geometry unavailable: using axis-aligned fallback. ${decoded.geometryWarnings[0]}`,
+          );
+        }
+      }
       return;
     }
     throw new Error("No JPG, PNG, TIFF, DICOM, or NIfTI images were found.");
@@ -4110,7 +4174,7 @@ async function loadNiftiDemo(dataset) {
       [file],
       dataset.projectName,
       `${dataset.displayName} slice(s)`,
-      { preserveDimensions: true, demoDataset: dataset },
+      { preserveDimensions: true, demoDataset: dataset, volumeGeometry: volume.geometry },
     );
     if (!loaded) return;
     state.sourceVolume = {

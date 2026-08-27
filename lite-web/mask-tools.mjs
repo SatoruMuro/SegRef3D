@@ -1,4 +1,4 @@
-import { signedDistanceForLabel } from "./volume-tools.mjs?v=15";
+import { signedDistanceForLabel } from "./volume-tools.mjs?v=16";
 
 function validateMasks(masks, width, height) {
   if (!Array.isArray(masks) || masks.length === 0) throw new Error("The label volume is empty.");

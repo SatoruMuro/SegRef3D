@@ -34,10 +34,12 @@ test("offline cache uses the current UI asset generation", async () => {
   ]);
 
   assert.match(html, /styles\.css\?v=31/);
-  assert.match(html, /app\.mjs\?v=31/);
-  assert.match(worker, /segref3d-lite-web-v31/);
+  assert.match(html, /app\.mjs\?v=32/);
+  assert.match(worker, /segref3d-lite-web-v32/);
+  assert.match(worker, /medical-geometry\.mjs\?v=1/);
+  assert.match(worker, /mask-tools\.mjs\?v=19/);
   assert.match(worker, /styles\.css\?v=31/);
-  assert.match(worker, /app\.mjs\?v=31/);
+  assert.match(worker, /app\.mjs\?v=32/);
   assert.match(worker, /workspace-ui\.mjs\?v=30/);
   assert.match(worker, /instant3d-bridge\.mjs\?v=3/);
   assert.match(worker, /totalsegmentator_roi_catalog\.json/);

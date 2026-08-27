@@ -1,3 +1,10 @@
+import {
+  axisAlignedAffine,
+  makeVolumeGeometry,
+  normalizeAffine,
+  spacingFromAffine,
+} from "./medical-geometry.mjs?v=1";
+
 function validateVolume(masks, width, height) {
   if (!Array.isArray(masks) || masks.length === 0) throw new Error("The label volume is empty.");
   const sliceSize = width * height;
@@ -72,7 +79,7 @@ function headerMatches(row, expected) {
   return expected.every((value, index) => row?.[index]?.trim().toLowerCase() === value);
 }
 
-export function createVolInfoCsv({ width, height, depth, spacing, origin = [0, 0, 0] }) {
+export function createVolInfoCsv({ width, height, depth, spacing, origin = [0, 0, 0], affine = null, sourceKind = null }) {
   const dimensions = [width, height, depth].map(Number);
   if (dimensions.some((value) => !Number.isInteger(value) || value < 1)) {
     throw new Error("VolInfo dimensions must be positive integers.");
@@ -87,6 +94,11 @@ export function createVolInfoCsv({ width, height, depth, spacing, origin = [0, 0
     ["X Origin", "Y Origin", "Z Origin"],
     normalizedPosition,
   ];
+  if (affine) {
+    const matrix = normalizeAffine(affine);
+    matrix.forEach((row, index) => rows.push([`IJK to RAS Row ${index + 1}`], row));
+    if (sourceKind) rows.push(["Geometry Source"], [sourceKind]);
+  }
   return `${rows.map((row) => row.map(csvCell).join(",")).join("\r\n")}\r\n`;
 }
 
@@ -121,25 +133,54 @@ export function parseVolInfoCsv(text) {
   if (origin.length < 3 || origin.some((value) => !Number.isFinite(value))) {
     throw new Error("VolInfo origin values must be numbers.");
   }
-  return {
+  const affineRows = [];
+  for (let rowNumber = 1; rowNumber <= 4; rowNumber += 1) {
+    const header = rows.findIndex((row) =>
+      headerMatches(row, [`ijk to ras row ${rowNumber}`]),
+    );
+    if (header < 0) {
+      affineRows.length = 0;
+      break;
+    }
+    const values = rows[header + 1]?.slice(0, 4).map(Number) || [];
+    if (values.length !== 4 || values.some((value) => !Number.isFinite(value))) {
+      throw new Error(`IJK to RAS Row ${rowNumber} values are invalid.`);
+    }
+    affineRows.push(values);
+  }
+  const result = {
     width: dimensions[0],
     height: dimensions[1],
     depth: dimensions[2],
     spacing,
     origin,
   };
+  if (affineRows.length === 4) result.affine = normalizeAffine(affineRows);
+  return result;
 }
 
 export function createNiftiLabelVolume(
   masks,
   width,
   height,
-  spacing = [1, 1, 1],
+  geometryOrSpacing = [1, 1, 1],
   origin = [0, 0, 0],
 ) {
   validateVolume(masks, width, height);
-  const [spacingX, spacingY, spacingZ] = normalizedSpacing(spacing);
-  const [originX, originY, originZ] = normalizedOrigin(origin);
+  const shape = [width, height, masks.length];
+  const geometry = geometryOrSpacing && !Array.isArray(geometryOrSpacing) && geometryOrSpacing.affine
+    ? makeVolumeGeometry({
+        shape,
+        affine: geometryOrSpacing.affine,
+        sourceKind: geometryOrSpacing.sourceKind || "source",
+      })
+    : makeVolumeGeometry({
+        shape,
+        affine: axisAlignedAffine(normalizedSpacing(geometryOrSpacing), normalizedOrigin(origin)),
+        sourceKind: "axis-aligned-fallback",
+      });
+  const affine = geometry.affine;
+  const [spacingX, spacingY, spacingZ] = spacingFromAffine(affine);
   const voxelCount = width * height * masks.length;
   const output = new Uint8Array(352 + voxelCount);
   const view = new DataView(output.buffer);
@@ -157,13 +198,13 @@ export function createNiftiLabelVolume(
   view.setFloat32(88, spacingZ, true);
   view.setFloat32(108, 352, true);
   view.setUint8(123, 2);
+  view.setInt16(252, 0, true);
   view.setInt16(254, 1, true);
-  view.setFloat32(280, spacingX, true);
-  view.setFloat32(292, originX, true);
-  view.setFloat32(300, spacingY, true);
-  view.setFloat32(308, originY, true);
-  view.setFloat32(320, spacingZ, true);
-  view.setFloat32(324, originZ, true);
+  for (let row = 0; row < 3; row += 1) {
+    for (let column = 0; column < 4; column += 1) {
+      view.setFloat32(280 + row * 16 + column * 4, affine[row][column], true);
+    }
+  }
   output.set([0x6e, 0x2b, 0x31, 0], 344);
   let offset = 352;
   for (const mask of masks) {

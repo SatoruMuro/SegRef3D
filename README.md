@@ -63,6 +63,7 @@ masks stay on the device and are not uploaded to a server.
 - Window/level, brightness/contrast, reference-line calibration, threshold extraction, and RGB extraction
 - Windows-compatible VolInfo CSV import/export, including automatic export after medical-volume loading and calibration
 - NIfTI/TIFF label-volume export and 1x/5x/10x signed-distance interpolation with STL export
+- Full DICOM/NIfTI IJK-to-RAS geometry preservation in NIfTI masks; legacy VolInfo CSV remains readable
 - Multi-object Seg Anything job setup, job ZIP export, and complete result ZIP restoration
 - Mouse-wheel image switching, zoom, pan, and a responsive touch-friendly layout
 
@@ -71,6 +72,10 @@ and Tracking Ranges in Lite Web, export `segonweb_input.zip`, process it in the 
 Colab backend, and restore `segref3d_result.zip` with **Import Result**. Display, extraction,
 calibration, label-volume export, and STL generation run locally in the browser. Images are
 uploaded only when the user explicitly sends the job ZIP to Google Colab.
+
+NIfTI mask export preserves the source DICOM/NIfTI physical geometry when available. TIFF mask
+export preserves pixels, but not a reliable full patient-space transform; use NIfTI for registered
+workflows in 3D Slicer or other medical-image software.
 
 ## AI-assisted segmentation
 

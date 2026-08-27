@@ -128,11 +128,16 @@ data to Google Colab, so users should confirm that this use is permitted before 
 Project ZIP files do not contain the source images. Load the original image folder first, then
 open the Project ZIP from **Open > Masks / Project ZIP** to restore its masks and editor settings.
 
-VolInfo CSV uses the same six-row `Width/Height/Depth`, `X/Y/Z Spacing`, and `X/Y/Z Origin`
-format as the Windows app. Imported spacing is used by NIfTI and STL export, and origin is written
-to the NIfTI sform. A CSV is
-downloaded automatically after DICOM/NIfTI loading and after reference-line calibration; the
-Calibration tab also provides manual Import/Export controls.
+VolInfo CSV keeps the Windows-compatible `Width/Height/Depth`, `X/Y/Z Spacing`, and
+`X/Y/Z Origin` rows and now adds the complete 4 x 4 IJK-to-RAS affine. Older six-row VolInfo
+files remain supported and use an explicit axis-aligned fallback. DICOM and NIfTI inputs retain
+their source orientation and physical origin through NIfTI label export. A CSV is downloaded
+automatically after DICOM/NIfTI loading and after reference-line calibration; the Calibration tab
+also provides manual Import/Export controls.
+
+NIfTI label export preserves full 3D patient-space geometry when it is available. TIFF exports
+preserve mask pixels but do not reliably preserve full 3D patient-space geometry. For spatially
+registered use with 3D Slicer or other medical-image software, use NIfTI.
 
 **Replace** replaces each matched image mask. **Merge** treats imported label `0` as transparent,
 keeps existing labels outside imported regions, and lets imported non-zero labels win on overlap.

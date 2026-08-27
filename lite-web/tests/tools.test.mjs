@@ -19,6 +19,7 @@ import {
   parseVolInfoCsv,
   signedDistanceForLabel,
 } from "../volume-tools.mjs";
+import { parseNiftiLabelVolume } from "../medical-io.mjs";
 
 test("display adjustment preserves alpha and changes RGB channels", () => {
   const source = new Uint8ClampedArray([20, 40, 60, 200, 200, 220, 240, 255]);
@@ -70,6 +71,29 @@ test("NIfTI export writes dimensions, spacing, and label voxels", () => {
   assert.deepEqual([...bytes.slice(352)], [0, 1, 2, 3, 4, 5, 6, 7]);
 });
 
+test("NIfTI export preserves a full oblique affine in sform", () => {
+  const affine = [
+    [-0.6875, -0.0065, 0.0559, 100.076588],
+    [-0.0105, 0.0344, -3.7448, 23.749557],
+    [0.006, -0.6866, -0.1883, 137.329995],
+    [0, 0, 0, 1],
+  ];
+  const masks = [new Uint8Array([0, 1, 2, 3]), new Uint8Array([4, 5, 6, 7])];
+  const bytes = createNiftiLabelVolume(masks, 2, 2, {
+    shape: [2, 2, 2],
+    affine,
+    sourceKind: "synthetic-oblique",
+  });
+  const view = new DataView(bytes.buffer);
+  assert.equal(view.getInt16(252, true), 0);
+  assert.equal(view.getInt16(254, true), 1);
+  const parsed = parseNiftiLabelVolume(bytes.buffer, "oblique-labels.nii");
+  parsed.affine.forEach((row, y) => row.forEach((value, x) => {
+    assert.ok(Math.abs(value - affine[y][x]) < 1e-4, `affine[${y}][${x}]`);
+  }));
+  assert.deepEqual([...parsed.frames[1]], [4, 5, 6, 7]);
+});
+
 test("VolInfo CSV matches the desktop six-row format and round-trips metadata", () => {
   const source = {
     width: 540,
@@ -93,6 +117,31 @@ test("VolInfo CSV matches the desktop six-row format and round-trips metadata", 
     () => parseVolInfoCsv(csv.replace("0.036", "0")),
     /positive numbers/,
   );
+});
+
+test("VolInfo CSV adds an optional affine while retaining legacy import", () => {
+  const source = {
+    width: 4,
+    height: 3,
+    depth: 2,
+    spacing: [0.7, 0.8, 2.5],
+    origin: [12, -4, 8],
+    affine: [
+      [-0.7, 0.01, 0.2, 12],
+      [0.02, 0.8, -0.1, -4],
+      [0.03, -0.04, 2.5, 8],
+      [0, 0, 0, 1],
+    ],
+    sourceKind: "dicom",
+  };
+  const csv = createVolInfoCsv(source);
+  assert.match(csv, /IJK to RAS Row 1/);
+  assert.match(csv, /Geometry Source/);
+  const parsed = parseVolInfoCsv(csv);
+  assert.deepEqual(parsed.affine, source.affine);
+  assert.deepEqual(parsed.spacing, source.spacing);
+  const legacy = csv.split("IJK to RAS Row 1")[0];
+  assert.equal(parseVolInfoCsv(legacy).affine, undefined);
 });
 
 test("multi-page TIFF export chains one IFD per mask slice", () => {

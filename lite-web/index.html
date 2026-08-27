@@ -1068,7 +1068,7 @@
       });
     </script>
     <script type="module">
-      import("./app.mjs?v=31").catch((error) => {
+      import("./app.mjs?v=32").catch((error) => {
         console.error("Application module failed to load", error);
         const status = document.querySelector("#status-text");
         if (status) status.textContent = `Application startup failed: ${error.message}`;
