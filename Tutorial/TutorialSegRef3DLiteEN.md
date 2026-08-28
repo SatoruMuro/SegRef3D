@@ -1,189 +1,234 @@
 # SegRef3D Lite Basic Tutorial
 
-This getting-started guide uses the 20-image **Apple Demo** to take you through loading, calibration, mask creation, refinement, 3D preview, and saving. You do not need Python, command-line experience, or software installation.
+This tutorial uses the built-in **Apple Demo - Kanzi 84** to define three structures, segment them with SAM2 on Google Colab, return the results to SegRef3D Lite, refine the masks, preview them in 3D, and save the work.
 
-> This is an operation exercise. The apple mask produced here is not intended to be a complete research-grade segmentation.
+| Object | Structure in this tutorial |
+| --- | --- |
+| Obj 1 | Apple (whole fruit) |
+| Obj 2 | Stem |
+| Obj 3 | Core |
 
-## 0. What is SegRef3D Lite?
-
-SegRef3D Lite is the standard entry point for SegRef3D. It runs in a modern browser on Windows, macOS, and Linux and supports JPG, PNG, TIFF, DICOM, and NIfTI input; mask editing; calibration; measurements; 3D reconstruction; NIfTI, TIFF, STL, and CSV export; and optional AI workflows. Normal editing and export operations run on your device.
+You do not need to install Python or desktop software. You upload a job ZIP to your own Google Colab runtime only when you run AI segmentation.
 
 ## 1. Open SegRef3D Lite
 
 [**Open SegRef3D Lite**](https://satorumuro.github.io/SegRef3D/lite-web/)
 
-Chrome or Edge is a practical first choice when you need image-folder selection. Other modern browsers can also work, although folder dialogs differ between browsers.
+SegRef3D Lite lets you inspect images, prepare AI segmentation, refine masks, reconstruct in 3D, and export data in a browser. Normal display, editing, and export operations are processed on your device.
 
-![SegRef3D Lite start screen](images/SegRef3DLite/01-segref3d-lite-start.png)
+![SegRef3D Lite start screen](images/SegRef3DLite/01-open-lite.png)
 
-The top bars contain image and editing commands, the center is the main canvas, and the Objects panel appears beside or below it. Select `Local Processing` at the upper right to review where processing takes place.
+## 2. Open the Apple Demo and navigate the slices
 
-## 2. Open the Apple Demo
+Select `Load Apple Demo` in the center. There is no separate selection screen; the 20-image `Apple Demo - Kanzi 84` sequence loads directly.
 
-Select `Load Apple Demo` in the center of the start screen.
+![Apple Demo loaded](images/SegRef3DLite/02-apple-demo-loaded.png)
 
-![Select Apple Demo](images/SegRef3DLite/02-apple-demo-select.png)
+Use a plain mouse wheel over the canvas to move through the slices. You can also use the slider or Previous/Next buttons below the canvas. Inspect several slices and find frames where the Apple, Stem, and Core are clear.
 
-SegRef3D Lite loads the 20-image `Apple Demo - Kanzi 84` sequence. An apple cross-section and a frame counter such as `1 / 20` appear.
+## 3. Calibration
 
-![Apple Demo loaded](images/SegRef3DLite/03-apple-demo-loaded.png)
-
-## 3. Basic navigation
-
-- Use the upper Previous/Next arrows or the slice controls below the canvas.
-- A plain mouse wheel moves through the image sequence.
-- `Ctrl`/`Command` + wheel zooms the image.
-- While zoomed, hold the middle mouse button and drag to pan.
-- Select the editing object with `Target` or in the Objects panel. This guide uses `Obj 1`.
-- The Fit icon returns the whole image to the canvas.
-
-## 4. Calibration
-
-Move to a central frame where the apple is widest, then open `Tools` → `Calibration`. The Apple Demo guide provides:
+After the Apple Demo loads, `Calibration` opens in `Image & mask tools` with these presets:
 
 - `Reference length`: **100 mm**
 - `Z spacing`: **4.0 mm (approx.)**
 
-Select `Draw Reference Line`, then click two endpoints across the widest apple diameter. A guide line follows the pointer after the first point.
+You do not need to re-enter the values. Select `Draw Reference Line`, then click two points across the widest apple diameter. A guide line follows the pointer after the first point.
 
-![Apple Demo calibration](images/SegRef3DLite/04-calibration.png)
+![Apple Demo calibration](images/SegRef3DLite/03-calibration.png)
 
-**The 100 mm value is an assumed apple diameter for demonstration purposes, not a measurement of this specimen.** The source dataset describes the slice spacing as roughly 4 mm. SegRef3D Lite uses the resulting mm/px and Z spacing for measurements, volume calculations, NIfTI, and STL.
+The resulting X/Y spacing and Z spacing determine physical dimensions in volume measurements, NIfTI, 3D Preview, and STL.
 
-## 5. Select Obj 1
+> **About the demo values:** 100 mm is an assumed apple diameter for learning the calibration workflow, not a measurement of this specimen. The source dataset describes the slice spacing as roughly 4 mm.
 
-Select `Obj 1` in the Objects panel or the top `Target` control and keep its visibility enabled. In a label mask, 0 is background and 1 is Obj 1. Up to 20 objects can be managed with separate display colors.
+## 4. Open AI Tracking Setup
 
-## 6. Create the apple mask
+Select `Seg Anything` in the top bar to open the workflow.
 
-For this demo, Threshold is a reproducible starting point because the apple flesh is bright and the surrounding background is dark.
+![Seg Anything workflow](images/SegRef3DLite/04-ai-segmentation-workflow.png)
 
-1. Open `Tools` → `Extract`.
-2. Set Threshold `Minimum` to `180` and `Maximum` to `255`.
-3. Set `Operation` to `Add` and `Images` to `All`.
-4. Select `Apply Threshold`.
+Select `Edit Setup` to open `AI Tracking Setup`. This is where you register object names, Tracking Ranges, and Box Prompts.
 
-These values are a demo starting point. Adjust them to the intensity distribution of your own images.
+![AI Tracking Setup](images/SegRef3DLite/05-ai-tracking-setup.png)
 
-![Create the apple mask](images/SegRef3DLite/05-create-mask.png)
+A Tracking Range is the first and last slice on which the structure should be tracked. Keep the dialog open while navigating with its frame buttons, the mouse wheel, or `F`/`R`, then select `Use current` beside `Tracking start` or `Tracking end`. A Box Prompt frame must be inside its Tracking Range.
 
-## 7. Refine with Add and Erase
+> Some provided screenshots show the default names `Object 1` and `Object 2`. For this tutorial, replace the `Object name` values with `Apple`, `Stem`, and `Core`. The object IDs and display colors do not change.
 
-Close Tools and choose the `Click` draw mode. Left-click points around a region. At the final point, **right-click**; that point becomes the endpoint and is joined to the start.
+## 5. Register Obj 1 = Apple
 
-- Add the drawn region: `Add`
-- Remove the drawn region: `Erase`
-- Undo a mask edit: Undo in the `EDIT` group
-- Redo the edit: Redo in the `EDIT` group
+1. Set `Object ID` to `Obj 1` and `Object name` to `Apple`.
+2. Move to a slice where the whole apple boundary is clear.
+3. Inspect the sequence and set `Tracking start` and `Tracking end` to the first and last slices containing the apple.
+4. Select `Add Box Prompt Here`.
+5. Click two opposite corners of a box that contains the whole apple.
+6. Select `Save Object`.
 
-The Undo/Redo controls in the `LINE` group affect only drawn lines and are separate from mask edit history.
+The box does not need to touch the boundary tightly. Make sure the full target is inside it.
 
-![Edit a mask with Add and Erase](images/SegRef3DLite/06-edit-mask.png)
+![Apple Box Prompt](images/SegRef3DLite/06-apple-box-prompt.png)
 
-## 8. Mask Cleanup
+After saving, the upper table shows Obj 1, its prompt count, and its Tracking Range.
 
-Threshold may also select small bright regions outside the apple. Use one representative cleanup operation:
+![Apple object saved](images/SegRef3DLite/07-apple-object-saved.png)
 
-1. Open `Tools` → `Mask Cleanup`.
-2. Choose `Obj 1`.
-3. Choose `Keep Largest Component`.
-4. Set `Frames` to `All Frames`.
-5. Select `Apply Cleanup`.
+## 6. Register Obj 2 = Stem
 
-This keeps the largest connected region in each frame and removes detached selections. Use mask edit Undo if the result is not appropriate.
+1. Select `New`. SegRef3D chooses the next unused ID, `Obj 2`.
+2. Set `Object name` to `Stem`.
+3. Move to a slice where the stem is clear.
+4. Set `Tracking start` and `Tracking end` to the slices containing the stem.
+5. Select `Add Box Prompt Here` and enclose the whole stem.
+6. Select `Save Object`.
 
-![Mask Cleanup](images/SegRef3DLite/07-mask-cleanup.png)
+![Stem Box Prompt](images/SegRef3DLite/08-stem-box-prompt.png)
 
-## 9. Inspect multiple slices
+## 7. Register Obj 3 = Core and review the job
 
-Move through adjacent frames and check that the red Obj 1 overlay follows the apple boundary. You do not need to perfect all 20 slices for this tutorial. The goal is to understand how consecutive 2D masks become a 3D volume.
+1. Select `New` again to create `Obj 3`.
+2. Set `Object name` to `Core`.
+3. Move to a slice where the star-shaped core is clear.
+4. Set the slice range containing the Core.
+5. Enclose the full Core with `Add Box Prompt Here`, then select `Save Object`.
 
-## 10. Preview in 3D
+![Core Box Prompt](images/SegRef3DLite/09-core-box-prompt.png)
 
-Open `Tools` → `Volume & 3D`. In the STL section choose:
+When the workflow summary reads `3 objects · 3 prompts configured`, the job is ready for Colab. Reopen `Edit Setup` if you need to review each prompt and Tracking Range.
 
-- `Slice interpolation`: `5x`
-- `Objects`: `Current target`
+![Three objects ready](images/SegRef3DLite/10-three-objects-ready.png)
 
-Select `Preview 3D`. SegRef3D Lite stacks the 2D masks into a voxel volume and displays its surface.
+## 8. Create Input ZIP
 
-![Apple 3D preview](images/SegRef3DLite/08-3d-preview.png)
+Close `AI Tracking Setup` and select `Create Input ZIP` in the Seg Anything workflow. The Apple Demo downloads:
 
-Drag to rotate, use the wheel to zoom, and select `Reset Camera` to return to the initial view.
+`Apple Demo - Kanzi 84_segonweb_input.zip`
+
+This ZIP contains the 20 working images and the Apple, Stem, and Core Box Prompts and Tracking Ranges. Creating the ZIP does not upload it anywhere.
+
+## 9. Run Seg Anything in Google Colab
+
+### 9-1. Open Colab
+
+Select `Open Seg Anything`. Read the Google Colab notice and, if you wish to continue, select `Continue to Seg Anything`. You can also [open Seg Anything directly](https://satorumuro.github.io/SegRef3D/ColabNotebooks/segonweb.html).
+
+### 9-2. Select a GPU runtime
+
+In Colab, open `Runtime` → `Change runtime type`, select `T4 GPU` as the hardware accelerator, and save. Another assigned NVIDIA GPU can also be used.
+
+### 9-3. Run all cells and upload the Input ZIP
+
+Choose `Runtime` → `Run all`. When the file upload control appears in the first executable cell, select the `*_segonweb_input.zip` created above.
+
+![Upload the Seg Anything input ZIP in Colab](images/SegRef3DLite/11-colab-upload.png)
+
+The notebook prepares SAM2 and tracks the three objects in sequence. Processing commonly takes several minutes, but the time varies with Colab load, the assigned GPU, and the runtime. Leave the notebook open while it runs.
+
+When `Segmentation complete` appears, the final cell automatically starts downloading `segref3d_result.zip`. If the download does not start, run only the final download cell again.
+
+> **Data handling:** Normal SegRef3D Lite operations run on your device. Seg Anything is different: you explicitly upload the Input ZIP containing the working images to your own Google Colab runtime. Confirm that this is permitted by your institution's research-data and privacy policies before using research or medical data. This workflow does not upload images to a SegRef3D-operated server.
+
+## 10. Return the AI Result and refine the masks
+
+### 10-1. Import the Result ZIP
+
+Return to SegRef3D Lite, select `Import AI Result` in the Seg Anything workflow, and choose `segref3d_result.zip`. If the project already contains masks, SegRef3D asks before replacing the current label masks.
+
+![Import AI Result](images/SegRef3DLite/12-import-ai-result.png)
+
+After import, the Apple, Stem, and Core masks and object names appear in the Objects panel.
+
+### 10-2. Add a missing region
+
+1. Open `Draw & Refine`.
+2. Select the object to edit in the Objects panel.
+3. Choose the `Click` draw mode.
+4. Set `Auto` to `Add`.
+5. Left-click around the missing region, then right-click the final point.
+
+The right-clicked point becomes the endpoint, joins the start, and applies the enclosed region to the current slice.
+
+| Outline an Add region | After Add |
+| --- | --- |
+| ![Outline an Add region](images/SegRef3DLite/13-ai-result-add-outline.png) | ![Add completed](images/SegRef3DLite/14-refine-add-complete.png) |
+
+### 10-3. Erase an unwanted region
+
+Set `Auto` to `Erase`, left-click around the unwanted area, and right-click the final point. The enclosed region is removed from the current slice.
+
+| Outline an Erase region | After Erase |
+| --- | --- |
+| ![Outline an Erase region](images/SegRef3DLite/15-refine-erase-outline.png) | ![Erase completed](images/SegRef3DLite/16-refine-erase-complete.png) |
+
+This is the central SegRef3D workflow: AI creates most of the segmentation, and the researcher reviews and corrects the parts that need attention.
+
+### 10-4. Switch objects
+
+Select `Obj 1: Apple`, `Obj 2: Stem`, or `Obj 3: Core` in the Objects panel to change the editing target. The checkbox at the left controls visibility. Each object can be inspected and refined independently on the same image sequence.
+
+![Switch editing objects](images/SegRef3DLite/17-object-switching.png)
 
 ## 11. Choose an export
 
-| Goal | Recommended export |
+| Goal | Export |
 | --- | --- |
+| Use multiple objects as 3D surfaces | `STL` |
 | Resume later in SegRef3D Lite | `Project ZIP` |
-| Send labels to 3D Slicer or similar software | `NIfTI Labelmap` |
+| Send a label volume to 3D Slicer or similar software | `NIfTI Labelmap` |
 | Save mask images | `Label PNG` or `TIFF` |
-| Use a 3D surface model | `STL` |
 | Save object volume values | `Volume Statistics CSV` |
 
-Use the top `Export` menu or `Tools` → `Volume & 3D`.
+### 11-1. Preview Apple, Stem, and Core in 3D
 
-![Export options](images/SegRef3DLite/09-export.png)
+1. Enable visibility for Apple, Stem, and Core in the Objects panel.
+2. Open `Volume & 3D` under `Image & mask tools`.
+3. Set STL `Slice interpolation` to `5x`.
+4. Set `Objects` to `Visible objects`.
+5. Select `Preview 3D`.
 
-## 12. Save and resume with Project ZIP
+![Choose Visible objects for 3D](images/SegRef3DLite/18-volume-3d-visible-objects.png)
 
-Choose `Export` → `Project ZIP`. The archive contains the working images, label masks, display settings, and calibration settings.
+In the 3D Preview, drag to rotate and use the mouse wheel to zoom. The sliders at the right control each object's opacity. Reducing the Apple opacity makes the spatial relationship of the Stem and Core easier to inspect.
 
-To resume, choose `Open` → `Masks / Project ZIP`, then open the saved Project ZIP. When importing masks into an existing project, choose `Replace` or `Merge` in the prompt according to your goal.
+![Apple, Stem, and Core in 3D](images/SegRef3DLite/19-three-objects-3d.png)
 
-Browser autosave can help restore masks on the same browser and device, but it is not a replacement for a portable backup. **Save a Project ZIP explicitly** in case browser data is cleared or you change environments.
+### 11-2. Export STL
 
-## 13. NIfTI, STL, and CSV
+Close the preview, keep `Objects = Visible objects`, and select `Export STL`.
 
-- **NIfTI Labelmap** is intended for labels/segmentations in applications such as 3D Slicer.
-- **STL** is a 3D surface model for viewers, CAD, or 3D-printing workflows.
-- **Volume Statistics CSV** contains object voxel counts, mm³, cm³, and frame counts.
+![Export STL](images/SegRef3DLite/20-export-stl.png)
 
-NIfTI and STL can optionally use 5x or 10x interpolation along the slice direction. Start with the 5x preview and verify the shape and calibration.
+For multiple objects, SegRef3D downloads `Apple Demo - Kanzi 84_STL_5x_<timestamp>.zip`. The ZIP contains separate STL files for Obj 1, Obj 2, and Obj 3. STL is a surface-model format for 3D viewers, CAD, and 3D-printing workflows.
 
-## 14. AI segmentation
+### 11-3. Finish by saving a Project ZIP
 
-Basic editing works without AI. Two Google Colab workflows are available when needed.
+Choose `Export` → `Project ZIP` in the top bar.
 
-### Seg Anything
+![Export Project ZIP](images/SegRef3DLite/21-project-zip.png)
 
-Segment an arbitrary user-specified structure with a SAM-based workflow. Define Box Prompts, Prompt Frames, and Tracking Ranges in SegRef3D Lite, then use `Create Input ZIP` → Google Colab → `Import Result ZIP`. See the [Seg Anything tutorial](TutorialSegOnWebEN.md).
+`Apple Demo - Kanzi 84_SegRef3D_Project_<timestamp>.zip` stores label masks, calibration, object names, display settings, and the Seg Anything setup. It does not include the source images.
 
-### Seg CT/MRI
+To resume, first select `Load Apple Demo`, then use `Load Masks` → `Replace` → `ZIP / Project ZIP` to open the saved ZIP. Browser autosave is helpful, but **finish the session by saving a Project ZIP** as a portable work record.
 
-Use TotalSegmentator for supported known anatomy in a CT/MRI NIfTI volume. Select anatomy, create a request ZIP, process it in Google Colab, and import the result ZIP.
+## 12. Other useful tools
 
-![AI Segmentation tools](images/SegRef3DLite/10-ai-segmentation.png)
+SegRef3D Lite also provides Threshold/RGB extraction, Mask Cleanup, mask interpolation, NIfTI Labelmap, TIFF, Label PNG, Overlay PNG, and Volume Statistics CSV. This getting-started tutorial focuses on the AI workflow. See the [SegRef3D Lite documentation](../lite-web/README.md) and the [detailed Seg Anything guide](TutorialSegOnWebEN.md) for additional options and troubleshooting.
 
-## 15. Your data and privacy
+## 13. What you learned
 
-During normal SegRef3D Lite use, image display, mask editing, calibration, measurements, NIfTI/TIFF export, and STL generation are processed in your browser on your device. Normal operations do not automatically upload source images to a SegRef3D-operated server.
+- Loaded a serial image sequence in SegRef3D Lite
+- Calibrated image scale and Z spacing
+- Defined Apple, Stem, and Core as separate objects with Box Prompts
+- Ran SAM2 segmentation on a Google Colab GPU
+- Imported the AI masks back into SegRef3D Lite
+- Refined masks with Add and Erase
+- Switched among three independently editable objects
+- Previewed Apple, Stem, and Core together in 3D
+- Exported separate object surfaces as STL
+- Saved a Project ZIP
 
-`Seg Anything` and `Seg CT/MRI` are different. When using their Google Colab workflows, you explicitly upload job data containing the working images or source NIfTI to your Google Colab runtime. Check that this is permitted by your institution's research-data and privacy policies before using research or medical data.
+You have completed the core SegRef3D Lite workflow: **define targets → AI segmentation → human refinement → quantitative 3D output**.
 
-## 16. Troubleshooting
-
-### Images do not load
-
-Check for JPG, PNG, TIFF, DICOM (with or without `.dcm`), or NIfTI (`.nii`/`.nii.gz`). SegRef3D Lite asks you to select a series when a DICOM folder contains multiple series.
-
-### The browser becomes slow
-
-Large volumes, many high-resolution images, and 5x/10x 3D operations can use substantial memory. Close unused tabs and begin with 1x or the current target only.
-
-### The 3D model looks stretched or compressed
-
-Check X/Y spacing, Z spacing, and the calibration line. DICOM and NIfTI input uses source geometry when it is available.
-
-### I closed the browser
-
-Loading the same images in the same browser may restore masks from browser autosave. Use a saved Project ZIP for reliable, portable resumption.
-
-### I want to use 3D Slicer
-
-Use `NIfTI Labelmap`. In 3D Slicer, load it as a Segmentation to handle object labels as separate segments.
-
-## Demo data
+## 14. Demo data
 
 Apple Demo images are adapted from: Schut DE, Trull AK, Couvée M. *Dataset of CT scans, slice photographs, and visual browning scores of 120 'Kanzi' apples.* Zenodo. [https://doi.org/10.5281/zenodo.8167285](https://doi.org/10.5281/zenodo.8167285)
 
@@ -191,4 +236,4 @@ Source dataset license: [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/
 
 ---
 
-[日本語版](TutorialSegRef3DLiteJP.md) · [Seg Anything](TutorialSegOnWebEN.md) · [Registration](Registration.md)
+[日本語版](TutorialSegRef3DLiteJP.md) · [Detailed Seg Anything guide](TutorialSegOnWebEN.md) · [Registration](Registration.md)

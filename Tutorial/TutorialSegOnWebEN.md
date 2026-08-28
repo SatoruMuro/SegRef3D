@@ -48,12 +48,12 @@ Imported masks are immediately written to a new `[autosave]` label PNG folder.
 
 ### SegRef3D Lite controls
 
-The browser app uses the same manifest and ZIP formats. Open **Batch Jobs**, set each
-object's prompt and range, choose **Create Input ZIP**, then restore the Colab output with
-**Import Result**. Keep **Batch Jobs** open while navigating with the mouse wheel or F/R,
-then use **Use current** to capture Tracking Start and End. **Set Box on Canvas** displays
-crosshair guides for accurate Box Prompt placement. No local SAM2 package or NVIDIA GPU is
-required for job preparation.
+The browser app uses the same manifest and ZIP formats. Open **Seg Anything > Edit Setup**
+to enter **AI Tracking Setup**, set each object's prompt and range, choose **Create Input ZIP**,
+then restore the Colab output with **Import AI Result**. Keep **AI Tracking Setup** open while
+navigating with the mouse wheel or F/R, then use **Use current** to capture Tracking start and
+end. **Add Box Prompt Here** displays crosshair guides for accurate Box Prompt placement. No
+local SAM2 package or NVIDIA GPU is required for job preparation.
 
 ## 5. Refine And Reconstruct
 

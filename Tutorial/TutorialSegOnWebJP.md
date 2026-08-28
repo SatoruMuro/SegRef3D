@@ -41,7 +41,7 @@ SegRef3Dは画像系列とmaskを検証してから反映します。画像を�
 
 ### SegRef3D Liteでの操作
 
-ブラウザ版も同じmanifest/ZIP形式を使用します。**Batch Jobs**を開いたままmouse wheelまたはF/Rで画像を移動し、**Use current**で現在画像をTracking Start/Endとして取り込みます。**Set Box on Canvas**ではcrosshair補助線を使ってBox Promptを設定できます。**Create Input ZIP**で出力し、Colabの結果を**Import Result**で復元します。jobの準備にはローカルSAM2やNVIDIA GPUは不要です。
+ブラウザ版も同じmanifest/ZIP形式を使用します。**Seg Anything > Edit Setup**から**AI Tracking Setup**を開いたままmouse wheelまたはF/Rで画像を移動し、**Use current**で現在画像をTracking start/endとして取り込みます。**Add Box Prompt Here**ではcrosshair補助線を使ってBox Promptを設定できます。**Create Input ZIP**で出力し、Colabの結果を**Import AI Result**で復元します。jobの準備にはローカルSAM2やNVIDIA GPUは不要です。
 
 ## 5. 修正と3D構築
 

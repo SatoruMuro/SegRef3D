@@ -1,189 +1,234 @@
 # SegRef3D Lite 基本操作チュートリアル
 
-このガイドでは、20枚の**Apple Demo**を使って、画像の読込、calibration、mask作成、修正、3D preview、保存までを一周します。Python、コマンド操作、ソフトウェアのインストールは不要です。
+このチュートリアルでは、内蔵の **Apple Demo - Kanzi 84** を使い、3つの構造をGoogle ColabのSAM2でsegmentし、SegRef3D Liteへ戻して修正・3D表示・保存するところまでを一周します。
 
-> このチュートリアルは操作練習用です。作成するapple maskは研究用の完全なsegmentationを意図したものではありません。
+| Object | このチュートリアルでsegmentする構造 |
+| --- | --- |
+| Obj 1 | Apple（リンゴ全体） |
+| Obj 2 | Stem（茎） |
+| Obj 3 | Core（芯） |
 
-## 0. SegRef3D Liteとは
-
-SegRef3D LiteはSegRef3Dの標準的な利用入口です。Windows、macOS、Linuxなどのモダンブラウザで動作し、JPG、PNG、TIFF、DICOM、NIfTIの表示とmask編集、calibration、measurement、3D reconstruction、NIfTI／TIFF／STL／CSV出力を行えます。通常の編集と出力はユーザー端末内で処理されます。
+Pythonやsoftwareのinstallは不要です。Google ColabでAI segmentationを実行するときだけ、ユーザー自身がjob ZIPをColabへuploadします。
 
 ## 1. SegRef3D Liteを開く
 
-[**Open SegRef3D Lite**](https://satorumuro.github.io/SegRef3D/lite-web/)
+[**SegRef3D Liteを開く**](https://satorumuro.github.io/SegRef3D/lite-web/)
 
-ChromeまたはEdgeは、画像フォルダ選択を含む操作を始める際の実用的な選択肢です。ほかのモダンブラウザでも利用できますが、フォルダ選択ダイアログの表示はブラウザによって異なります。
+SegRef3D Liteでは、browser上で画像確認、AI segmentationの準備、mask修正、3D reconstruction、exportまで行えます。通常の表示・編集・exportは端末内で処理されます。
 
-![SegRef3D Lite start screen](images/SegRef3DLite/01-segref3d-lite-start.png)
+![SegRef3D Lite start screen](images/SegRef3DLite/01-open-lite.png)
 
-画面上部に画像操作、中央にcanvas、下部または横にObjects panelが表示されます。右上の`Local Processing`を押すと、処理場所の説明を確認できます。
+## 2. Apple Demoを開いてsliceを移動する
 
-## 2. Apple Demoを開く
+中央の`Load Apple Demo`を押します。選択画面はなく、20枚の`Apple Demo - Kanzi 84`が直接読み込まれます。
 
-中央の`Load Apple Demo`を押します。
+![Apple Demo loaded](images/SegRef3DLite/02-apple-demo-loaded.png)
 
-![Select Apple Demo](images/SegRef3DLite/02-apple-demo-select.png)
+canvas上でmouse wheelを回すとsliceを前後へ移動できます。画面下のsliderや左右buttonでも移動できます。まず複数sliceを見て、Apple、Stem、Coreが分かりやすいframeを確認してください。
 
-`Apple Demo - Kanzi 84`の20枚の連続画像が読み込まれ、appleの断面と`1 / 20`のようなframe表示が現れます。
+## 3. Calibration
 
-![Apple Demo loaded](images/SegRef3DLite/03-apple-demo-loaded.png)
-
-## 3. 画面の基本操作
-
-- 上部の左右矢印またはcanvas下のslice controlで前後のframeへ移動します。
-- 通常のmouse wheelで前後の画像へ移動します。
-- `Ctrl`／`Command`を押しながらwheelを回すとzoomします。
-- zoom中はmiddle mouse buttonを押しながらdragするとpanできます。
-- `Target`またはObjects panelで編集対象を選びます。このガイドでは`Obj 1`を使います。
-- `Fit` iconは画像全体をcanvasへ戻します。
-
-## 4. Calibration
-
-最も広いapple断面が見える中央付近のframeへ移動し、`Tools` → `Calibration`を開きます。Apple Demo guideには次の値が表示されます。
+Apple Demoを読み込むと、`Image & mask tools`の`Calibration`が開き、次の値がpresetされます。
 
 - `Reference length`: **100 mm**
 - `Z spacing`: **4.0 mm (approx.)**
 
-`Draw Reference Line`を押し、appleの最も広い径を横切るように2点をclickします。1点目の後は補助線が表示されます。
+値を入力し直す必要はありません。`Draw Reference Line`を押し、リンゴの最も広い直径に沿って2点をclickします。1点目の後は、2点目まで補助線が表示されます。
 
-![Apple Demo calibration](images/SegRef3DLite/04-calibration.png)
+![Apple Demo calibration](images/SegRef3DLite/03-calibration.png)
 
-**この100 mmは操作練習用に仮定した値であり、この標本を実測した値ではありません。** Source datasetではslice spacingがおよそ4 mmと説明されています。calibrationで得たmm/pxとZ spacingはmeasurement、volume、NIfTI、STLへ使用されます。
+calibrationで得たX/Y spacingとZ spacingは、volume計測、NIfTI、3D Preview、STLの実寸に使われます。
 
-## 5. Obj 1を選ぶ
+> **Demoの数値について:** 100 mmはcalibration操作を学ぶために仮定したリンゴ直径で、この標本の実測値ではありません。Source datasetではslice間隔がおよそ4 mmと説明されています。
 
-Objects panelまたは上部の`Target`で`Obj 1`を選び、visibilityをONにします。1枚のlabel maskでは、0がbackground、1がObj 1です。SegRef3D Liteでは最大20 objectsを別々の色で扱えます。
+## 4. AI Tracking Setupを開く
 
-## 6. Apple maskを作る
+上部の`Seg Anything`を押し、workflow画面を開きます。
 
-Apple Demoでは、明るい果肉と暗い背景の差を利用するThresholdが初回操作に向いています。
+![Seg Anything workflow](images/SegRef3DLite/04-ai-segmentation-workflow.png)
 
-1. `Tools` → `Extract`を開きます。
-2. Thresholdの`Minimum`を`180`、`Maximum`を`255`にします。
-3. `Operation`を`Add`、`Images`を`All`にします。
-4. `Apply Threshold`を押します。
+`Edit Setup`を押すと`AI Tracking Setup`が開きます。ここでobject名、Tracking Range、Box Promptを登録します。
 
-この値はdemo用の開始点です。実データでは画像の濃度に合わせて調整してください。
+![AI Tracking Setup](images/SegRef3DLite/05-ai-tracking-setup.png)
 
-![Create the apple mask](images/SegRef3DLite/05-create-mask.png)
+Tracking Rangeは、その構造を追跡する最初と最後のsliceです。modalを開いたまま左右button、mouse wheel、または`F`／`R`でsliceを移動し、`Use current`で現在のsliceを`Tracking start`／`Tracking end`へ設定できます。Box Promptを置くframeはTracking Range内にしてください。
 
-## 7. Add／Eraseで修正する
+> 提供スクリーンショットの一部ではdefault名の`Object 1`／`Object 2`が表示されています。このチュートリアルでは`Object name`を`Apple`／`Stem`／`Core`へ変更してください。Obj IDと表示色は変わりません。
 
-Toolsを閉じ、上部のdraw modeを`Click`にします。左clickでapple外形に沿って点を置き、最後の点で**右click**すると、その点を終点として始点へ結ばれます。
+## 5. Obj 1 = Appleを登録する
 
-- 描いた範囲をmaskへ加える: `Add`
-- 描いた範囲をmaskから消す: `Erase`
-- mask編集を戻す: `EDIT`のUndo icon
-- 戻した編集をやり直す: `EDIT`のRedo icon
+1. `Object ID`を`Obj 1`、`Object name`を`Apple`にします。
+2. リンゴ全体の輪郭が明瞭なsliceへ移動します。
+3. リンゴが存在する最初と最後のsliceを確認し、`Tracking start`と`Tracking end`を設定します。
+4. `Add Box Prompt Here`を押します。
+5. canvas上でリンゴ全体を含むboxの対角2点をclickします。
+6. `Save Object`を押します。
 
-`LINE`のUndo／Redoは描画線だけを操作し、mask編集のUndo／Redoとは別です。
+boxは輪郭ぎりぎりにする必要はありません。対象全体が入るように囲みます。
 
-![Edit a mask with Add and Erase](images/SegRef3DLite/06-edit-mask.png)
+![Apple Box Prompt](images/SegRef3DLite/06-apple-box-prompt.png)
 
-## 8. Mask Cleanup
+保存後、上部の一覧にObj 1とPrompt数、Tracking Rangeが表示されます。
 
-Thresholdで背景の小さな明部も拾った場合は、代表的なcleanupとして次を使います。
+![Apple object saved](images/SegRef3DLite/07-apple-object-saved.png)
 
-1. `Tools` → `Mask Cleanup`を開きます。
-2. `Object`を`Obj 1`にします。
-3. `Operation`を`Keep Largest Component`にします。
-4. `Frames`を`All Frames`にします。
-5. `Apply Cleanup`を押します。
+## 6. Obj 2 = Stemを登録する
 
-各frameの最大連結領域を残すため、apple本体から離れた小領域を整理できます。結果が意図と異なる場合はmask editのUndoで戻します。
+1. `New`を押します。未使用の次のIDである`Obj 2`が選ばれます。
+2. `Object name`を`Stem`にします。
+3. mouse wheelまたはframe buttonで茎が見やすいsliceへ移動します。
+4. 茎が存在するslice範囲を`Tracking start`／`Tracking end`へ設定します。
+5. `Add Box Prompt Here`を押し、茎全体を囲みます。
+6. `Save Object`を押します。
 
-![Mask Cleanup](images/SegRef3DLite/07-mask-cleanup.png)
+![Stem Box Prompt](images/SegRef3DLite/08-stem-box-prompt.png)
 
-## 9. 複数sliceを確認する
+## 7. Obj 3 = Coreを登録し、3 objectsを確認する
 
-前後のframeへ移動し、赤いObj 1 overlayがapple外形へ沿っているか確認します。すべてを完全に整える必要はありません。今回の目的は、連続する2D masksが3D volumeへ変換される流れを理解することです。
+1. もう一度`New`を押し、`Obj 3`を作ります。
+2. `Object name`を`Core`にします。
+3. 芯の星形が分かりやすいsliceへ移動します。
+4. Coreが存在するslice範囲を設定します。
+5. `Add Box Prompt Here`でCore全体を囲み、`Save Object`を押します。
 
-## 10. 3D Preview
+![Core Box Prompt](images/SegRef3DLite/09-core-box-prompt.png)
 
-`Tools` → `Volume & 3D`を開き、STL sectionで次を選びます。
+workflow summaryが`3 objects · 3 prompts configured`になれば、Colabへ渡す準備は完了です。必要なら`Edit Setup`を再度開き、3 objectsのPromptとTracking Rangeを確認します。
 
-- `Slice interpolation`: `5x`
-- `Objects`: `Current target`
+![Three objects ready](images/SegRef3DLite/10-three-objects-ready.png)
 
-`Preview 3D`を押します。2D masksがvoxel volumeとして積層され、surface previewが表示されます。
+## 8. Create Input ZIP
 
-![Apple 3D preview](images/SegRef3DLite/08-3d-preview.png)
+`AI Tracking Setup`を閉じ、Seg Anything workflowの`Create Input ZIP`を押します。Apple Demoでは次のfileがdownloadされます。
 
-previewではdragで回転、wheelでzoomできます。`Reset Camera`で初期視点へ戻せます。
+`Apple Demo - Kanzi 84_segonweb_input.zip`
+
+このZIPには、20枚の作業画像と、Apple／Stem／CoreのBox Prompt・Tracking Rangeがまとめられています。作成しただけでは外部へ送信されません。
+
+## 9. Google ColabでSeg Anythingを実行する
+
+### 9-1. Colabを開く
+
+`Open Seg Anything`を押します。Google Colab利用の確認画面で内容を読み、続ける場合は`Continue to Seg Anything`を押します。[Seg Anythingを直接開く](https://satorumuro.github.io/SegRef3D/ColabNotebooks/segonweb.html)こともできます。
+
+### 9-2. GPU runtimeを選ぶ
+
+Colabで`ランタイム` → `ランタイムのタイプを変更`を開き、hardware acceleratorに`T4 GPU`を選んで保存します。T4以外の割り当て済みNVIDIA GPUでも動作できます。
+
+### 9-3. 全cellを実行してInput ZIPをuploadする
+
+`ランタイム` → `すべてのセルを実行`を選びます。最初の実行cellにfile upload欄が表示されたら、先ほどの`*_segonweb_input.zip`を選びます。
+
+![Upload the Seg Anything input ZIP in Colab](images/SegRef3DLite/11-colab-upload.png)
+
+notebookはSAM2を準備し、3 objectsを順番にtrackingします。通常は数分程度ですが、Colabの混雑状況、割り当てGPU、runtimeによって変わります。処理中はnotebookを閉じないでください。
+
+処理が完了すると`Segmentation complete`と表示され、最後のcellから`segref3d_result.zip`のdownloadが自動的に始まります。始まらない場合は最後のdownload cellだけを再実行します。
+
+> **Data handling:** 通常のSegRef3D Lite操作は端末内で行われますが、Seg Anythingでは作業画像を含むInput ZIPをユーザー自身のGoogle Colab runtimeへuploadします。研究・医療データでは、所属施設のdata handling policyでGoogle Colabの利用が許可されていることを確認してください。画像がSegRef3D運営serverへ送信されるworkflowではありません。
+
+## 10. AI Resultを戻してmaskを修正する
+
+### 10-1. Result ZIPをimportする
+
+SegRef3D Liteへ戻り、Seg Anything workflowの`Import AI Result`を押して`segref3d_result.zip`を選びます。既存maskがある場合は、現在のlabel masksを置き換えるか確認されます。
+
+![Import AI Result](images/SegRef3DLite/12-import-ai-result.png)
+
+import後は、Apple、Stem、Coreのmaskとobject名がObjects panelへ反映されます。
+
+### 10-2. Addで不足部分を補う
+
+1. `Draw & Refine`を開きます。
+2. Objects panelで修正するobjectを選びます。
+3. draw modeを`Click`にします。
+4. `Auto`を`Add`にします。
+5. 左clickで追加領域を囲み、最後の点を右clickします。
+
+右clickした点が終点となって始点へ結ばれ、囲んだ領域が現在のsliceのmaskへ追加されます。
+
+| Addする範囲を指定 | Add後 |
+| --- | --- |
+| ![Outline an Add region](images/SegRef3DLite/13-ai-result-add-outline.png) | ![Add completed](images/SegRef3DLite/14-refine-add-complete.png) |
+
+### 10-3. Eraseではみ出しを削る
+
+`Auto`を`Erase`へ変更し、削除したい領域を左clickで囲み、最後の点を右clickします。囲んだ領域が現在のsliceのmaskから削除されます。
+
+| Eraseする範囲を指定 | Erase後 |
+| --- | --- |
+| ![Outline an Erase region](images/SegRef3DLite/15-refine-erase-outline.png) | ![Erase completed](images/SegRef3DLite/16-refine-erase-complete.png) |
+
+AI segmentationで大部分を作り、研究者が必要な部分だけ確認・修正するのがSegRef3Dの基本workflowです。
+
+### 10-4. Objectを切り替える
+
+Objects panelで`Obj 1: Apple`、`Obj 2: Stem`、`Obj 3: Core`を選ぶと、編集対象を切り替えられます。左端のcheckboxは表示／非表示です。複数objectを同じ画像系列上で独立して確認・修正できます。
+
+![Switch editing objects](images/SegRef3DLite/17-object-switching.png)
 
 ## 11. どの形式を保存するか
 
-| やりたいこと | 推奨出力 |
+| 目的 | 出力 |
 | --- | --- |
-| 後でSegRef3D Liteで作業を再開 | `Project ZIP` |
-| 3D Slicer等へlabelとして渡す | `NIfTI Labelmap` |
-| mask画像として保存 | `Label PNG`または`TIFF` |
-| 3D surface modelとして利用 | `STL` |
-| object volumeを表として保存 | `Volume Statistics CSV` |
+| 複数objectを3D surfaceとして使用 | `STL` |
+| 後日SegRef3D Liteで作業を再開 | `Project ZIP` |
+| 3D Slicer等へlabel volumeとして渡す | `NIfTI Labelmap` |
+| mask画像を保存 | `Label PNG`または`TIFF` |
+| object volumeを表で保存 | `Volume Statistics CSV` |
 
-上部の`Export` menu、または`Tools` → `Volume & 3D`から出力します。
+### 11-1. Apple／Stem／Coreを3D Previewする
 
-![Export options](images/SegRef3DLite/09-export.png)
+1. Objects panelでApple、Stem、CoreのvisibilityをONにします。
+2. `Image & mask tools`の`Volume & 3D`を開きます。
+3. STL sectionの`Slice interpolation`を`5x`にします。
+4. `Objects`を`Visible objects`にします。
+5. `Preview 3D`を押します。
 
-## 12. Project ZIPを保存して再開する
+![Choose Visible objects for 3D](images/SegRef3DLite/18-volume-3d-visible-objects.png)
 
-`Export` → `Project ZIP`を選びます。Project ZIPには作業画像、label masks、表示・calibration設定などが含まれます。
+3D Previewでは、mouse dragで回転、mouse wheelでzoomできます。右側のsliderはobjectごとのopacityです。Appleを半透明にすると、StemとCoreの位置関係を確認しやすくなります。
 
-再開するときは、`Open` → `Masks / Project ZIP`を選び、保存したProject ZIPを開きます。既存projectへmaskだけを読み込む場合は、表示される`Replace`／`Merge`を目的に合わせて選びます。
+![Apple, Stem, and Core in 3D](images/SegRef3DLite/19-three-objects-3d.png)
 
-ブラウザautosaveは同じbrowser／deviceでmaskを補助的に復元しますが、browser dataの消去や環境変更に備え、**Project ZIPを明示的な作業バックアップとして保存してください。**
+### 11-2. STLをexportする
 
-## 13. NIfTI／STL／CSV
+Previewを閉じ、`Objects = Visible objects`のまま`Export STL`を押します。
 
-- **NIfTI Labelmap**: 3D Slicer等でlabel／segmentationとして扱う用途です。
-- **STL**: 3D surface modelとしてviewer、CAD、3D printing workflow等へ渡します。
-- **Volume Statistics CSV**: objectごとのvoxel数、mm³、cm³、frame数を保存します。
+![Export STL](images/SegRef3DLite/20-export-stl.png)
 
-NIfTIとSTLには、必要に応じてslice方向を5x／10x補間した出力もあります。基本操作では5x previewから始め、形状とcalibrationを確認してください。
+複数objectでは、`Apple Demo - Kanzi 84_STL_5x_<timestamp>.zip`がdownloadされます。ZIP内にはObj 1、Obj 2、Obj 3のSTLが別fileとして入ります。STLは3D viewer、CAD、3D printing workflow等で使えるsurface model形式です。
 
-## 14. AI Segmentation
+### 11-3. 最後にProject ZIPを保存する
 
-基本編集はAIなしで完結します。必要な場合は2つのGoogle Colab workflowを利用できます。
+上部の`Export` → `Project ZIP`を選びます。
 
-### Seg Anything
+![Export Project ZIP](images/SegRef3DLite/21-project-zip.png)
 
-任意構造をSAMベースでsegmentします。SegRef3D LiteでBox Prompt、Prompt Frame、Tracking Rangeを設定し、`Create Input ZIP` → Google Colab → `Import Result ZIP`の順に進みます。詳しくは[Seg Anything tutorial](TutorialSegOnWebJP.md)を参照してください。
+`Apple Demo - Kanzi 84_SegRef3D_Project_<timestamp>.zip`にはlabel masks、calibration、object名、表示設定、Seg Anything setupが保存されます。Source images自体は含まれません。
 
-### Seg CT/MRI
+再開するときは、先に`Load Apple Demo`で同じ画像を読み込み、`Load Masks` → `Replace` → `ZIP / Project ZIP`で保存済みZIPを開きます。browser autosaveだけに頼らず、**作業の最後にProject ZIPを保存してください。**
 
-対応するCT/MRI NIfTIから既知の解剖構造をTotalSegmentatorでsegmentします。anatomyを選択し、request ZIPをGoogle Colabへ送り、result ZIPを戻します。
+## 12. その他の便利な機能
 
-![AI Segmentation tools](images/SegRef3DLite/10-ai-segmentation.png)
+SegRef3D Liteには、Threshold／RGB extraction、Mask Cleanup、mask interpolation、NIfTI Labelmap、TIFF、Label PNG、Overlay PNG、Volume Statistics CSVなどもあります。このGetting Started tutorialではAI workflowを中心に扱いました。詳細は[SegRef3D Lite documentation](../lite-web/README.md)と[Seg Anything詳細guide](TutorialSegOnWebJP.md)を参照してください。
 
-## 15. 研究データの取り扱い
+## 13. このチュートリアルで行ったこと
 
-通常のSegRef3D Liteでは、画像表示、mask編集、calibration、measurement、NIfTI／TIFF export、STL generationはブラウザ内・端末内で処理されます。通常操作だけで研究画像がSegRef3Dの外部serverへ自動uploadされるものではありません。
+- Apple Demoの連続画像を読み込んだ
+- 画像scaleとZ spacingをcalibrationした
+- Apple、Stem、Coreを別objectとしてBox Promptで指定した
+- Google Colab GPUでSAM2 segmentationを実行した
+- AI masksをSegRef3D Liteへ戻した
+- Add／Eraseでmaskを修正した
+- 3 objectsを切り替えて確認した
+- Apple／Stem／Coreを同時に3D表示した
+- object別STLをexportした
+- Project ZIPを保存した
 
-一方、`Seg Anything`と`Seg CT/MRI`でGoogle Colabを利用する場合は、ユーザー自身が作業画像または元NIfTIを含むjob dataをGoogle Colab runtimeへ明示的にuploadします。研究・医用データを扱う場合は、所属施設のdata handling policyでGoogle Colabの利用が許可されていることを確認してください。
+これで、**対象指定 → AI segmentation → human refinement → quantitative 3D output**というSegRef3D Liteの基本workflowを一周しました。
 
-## 16. Troubleshooting
-
-### Images do not load
-
-JPG、PNG、TIFF、DICOM（拡張子あり／なし）、NIfTI（`.nii`／`.nii.gz`）を確認してください。DICOM folderに複数seriesがある場合はseries選択が表示されます。
-
-### Browser becomes slow
-
-大きなvolume、多数の高解像度画像、5x／10x 3D処理はmemoryを多く使います。不要なtabを閉じ、まず1xまたは対象objectだけでpreviewしてください。
-
-### 3D model is stretched or compressed
-
-X/Y spacing、Z spacing、calibration lineを確認してください。DICOM／NIfTIではsource geometryが使われます。
-
-### Browser was closed
-
-同じbrowserで同じ画像を読み込むとbrowser autosaveからmaskが戻る場合があります。確実な再開には保存済みProject ZIPを使用してください。
-
-### I want to use 3D Slicer
-
-`NIfTI Labelmap`を推奨します。3D SlicerではSegmentationとして読み込むとobject labelsをsegmentsとして扱えます。
-
-## Demo data
+## 14. Demo data
 
 Apple Demo images are adapted from: Schut DE, Trull AK, Couvée M. *Dataset of CT scans, slice photographs, and visual browning scores of 120 'Kanzi' apples.* Zenodo. [https://doi.org/10.5281/zenodo.8167285](https://doi.org/10.5281/zenodo.8167285)
 
@@ -191,4 +236,4 @@ Source dataset license: [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/
 
 ---
 
-[English version](TutorialSegRef3DLiteEN.md) · [Seg Anything](TutorialSegOnWebJP.md) · [Registration](Registration.md)
+[English version](TutorialSegRef3DLiteEN.md) · [Seg Anything詳細guide](TutorialSegOnWebJP.md) · [Registration](Registration.md)
