@@ -176,13 +176,22 @@ Windows／macOS／Linux。インストール不要です。
 
 #### 高度なローカルAI：SegRef3D Local GPU v1.2.6
 
-Windows + NVIDIA CUDA GPU向け。ローカルSAM2 segmentation／trackingを含みます。
-`SegRef3D-Local-GPU-v1.2.6-Windows.zip`はローカルで作成済みで、公開先へのupload待ちです。
+Windows + 対応NVIDIA CUDA GPU向けです。ローカルSAM2 segmentation／trackingを含み、
+同梱AI機能をローカル実行したいWindowsユーザーに推奨します。
+
+* **[SegRef3D Local GPU v1.2.6 Windows版をダウンロード](https://www.dropbox.com/scl/fi/ku3hj0spnw5rrmzgpc5ui/SegRef3D-Local-GPU-v1.2.6-Windows.zip?rlkey=aqd47l35lfl1kf6a7r5rv3xa3&st=e34tvblg&dl=1)**
+
+ファイル：`SegRef3D-Local-GPU-v1.2.6-Windows.zip`
 
 #### Legacy／offline：SegRef3D Local CPU v1.2.6
 
-ローカルSAM2を含まないWindowsデスクトップ版です。
-`SegRef3D-Local-CPU-v1.2.6-Windows.zip`はローカルで作成済みで、公開先へのupload待ちです。
+ローカルSAM2を含まないCPU-only Windowsデスクトップ版です。対応NVIDIA GPUがなく、
+Windowsデスクトップアプリを必要とする場合のlegacy／fallback版です。GPUを使わない多くの
+新規ユーザーには、引き続きSegRef3D Liteを推奨します。
+
+* **[SegRef3D Local CPU v1.2.6 Windows版をダウンロード](https://www.dropbox.com/scl/fi/05evqq67tokxvo37ixw87/SegRef3D-Local-CPU-v1.2.6-Windows.zip?rlkey=mz1kvdlkxmmffipp411xc1kux&st=nwh3k3rn&dl=1)**
+
+ファイル：`SegRef3D-Local-CPU-v1.2.6-Windows.zip`
 
 #### 以前のデスクトップ配布版 — v1.2.3
 

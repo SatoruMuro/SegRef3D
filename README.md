@@ -208,13 +208,22 @@ Windows / macOS / Linux. No installation required.
 
 #### Advanced local AI: SegRef3D Local GPU v1.2.6
 
-Windows + NVIDIA CUDA GPU. Includes local SAM2 segmentation and tracking. The current
-`SegRef3D-Local-GPU-v1.2.6-Windows.zip` package has been built locally; public upload is pending.
+Windows + compatible NVIDIA CUDA GPU. Includes local SAM2 segmentation and tracking. Recommended
+for Windows users who want to run the included AI functions locally.
+
+* **[Download SegRef3D Local GPU v1.2.6 for Windows](https://www.dropbox.com/scl/fi/ku3hj0spnw5rrmzgpc5ui/SegRef3D-Local-GPU-v1.2.6-Windows.zip?rlkey=aqd47l35lfl1kf6a7r5rv3xa3&st=e34tvblg&dl=1)**
+
+File: `SegRef3D-Local-GPU-v1.2.6-Windows.zip`
 
 #### Legacy / offline: SegRef3D Local CPU v1.2.6
 
-Windows desktop package without local SAM2. The current
-`SegRef3D-Local-CPU-v1.2.6-Windows.zip` package has been built locally; public upload is pending.
+CPU-only Windows desktop package without local SAM2. Use this legacy/fallback edition when a
+compatible NVIDIA GPU is unavailable and a Windows desktop application is specifically required.
+SegRef3D Lite remains the recommended starting point for most non-GPU users.
+
+* **[Download SegRef3D Local CPU v1.2.6 for Windows](https://www.dropbox.com/scl/fi/05evqq67tokxvo37ixw87/SegRef3D-Local-CPU-v1.2.6-Windows.zip?rlkey=mz1kvdlkxmmffipp411xc1kux&st=nwh3k3rn&dl=1)**
+
+File: `SegRef3D-Local-CPU-v1.2.6-Windows.zip`
 
 #### Previous desktop packages — v1.2.3
 
