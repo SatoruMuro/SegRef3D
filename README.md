@@ -1,49 +1,83 @@
 # SegRef3D
 
-**SegRef3D** is an open-source platform for AI-assisted segmentation, interactive refinement, multiframe tracking, and three-dimensional reconstruction in morphological research.
+**From image stacks to quantitative 3D data.**
 
-It provides a practical, lightweight alternative workflow for researchers working with serial histological sections, microscopy images, and other morphological datasets, particularly when access to comprehensive commercial platforms such as Amira/Avizo is limited.
+SegRef3D is an open-source platform for segmenting and refining structures, measuring calibrated
+volumes, and reconstructing 3D models from serial 2D images and volumetric data. It supports
+serial histology and microscopy, electron microscopy, CT/MRI and micro-CT, anatomical image
+stacks, and other research images that can be represented as an ordered series or 3D volume.
 
-**SegRef3D**（セグレフ3D）は、形態学研究におけるAI支援セグメンテーション、対話的修正、連続画像上の追跡、三次元再構築を支援するオープンソースプラットフォームです。
+[**Open SegRef3D Lite**](https://satorumuro.github.io/SegRef3D/lite-web/) ·
+[Basic tutorial](Tutorial/TutorialSegRef3DLiteEN.md) ·
+[Ask AI about your workflow](Tutorial/AskAISegRef3D.md) ·
+[日本語](READMEJP.md)
 
-連続組織切片、顕微鏡画像、その他の形態学画像データを扱う研究者に対して、特にAmira/Avizoなどの商用総合プラットフォームを利用しにくい環境でも実践可能な、軽量な代替ワークフローを提供します。
+This repository was formerly named SAM2GUIfor3Drecon. The software is now distributed as SegRef3D.
 
+## Start with your data and goal
 
-👉 [Read the full usage tutorial here](Tutorial/TutorialSegRef3DEN.md)
-  
-日本語は[こちら](READMEJP.md)
+### What kind of images are you working with?
 
-This repository was formerly named SAM2GUIfor3Drecon.  
-The software is now distributed as SegRef3D.
-
-## Which SegRef3D should I use?
-
-| Environment | Recommended version |
+| Data | Practical starting point |
 | --- | --- |
-| Windows | **SegRef3D Lite** |
-| macOS | **SegRef3D Lite** |
-| Linux / modern browser | **SegRef3D Lite** |
-| Windows + NVIDIA CUDA GPU | **SegRef3D Lite** or **SegRef3D Local GPU** |
+| Serial histology or optical microscopy | Register the sections if needed, load the ordered images, calibrate pixel and slice spacing, then segment or refine masks. |
+| Serial electron microscopy | Load an ordered image stack, confirm dimensions and spacing, then use manual, threshold, RGB, or AI-assisted segmentation as appropriate. |
+| CT, MRI, or micro-CT | Load DICOM or a 3D NIfTI volume. Review the imported physical geometry before measuring or exporting. |
+| Visible Human or another anatomical image stack | Load the ordered images, enter known spacing, then segment, measure, or reconstruct selected structures. |
+| Existing image masks | Load label PNG masks or a SegRef3D Project ZIP and continue refinement. |
+| Existing 3D scalar volume | Load NIfTI, DICOM, or supported TIFF data and work with it as editable slices. |
 
-### SegRef3D Lite
+Serial sections may need [registration/alignment](Tutorial/Registration.md) before quantitative 3D
+work. Do not infer real-world measurements from image dimensions alone: use source DICOM/NIfTI
+geometry or enter verified pixel/voxel and slice spacing.
 
-**Recommended for most users.** Runs locally in a modern browser on Windows, macOS, and Linux,
-with no installation required. [Open SegRef3D Lite](https://satorumuro.github.io/SegRef3D/lite-web/).
+### What do you want to do?
 
-### SegRef3D Local GPU
+| Goal | SegRef3D route |
+| --- | --- |
+| Segment a structure | Draw directly, use threshold/RGB extraction, use **Seg Anything**, or use supported **Seg CT/MRI** anatomy. |
+| Refine an existing AI mask | Import the masks, then use Add, Erase, Transfer, interpolation, and Mask Cleanup. |
+| Measure volume | Verify spacing or calibrate first, inspect the masks, then export Volume Statistics CSV. |
+| Create a 3D model | Confirm image order and spacing, preview the reconstruction, then export STL. |
+| Continue in 3D Slicer | Export a NIfTI Labelmap and load it as a Segmentation. |
+| Preserve or share an editing session | Export a Project ZIP and keep the original source data with it. |
 
-For Windows PCs with NVIDIA CUDA GPUs. Runs SAM2 segmentation and tracking locally.
+## Which version should you use?
 
-### SegRef3D Local CPU
+| Environment and need | Recommended version |
+| --- | --- |
+| Windows, macOS, or Linux; easiest start | **SegRef3D Lite** |
+| Windows + NVIDIA CUDA GPU; local SAM2 segmentation/tracking | **SegRef3D Local GPU** |
+| Windows desktop workflow without local SAM2 | **SegRef3D Local CPU** (legacy) |
+| Very large data that exceeds browser memory | Prefer a Windows local build and validate the workflow on a representative subset first. |
 
-Legacy / offline desktop option. It remains available for users who specifically require a Windows
-desktop workflow without local SAM2. SegRef3D Lite is recommended for most new users.
+**SegRef3D Lite** is recommended for most users. It runs in a modern browser without installation.
+**SegRef3D Local GPU** runs SAM2 locally on a compatible Windows NVIDIA CUDA system.
+**SegRef3D Local CPU** is retained as a legacy/offline Windows desktop option without local SAM2.
+
+## Ask AI about SegRef3D
+
+Not sure which route fits your image type, format, spacing, goal, operating system, GPU, or data
+policy? Use the [official SegRef3D AI workflow prompt](Tutorial/AskAISegRef3D.md), then open
+[ChatGPT](https://chatgpt.com/), [Gemini](https://gemini.google.com/),
+[Claude](https://claude.ai/), or [Perplexity](https://www.perplexity.ai/).
+
+The prompt asks the assistant to clarify your conditions before recommending a version and a short
+workflow. It points the assistant to SegRef3D's official AI-readable references:
+[llms.txt](llms.txt) and [llms-full.txt](llms-full.txt).
+
+> Describe your modality, file format, series/volume structure, spacing, intended output, OS/GPU,
+> and local-processing constraints. Do not paste identifiable patient information, confidential
+> research images, credentials, or unpublished data into a third-party AI service.
 
 ### Privacy and processing location
 
 **Your images stay on your device during normal SegRef3D Lite use.** Image display, mask editing,
-measurement, NIfTI export, and STL generation run locally in your browser. Data is uploaded only
-when you explicitly send a Seg Anything or Seg CT/MRI job to your own Google Colab runtime.
+measurement, NIfTI export, and STL generation run locally in your browser. Seg Anything and
+Seg CT/MRI are explicit exceptions: their input ZIPs contain working images or a source volume and
+are uploaded only when you explicitly send them to your own Google Colab runtime. SegRef3D does not
+operate an intermediate image-upload server. Confirm that Colab and any AI consultation service are
+permitted by your institution before sharing research or medical information.
 
 ---
 <img src="images/SegRef3D-v1.2.0-GUI.png" alt="image"  width="100%">
@@ -60,8 +94,9 @@ Watch the **Basic Workflow** video to learn how to use SegRef3D, from loading im
 
 ## 🧠 Features
 
-* 🖼 Load image folders
-* 📆 Integration with **SAM2** for box-prompted segmentation and video tracking
+* 🖼 Load ordered JPG/PNG/TIFF images, DICOM series, and 3D NIfTI volumes
+* 📆 Local **SAM2** box-prompt segmentation and tracking in SegRef3D Local GPU
+* ☁ Optional Seg Anything and Seg CT/MRI Google Colab workflows from SegRef3D Lite
 * ✨ Object tracking with start/end frame selection and batch execution
 * 🎨 Mask editing for up to 20 objects, with per-object color toggling
 * 🖊 Freehand, point-to-point, and snap-to-boundary drawing modes
@@ -231,15 +266,15 @@ The `_internal` folder **must be located in the same directory** as `SegRef3D.ex
 
 ## 📘 Full Tutorial
 
-Looking for step-by-step instructions?  
-👉 [Read the full usage tutorial here](https://github.com/SatoruMuro/SAM2GUIfor3Drecon/blob/main/Tutorial/TutorialSegRef3DEN.md)
+Looking for step-by-step instructions?
+👉 [Read the full usage tutorial here](Tutorial/TutorialSegRef3DEN.md)
 
 ---
 
 ## 🔄 Registration (Alignment)
 
-For serial images such as histological sections, alignment (registration) is essential before segmentation or 3D reconstruction.  
-👉 [See detailed registration steps here](https://github.com/SatoruMuro/SAM2GUIfor3Drecon/blob/main/Tutorial/Registration.md)
+For serial images such as histological sections, alignment (registration) is essential before segmentation or 3D reconstruction.
+👉 [See detailed registration steps here](Tutorial/Registration.md)
 
 > 💡 **Note:** Registration is typically **not required** for CT or MRI images, since they are already aligned during acquisition. However, **histological serial sections** often need registration (alignment) due to physical distortion and sectioning artifacts.
 
@@ -247,10 +282,12 @@ For serial images such as histological sections, alignment (registration) is ess
 
 ## 📂 Input Format
 
-* Input images: `.jpg`, `.png`, **or DICOM (.dcm)** files stored in a folder
-* Histological serial sections require registration before segmentation. See [this page](Tutorial/Registration.md) for details.
-  `.jpg`, `.png`, **or DICOM (.dcm)** files stored in a folder
-* Masks: SVG format with objects encoded using predefined 20 RGB colors
+* Ordered image sequences: `.jpg`, `.png`, and supported TIFF data
+* Medical volumes: DICOM folders (`.dcm` or extensionless) and 3D NIfTI (`.nii` / `.nii.gz`)
+* Masks and projects: label PNG sequences and SegRef3D Project ZIP; the local application also
+  retains legacy SVG-mask compatibility
+* Histological serial sections may require registration before segmentation. See
+  [Registration](Tutorial/Registration.md) for details.
 
 ---
 

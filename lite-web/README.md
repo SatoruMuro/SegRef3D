@@ -7,6 +7,10 @@ distinguish after download. A directly loaded single-file volume uses its displa
 
 Public app: <https://satorumuro.github.io/SegRef3D/lite-web/>
 
+Not sure which workflow fits your data, goal, and computer? Use the
+[official Ask AI prompt](../Tutorial/AskAISegRef3D.md). The AI-readable official references are
+[llms.txt](../llms.txt) and [llms-full.txt](../llms-full.txt).
+
 ## Workspace
 
 The desktop layout follows the same mental model as the Windows application:
@@ -118,8 +122,9 @@ do not endorse SegRef3D. The approximately 20 MB demo volume is fetched only whe
 - Mask autosave uses browser-local IndexedDB storage.
 - Label PNG, overlay, Project ZIP, NIfTI, TIFF, CSV, and STL exports are generated locally and
   downloaded directly to the user's device.
-- Download names use the first loaded image filename as a prefix. Standard sequence names such
-  as `mask0001.png` remain unchanged inside ZIP archives for import compatibility.
+- Download names use the loaded source folder name as a prefix. A directly loaded single-file
+  volume uses its displayed project name. Standard sequence names such as `mask0001.png` remain
+  unchanged inside ZIP archives for import compatibility.
 - SegRef3D Lite does not operate an image-upload API, analytics pipeline, or telemetry service.
 
 Seg Anything and Seg CT/MRI are the explicit exceptions to this browser-local workflow. They are

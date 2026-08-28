@@ -1,36 +1,55 @@
 # SegRef3D
 
-**SegRef3D** は、画像のセグメンテーションおよび修正をインタラクティブに行える PyQt6 ベースのGUIツールです。Meta社の Segment Anything Model 2（SAM2）を統合し、AIによる自動セグメンテーション、複数フレームにわたるオブジェクト追跡、編集、3D STL出力までをサポートします。  
-👉 [使用方法チュートリアル（日本語）](Tutorial/TutorialSegRef3DJP.md)
+**連続画像から、定量可能な3Dデータへ。**
+
+SegRef3Dは、連続2D画像や3D volumeから、構造のsegmentation、mask修正、体積計測、3D再構築を行う
+オープンソースプラットフォームです。連続組織切片、光学・電子顕微鏡画像、CT/MRI、micro-CT、
+Visible Human系画像、その他の連番画像やvolumeを扱えます。
+
+[**SegRef3D Liteを開く**](https://satorumuro.github.io/SegRef3D/lite-web/) ·
+[基本操作](Tutorial/TutorialSegRef3DLiteJP.md) ·
+[AIに使い方を相談する](Tutorial/AskAISegRef3D.md) ·
+[English](README.md)
+
+## 画像・目的・環境から選ぶ
+
+| 条件 | 最初の選択 |
+| --- | --- |
+| 連続組織切片・光学／電子顕微鏡画像 | 必要に応じて位置合わせし、画像順・pixel spacing・slice spacingを確認してから編集します。 |
+| CT／MRI／micro-CT | DICOMまたはNIfTIを読み込み、計測前に取り込まれたphysical geometryを確認します。 |
+| 既存のAI maskを直したい | label PNGまたはProject ZIPを読み込み、Add／Erase／Cleanup等で修正します。 |
+| 体積を測りたい | spacingまたはcalibrationを確認し、maskを点検してVolume Statistics CSVを出力します。 |
+| 3Dモデルを作りたい | 画像順とspacingを確認し、3D preview後にSTLを出力します。 |
+| 3D Slicerへ持っていきたい | NIfTI Labelmapを出力し、SlicerではSegmentationとして読み込みます。 |
+
+組織切片などは、定量3D化の前に[registration／alignment](Tutorial/Registration.md)が必要な場合があります。
+実寸計測では、DICOM/NIfTIのgeometryまたは検証済みのpixel/voxel・slice spacingを使用してください。
 
 ## どのSegRef3Dを使えばよいですか？
 
 | 環境 | 推奨版 |
 | --- | --- |
-| Windows | **SegRef3D Lite** |
-| macOS | **SegRef3D Lite** |
-| Linux／モダンブラウザ | **SegRef3D Lite** |
-| Windows + NVIDIA CUDA GPU | **SegRef3D Lite** または **SegRef3D Local GPU** |
+| Windows／macOS／Linuxで簡単に始めたい | **SegRef3D Lite** |
+| Windows + NVIDIA CUDA GPUでSAM2をローカル実行したい | **SegRef3D Local GPU** |
+| SAM2なしのWindowsデスクトップ版が必要 | **SegRef3D Local CPU**（legacy） |
 
-### SegRef3D Lite
+ほとんどの新規ユーザーには、インストール不要の**SegRef3D Lite**を推奨します。
 
-**ほとんどのユーザーに推奨します。** Windows、macOS、Linuxのモダンブラウザで動作し、
-インストールは不要です。[SegRef3D Liteを開く](https://satorumuro.github.io/SegRef3D/lite-web/)。
+## AIにSegRef3Dの使い方を相談する
 
-### SegRef3D Local GPU
+[公式のAI相談用プロンプト](Tutorial/AskAISegRef3D.md)を利用すると、画像種、file format、2D連番／3D volume、
+spacing、目的、OS/GPU、データ取扱条件をAIに整理させてから、適した版とworkflowを提案させられます。
+AI向け公式情報は[llms.txt](llms.txt)と[llms-full.txt](llms-full.txt)です。
 
-NVIDIA CUDA GPUを搭載したWindows PC向けです。SAM2 segmentation／trackingをローカル実行します。
-
-### SegRef3D Local CPU
-
-Legacy／offlineデスクトップ版です。ローカルSAM2を必要とせず、Windowsデスクトップworkflowを
-明示的に必要とするユーザー向けに提供します。新規ユーザーにはSegRef3D Liteを推奨します。
+> AI相談では条件を文章で説明し、患者識別情報、機密の研究画像、認証情報、未公開データそのものは
+> 第三者のAIサービスへ貼り付けないでください。
 
 ### プライバシーと処理場所
 
 **通常のSegRef3D Lite利用中、画像はユーザーの端末内に留まります。** 画像表示、mask編集、計測、
-NIfTI出力、STL生成はブラウザ内で処理されます。Seg AnythingまたはSeg CT/MRIのjobを、ユーザー自身が
-Google Colab runtimeへ明示的に送信した場合だけデータがアップロードされます。
+NIfTI出力、STL生成はブラウザ内で処理されます。Seg AnythingとSeg CT/MRIだけは例外で、作業画像または
+元volumeを含むZIPをユーザー自身のGoogle Colab runtimeへ明示的にuploadします。SegRef3Dは中継用の
+画像upload serverを運用していません。研究・医用情報の利用可否は所属機関の規定を確認してください。
 
 ---
 
@@ -49,8 +68,9 @@ SegRef3Dの基本的な操作手順をご覧いただける動画を掲載して
 
 ## 🧠 主な機能
 
-* 🖼 画像フォルダの一括読み込み（DICOM含む）
-* 📆 SAM2 による自動セグメンテーション（ボックスプロンプト）とマルチフレーム追跡
+* 🖼 JPG/PNG/TIFF連番、DICOM series、3D NIfTI volumeの読み込み
+* 📆 SegRef3D Local GPUでのローカルSAM2 segmentation／tracking
+* ☁ SegRef3D Liteから利用する任意のSeg Anything／Seg CT/MRI Google Colab workflow
 * ✨ 任意の範囲を指定したオブジェクト追跡（Start/Endフレームの指定、バッチ処理）
 * 🎨 最大20オブジェクトまでのマスク編集と可視化切替
 * 🖊 フリーハンド、点指定、境界スナップの描画モード
@@ -228,7 +248,7 @@ SegRef3D を動かすのに必要なものはすべてアプリケーション�
 ## 🔄 位置合わせ
 
 連続組織切片の画像などでは、セグメンテーションや3D再構築の前に位置合わせが必要です。  
-👉 [詳細なレジストレーション手順はこちらをご覧ください](https://github.com/SatoruMuro/SAM2GUIfor3Drecon/blob/main/Tutorial/Registration.md)
+👉 [詳細なレジストレーション手順はこちらをご覧ください](Tutorial/Registration.md)
 
 > 💡 **補足:** CTやMRI画像は撮影時にすでに整列されているため、通常は位置合わせは**不要**です。  
 > 一方で、**組織の連続切片**では、物理的な歪みや切片ズレの影響により、位置合わせが必要になることがあります。
@@ -237,10 +257,11 @@ SegRef3D を動かすのに必要なものはすべてアプリケーション�
 
 ## 📂 入力フォーマット
 
-* 入力画像形式：`.jpg`, `.png`, **または DICOM (.dcm)**
-* 組織連続切片の場合は、セグメンテーション前に位置合わせ（Registration）が必要：
+* 連番画像：`.jpg`、`.png`、対応TIFF
+* 医用volume：DICOM folder（`.dcm`または拡張子なし）、3D NIfTI（`.nii` / `.nii.gz`）
+* mask／project：label PNG連番、SegRef3D Project ZIP。local版は旧SVG maskにも対応
+* 組織連続切片はsegmentation前にregistrationが必要な場合があります：
   [詳細はこちら](Tutorial/Registration.md)
-* マスク形式：SVG（最大20色の定義済みRGBに対応）
 
 ---
 

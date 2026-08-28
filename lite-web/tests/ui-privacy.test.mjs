@@ -42,7 +42,8 @@ test("offline cache uses the current UI asset generation", async () => {
   assert.match(html, /app\.mjs\?v=38/);
   assert.match(html, /<script type="module" src="\.\/app\.mjs\?v=38"><\/script>/);
   assert.match(html, /TutorialSegRef3DLiteEN\.html/);
-  assert.match(worker, /segref3d-lite-web-v40/);
+  assert.match(html, /AskAISegRef3D\.html/);
+  assert.match(worker, /segref3d-lite-web-v41/);
   assert.match(worker, /medical-geometry\.mjs\?v=2/);
   assert.match(worker, /mask-tools\.mjs\?v=20/);
   assert.match(worker, /styles\.css\?v=32/);

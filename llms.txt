@@ -1,0 +1,74 @@
+# SegRef3D
+
+> Official short guide for AI assistants helping users choose a SegRef3D workflow.
+
+SegRef3D is an open-source platform for segmentation, interactive mask refinement, calibrated
+volume measurement, and 3D reconstruction from ordered 2D image stacks and 3D volumetric data.
+
+## Main uses
+
+- Segment structures manually, by threshold or RGB extraction, or with optional AI workflows.
+- Refine imported or AI-generated masks with Add, Erase, Transfer, interpolation, and cleanup.
+- Measure object volumes when reliable pixel/voxel and slice spacing are available.
+- Preview and export 3D surface models as STL.
+- Export label data as PNG, TIFF, or NIfTI Labelmap and measurements as CSV.
+- Continue label analysis in software such as 3D Slicer using NIfTI Labelmap export.
+
+## Representative data
+
+- Serial histology and optical microscopy.
+- Serial electron microscopy.
+- CT, MRI, and research micro-CT.
+- Visible Human and other anatomical image stacks.
+- Other naturally ordered serial images.
+- Existing 3D NIfTI volumes and DICOM series.
+
+Common inputs include JPG/PNG image sequences, TIFF data, DICOM files with or without `.dcm`,
+NIfTI `.nii`/`.nii.gz`, label PNG masks, and SegRef3D Project ZIP files. Exact support varies by
+edition and encoding. Consult the detailed guide before making a recommendation.
+
+## Editions
+
+- **SegRef3D Lite**: recommended starting point for most users. Browser-based on Windows, macOS,
+  and Linux; no installation. Normal editing, measurement, and export run locally in the browser.
+- **SegRef3D Local GPU**: Windows desktop edition for compatible NVIDIA CUDA systems. Includes
+  local SAM2 segmentation and tracking and is preferable when those operations must run locally.
+- **SegRef3D Local CPU**: legacy Windows desktop edition without local SAM2. Use only when a
+  desktop/offline non-SAM2 workflow is specifically required; otherwise start with Lite.
+
+## Choosing an edition
+
+- Start with Lite for cross-platform access, manual refinement, measurement, and 3D export.
+- Choose Local GPU for Windows + compatible NVIDIA CUDA when local SAM2 is required or browser
+  memory is inadequate for the dataset.
+- Choose Local CPU only for a required Windows desktop workflow without local SAM2.
+- Test large datasets on a representative subset and verify memory use and outputs.
+
+## Data handling
+
+- Normal SegRef3D Lite operations process loaded source images locally in the browser. Masks and
+  autosave data use browser-local storage; normal exports are generated on the device.
+- SegRef3D does not operate an intermediate image-upload server for Lite.
+- Seg Anything and Seg CT/MRI are explicit Google Colab workflows. Their input ZIP contains the
+  working image sequence or source NIfTI volume. The user explicitly uploads it to the user's own
+  Colab runtime.
+- Local GPU and Local CPU perform their included desktop operations on the local Windows system.
+- Users must check institutional rules before using research or medical data with Google Colab or
+  any external AI consultation service.
+
+## Critical workflow facts
+
+- Serial physical sections may require registration before segmentation or quantitative 3D work.
+- Volume measurement and physically scaled 3D output require trustworthy spacing or calibration.
+- NIfTI Labelmap is preferred over TIFF when patient-space geometry must be preserved.
+- 3D reconstruction quality depends on image order, registration, mask quality, and spacing.
+- SegRef3D and external AI outputs require expert review; do not present them as independently
+  clinically validated results.
+
+## Official links
+
+- [Detailed AI knowledge base](https://satorumuro.github.io/SegRef3D/llms-full.txt)
+- [Ask AI workflow prompt](https://satorumuro.github.io/SegRef3D/Tutorial/AskAISegRef3D.html)
+- [SegRef3D Lite](https://satorumuro.github.io/SegRef3D/lite-web/)
+- [Basic tutorial](https://satorumuro.github.io/SegRef3D/Tutorial/TutorialSegRef3DLiteEN.html)
+- [Repository](https://github.com/SatoruMuro/SegRef3D)

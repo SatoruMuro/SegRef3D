@@ -1,0 +1,301 @@
+# SegRef3D official AI workflow knowledge base
+
+This document is written for AI assistants that help users choose a SegRef3D workflow. Base advice
+on the facts below, ask for missing conditions, and do not invent capabilities. Ask for descriptive
+metadata rather than research images or identifiable patient data.
+
+## 1. What SegRef3D is
+
+SegRef3D is an open-source platform for turning ordered image slices or scalar 3D volumes into
+editable label masks, calibrated measurements, and 3D surface models. Its core tasks are:
+
+- segmentation and object labeling;
+- manual and semi-automatic mask refinement;
+- multi-slice mask management and interpolation;
+- calibrated volume statistics;
+- 3D preview and STL export;
+- label export for downstream tools, including 3D Slicer.
+
+SegRef3D is not limited to CT or MRI. It can be used with serial histology, microscopy, electron
+microscopy, micro-CT, anatomical image stacks, and other ordered 2D images when the user can define
+their order and physical scale. Results depend on the source data, preprocessing, calibration, and
+mask review. Do not describe the software or an AI-generated mask as independently clinically
+validated.
+
+## 2. Questions to ask before recommending a workflow
+
+Ask the user for:
+
+1. Imaging modality or image type.
+2. Exact file format and encoding if known.
+3. Whether the data are ordered serial 2D images or one existing 3D volume.
+4. Number of slices, pixel dimensions, and approximate total data size.
+5. Whether pixel/voxel spacing, slice thickness, slice interval, orientation, and origin are known.
+6. Whether serial physical sections are already registered/aligned.
+7. The goal: segmentation, refinement, measurement, reconstruction, export, or downstream use.
+8. Existing masks and their format.
+9. Operating system, modern browser availability, NVIDIA GPU, and GPU compatibility.
+10. Whether work must stay on the device and whether Google Colab is permitted.
+
+Do not ask the user to paste confidential images, identifiable patient data, credentials, or
+unpublished datasets into a third-party AI chat. Descriptions and non-sensitive metadata are enough
+to select a workflow.
+
+## 3. Typical use cases
+
+### Serial histology or optical microscopy
+
+Typical route: register the section images if needed, verify natural ordering, load the stack,
+calibrate in-plane pixel size and slice spacing, segment or import masks, review every relevant
+slice, calculate volume, then preview/export 3D data. Section loss, distortion, folds, inconsistent
+staining, and spacing assumptions directly affect quantitative output.
+
+### Serial electron microscopy
+
+Typical route: begin with an aligned and ordered stack, verify voxel scale, then use manual drawing,
+threshold/RGB extraction where appropriate, imported masks, or Seg Anything. Large EM stacks can
+exceed browser memory; test a representative subset before choosing Lite or a local build.
+
+### CT, MRI, or micro-CT
+
+Typical route: load DICOM or NIfTI, inspect imported dimensions and physical geometry, segment or
+refine labels, review masks in multiple planes or downstream software as appropriate, calculate
+volume, and export NIfTI Labelmap or STL. Seg CT/MRI is an optional TotalSegmentator/Google Colab
+route for supported anatomy from a compatible CT NIfTI source; available structures depend on the
+bundled open-license catalog.
+
+### Existing AI masks
+
+Load compatible label PNG masks or a SegRef3D Project ZIP, choose Replace or Merge as appropriate,
+then refine with Add, Erase, Transfer, interpolation, and Mask Cleanup. Verify that mask dimensions,
+frame order, label IDs, source dataset, and geometry correspond to the working images.
+
+### 3D model or downstream analysis
+
+STL represents a surface, not the full source image geometry or label volume. Use STL for surface
+viewing, CAD, and related workflows. Prefer NIfTI Labelmap when labels and source physical geometry
+must continue into 3D Slicer or another medical-image application.
+
+## 4. Data categories and preparation
+
+### Ordered serial 2D images
+
+Representative formats are JPG, PNG, and supported TIFF sequences. Natural filename ordering is
+important. Mixed image dimensions may need a shared canvas. Large raster images may be resized for
+practical editing, but this changes pixel dimensions and must be reflected in calibration.
+
+Serial physical sections often require registration because cutting, mounting, imaging, folds, and
+deformation disturb correspondence between slices. Registration is normally not the same operation
+as segmentation. Complete alignment before quantitative reconstruction when the scientific question
+requires spatial correspondence.
+
+### DICOM series
+
+SegRef3D Lite reads DICOM folders with `.dcm` or extensionless files and selects a series when
+necessary. Supported browser transfer syntaxes include uncompressed Implicit VR Little Endian,
+Explicit VR Little Endian, Explicit VR Big Endian, and browser-decodable JPEG Baseline frames.
+JPEG-LS, JPEG 2000, RLE, Deflated Explicit VR, and other unsupported compressed encodings are
+rejected rather than rendered incorrectly.
+
+When consistent metadata are available, DICOM dimensions, spacing, orientation, and origin are used
+for physical geometry. Always review imported metadata and series selection before measurement.
+
+### NIfTI volumes
+
+SegRef3D Lite reads 3D NIfTI-1/NIfTI-2 `.nii` and `.nii.gz` scalar volumes, including common
+integer/floating-point types and RGB/RGBA volumes. Four-dimensional NIfTI is currently rejected.
+Source affine/orientation and spacing are retained for compatible NIfTI Labelmap export.
+
+### TIFF data
+
+SegRef3D Lite supports multi-page TIFF and naturally sorted TIFF folders for 8-bit grayscale,
+16-bit grayscale, and RGB data. TIFF mask export preserves mask pixels but is not the preferred
+format for reliable full patient-space geometry.
+
+### Spacing and calibration
+
+Volume in physical units and physically scaled reconstruction require positive X, Y, and Z spacing.
+DICOM/NIfTI metadata can supply it when valid. Raster stacks normally require known metadata or a
+reference-line calibration plus a verified slice interval. A calibration value should be measured
+or documented, not guessed for research output.
+
+## 5. Editions
+
+### SegRef3D Lite
+
+- Recommended entry point for most users.
+- Runs in a modern browser on Windows, macOS, and Linux without installation.
+- Supports image-stack, DICOM, NIfTI, and TIFF workflows described in the current Lite docs.
+- Supports up to 20 single-label objects; drawing, threshold/RGB extraction, mask cleanup,
+  interpolation, measurement, NIfTI/TIFF/PNG/CSV export, 3D preview, and STL export.
+- Uses browser-local IndexedDB for mask autosave.
+- Normal image processing and export run locally in the browser.
+- Does not run SAM2 or TotalSegmentator directly inside the browser.
+- Browser memory can limit very large image stacks, interpolation, and mesh generation.
+
+### SegRef3D Local GPU
+
+- Windows desktop edition for a compatible NVIDIA CUDA GPU and driver.
+- Includes local SAM2 box-prompt segmentation and multi-frame tracking.
+- Appropriate when local SAM2 is required, Google Colab is not permitted, or the browser workflow
+  is unsuitable for the data size.
+- GPU compatibility must be confirmed with the bundled runtime diagnostics; CUDA availability alone
+  does not guarantee that a specific GPU architecture can execute the bundled PyTorch kernels.
+
+### SegRef3D Local CPU
+
+- Legacy Windows desktop edition.
+- Does not include local SAM2, CUDA PyTorch, xformers, or flash-attn.
+- Keeps non-SAM2 editing, measurement, and export workflows available.
+- Choose it only when a Windows desktop/offline workflow without local SAM2 is specifically needed.
+- SegRef3D Lite is the preferred starting point for most new non-GPU users.
+
+## 6. Choosing an edition
+
+Use this order:
+
+1. If the user wants the easiest cross-platform start, recommend SegRef3D Lite.
+2. If the user requires local SAM2 and has compatible Windows NVIDIA CUDA hardware, recommend Local GPU.
+3. If the user requires a Windows desktop application but not SAM2, Local CPU is available as legacy.
+4. If the dataset is too large for browser memory, test a Windows local build with a representative subset.
+5. If research images cannot be uploaded to Google Colab, do not recommend the Colab AI routes.
+6. If no edition or input encoding directly supports the source, recommend converting a copy to a
+   supported lossless/scientifically appropriate format while preserving metadata and the original.
+
+## 7. Segmentation and refinement routes
+
+### Manual and image-based tools
+
+- Free, Click, and edge Snap drawing.
+- Add, Erase, and Transfer label operations.
+- Threshold extraction on the normalized editor intensity.
+- RGB extraction around a sampled color for suitable color images.
+- Mask Cleanup operations such as hole filling, small-island removal, largest-component retention,
+  smoothing, dilation, and erosion.
+- Signed-distance mask interpolation between labeled key slices.
+
+Threshold and RGB extraction are not universal AI segmentation. Their suitability depends on image
+contrast, staining, artifacts, and the target structure. Review the resulting masks.
+
+### Seg Anything
+
+Seg Anything is for arbitrary user-specified structures. In Lite, the user defines object tracking
+ranges and one or more box-prompt keyframes, creates `<source-folder>_segonweb_input.zip`, explicitly
+uploads that ZIP to the user's Google Colab runtime, runs the SAM-based workflow, downloads
+`segref3d_result.zip`, and imports it into SegRef3D for refinement. The input ZIP includes the
+working image sequence, not only prompt coordinates.
+
+Local GPU can perform its included SAM2 segmentation and tracking locally instead. Local CPU does
+not include local SAM2.
+
+### Seg CT/MRI
+
+Seg CT/MRI is for supported known anatomical structures from a compatible CT NIfTI volume. The user
+selects structures, creates `<source-folder>_instant3d_request.zip`, explicitly uploads the ZIP to
+the user's Google Colab runtime, runs TotalSegmentator, downloads `instant3d_result.zip`, and imports
+the validated result. The request ZIP contains the exact source NIfTI and settings. This route is
+not a general arbitrary-structure segmenter and does not imply clinical validation.
+
+## 8. Basic end-to-end workflow
+
+1. Preserve the original data and metadata.
+2. Register serial physical sections when necessary.
+3. Load the ordered image stack, DICOM series, NIfTI volume, or supported TIFF data.
+4. Verify project name, dimensions, image order, orientation, and spacing.
+5. Select object labels and create or import masks.
+6. Refine and clean masks; inspect multiple slices and boundaries.
+7. Use Project Check where available and resolve warnings relevant to the study.
+8. Verify calibration before volume measurement or physically scaled 3D export.
+9. Preview the 3D result and inspect for reversed order, gaps, artifacts, or implausible scaling.
+10. Export the format that matches the downstream goal and preserve a portable project backup.
+
+## 9. Export selection
+
+- **Project ZIP**: portable SegRef3D masks/settings backup. Keep the original source data available
+  and follow the current import instructions for the edition used.
+- **Label PNG**: per-slice integer label masks for image-based workflows.
+- **Overlay PNG**: visual review images combining visible labels with source images.
+- **NIfTI Labelmap**: preferred for voxel labels and patient/source geometry in tools such as 3D Slicer.
+- **TIFF**: image-stack interchange when full patient-space transforms are not required.
+- **STL**: surface mesh for 3D viewing/CAD; does not contain the original scalar volume.
+- **Volume Statistics CSV**: calibrated per-object voxel/volume statistics; only meaningful with
+  trustworthy spacing and masks.
+- **VolInfo CSV**: SegRef3D spacing/origin/affine interchange where supported; it is not a mask.
+
+Original, 5x, and 10x NIfTI/STL options refer to slice-direction densification using signed-distance
+interpolation. Interpolation adds estimated intermediate masks; it does not add new observed anatomy.
+Always compare interpolated output with the original annotated slices.
+
+## 10. Data handling and privacy
+
+### Normal SegRef3D Lite processing
+
+Source images are processed locally in the browser and are not uploaded to a SegRef3D-operated
+server. Mask autosave uses browser-local IndexedDB. Label, overlay, Project ZIP, NIfTI, TIFF, CSV,
+and STL files are generated locally and downloaded to the device. The Lite app has no image-upload
+API, analytics pipeline, or telemetry service in its current implementation.
+
+### Explicit external workflows
+
+Seg Anything and Seg CT/MRI use Google Colab. Their input ZIPs contain working images or a source
+NIfTI volume. Creating a ZIP does not upload it, but selecting it in Colab explicitly sends it to
+the user's Colab runtime. SegRef3D does not operate an intermediate image-upload server.
+
+An AI consultation through ChatGPT, Gemini, Claude, Perplexity, or another service is separate from
+SegRef3D. Users should provide descriptions and non-sensitive metadata, not research images or
+identifiable patient information, unless their institution explicitly permits that service and use.
+
+## 11. FAQ
+
+### Which edition should a new user try first?
+
+SegRef3D Lite, unless local SAM2, a Windows-only desktop workflow, or dataset size clearly requires
+a local edition.
+
+### Does SegRef3D Lite upload images when a folder dialog says "upload"?
+
+No for normal loading. Browsers may label local file access as upload, but normal Lite image loading
+and editing remain in the browser. Google Colab job upload is a separate explicit action.
+
+### Can Lite use DICOM without a `.dcm` extension?
+
+Yes, it detects extensionless DICOM files. Support still depends on the transfer syntax and valid
+metadata.
+
+### Why is spacing important?
+
+Pixel counts alone do not define millimetres, cubic millimetres, or correct 3D proportions. X/Y
+spacing and Z slice spacing determine physical scale. Orientation and origin matter for registration
+with other volumetric data.
+
+### Is volume measurement the same as 3D reconstruction?
+
+No. Volume measurement counts labeled voxels and applies spacing. 3D reconstruction generates a
+surface representation. Both depend on masks and geometry, but they answer different questions.
+
+### Which export should be opened in 3D Slicer?
+
+Use NIfTI Labelmap and load it as a Segmentation when label identity and source geometry should be
+retained. STL is a surface-only alternative.
+
+### Does interpolation recover missing anatomical observations?
+
+No. It estimates intermediate masks between labeled slices. It can smooth slice spacing in a model,
+but cannot replace missing source information or expert validation.
+
+### When is registration needed?
+
+It is often needed for serial physical sections that shifted or deformed during preparation and
+imaging. CT/MRI volumes are commonly spatially organized during acquisition, but metadata and
+series consistency still require review.
+
+## 12. Official links
+
+- SegRef3D repository: https://github.com/SatoruMuro/SegRef3D
+- SegRef3D Lite: https://satorumuro.github.io/SegRef3D/lite-web/
+- Ask AI prompt: https://satorumuro.github.io/SegRef3D/Tutorial/AskAISegRef3D.html
+- Basic tutorial: https://satorumuro.github.io/SegRef3D/Tutorial/TutorialSegRef3DLiteEN.html
+- Japanese basic tutorial: https://satorumuro.github.io/SegRef3D/Tutorial/TutorialSegRef3DLiteJP.html
+- Registration: https://github.com/SatoruMuro/SegRef3D/blob/main/Tutorial/Registration.md
+- Seg Anything tutorial: https://satorumuro.github.io/SegRef3D/Tutorial/TutorialSegOnWebEN.html
+- Short AI overview: https://satorumuro.github.io/SegRef3D/llms.txt

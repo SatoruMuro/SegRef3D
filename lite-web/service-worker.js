@@ -1,4 +1,4 @@
-const CACHE_NAME = "segref3d-lite-web-v40";
+const CACHE_NAME = "segref3d-lite-web-v41";
 const APPLE_DEMO_FILES = Array.from(
   { length: 20 },
   (_, index) => `./demo/apple-kanzi-84/apple_${String(index + 1).padStart(4, "0")}.jpg`,
