@@ -91,6 +91,8 @@ do not endorse SegRef3D. The approximately 20 MB demo volume is fetched only whe
 - Browser autosave with IndexedDB
 - Load grayscale label PNG sequences with Replace/Merge modes and clear all project masks
 - Export and restore Project ZIP files containing label masks and editor settings
+- Export image channels plus the single-label mask as a reusable one-case Training Data ZIP for
+  future custom segmentation-model training
 - Use the Objects panel as the current-target selector, with visibility, rename, relabel, merge,
   and object-only clear actions
 - Configure one tracking range and multiple box-prompt keyframes per Seg Anything object
@@ -122,6 +124,8 @@ do not endorse SegRef3D. The approximately 20 MB demo volume is fetched only whe
 - Mask autosave uses browser-local IndexedDB storage.
 - Label PNG, overlay, Project ZIP, NIfTI, TIFF, CSV, and STL exports are generated locally and
   downloaded directly to the user's device.
+- Training Data ZIP is also generated entirely in the browser. It contains image voxel/pixel data,
+  a geometry-matched NIfTI labelmap, and `manifest.json`; it is not uploaded to SegRef3D.
 - Download names use the loaded source folder name as a prefix. A directly loaded single-file
   volume uses its displayed project name. Standard sequence names such as `mask0001.png` remain
   unchanged inside ZIP archives for import compatibility.
@@ -138,6 +142,27 @@ data to Google Colab, so users should confirm that this use is permitted before 
 
 Project ZIP files do not contain the source images. Load the original image folder first, then
 open the Project ZIP from **Open > Masks / Project ZIP** to restore its masks and editor settings.
+
+### Training Data ZIP
+
+After reviewing or correcting a segmentation, choose **Export > Training Data ZIP** to save one
+case as `SegRef3D_Train_SR3D_<random>.zip`. Scalar/grayscale input uses `_0000`; RGB input is split
+losslessly on the working grid into `_0000` (R), `_0001` (G), and `_0002` (B). The labelmap keeps
+the existing Obj IDs without renumbering. Image channels, labelmap, spacing, origin, orientation,
+and affine are re-parsed and compared before download.
+
+For scalar NIfTI with unchanged working geometry, the exact source `.nii`/`.nii.gz` bytes are reused.
+Uncompressed monochrome DICOM is exported as Float32 after stored-value × rescale-slope +
+rescale-intercept; DICOM headers are never included. The current TIFF loader converts high-bit-depth
+TIFF to an 8-bit working image, so Training export requires explicit confirmation and records this
+limitation in `intensity_policy` and `warnings` rather than claiming original intensity retention.
+Compressed DICOM frames whose scalar pixels cannot be recovered losslessly are rejected.
+
+Training ZIPs are not anonymous data. DICOM headers and automatically copied patient identifiers
+are excluded, but image pixels/voxels may contain burned-in text, facial or unique anatomy, and
+object names are user-entered text. The ZIP is intended as a versioned one-case interchange format
+(`segref3d-training-case-1.0`) for future TrainRef3D-style dataset assembly; model training is not
+included in SegRef3D Lite yet.
 
 VolInfo CSV keeps the Windows-compatible `Width/Height/Depth`, `X/Y/Z Spacing`, and
 `X/Y/Z Origin` rows and now adds the complete 4 x 4 IJK-to-RAS affine. Older six-row VolInfo

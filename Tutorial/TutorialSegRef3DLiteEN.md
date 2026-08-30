@@ -173,6 +173,7 @@ Select `Obj 1: Apple`, `Obj 2: Stem`, or `Obj 3: Core` in the Objects panel to c
 | --- | --- |
 | Use multiple objects as 3D surfaces | `STL` |
 | Resume later in SegRef3D Lite | `Project ZIP` |
+| Save image + mask for future custom-model training | `Training Data ZIP` |
 | Send a label volume to 3D Slicer or similar software | `NIfTI Labelmap` |
 | Save mask images | `Label PNG` or `TIFF` |
 | Save object volume values | `Volume Statistics CSV` |
@@ -208,6 +209,12 @@ Choose `Export` → `Project ZIP` in the top bar.
 `Apple Demo - Kanzi 84_SegRef3D_Project_<timestamp>.zip` stores label masks, calibration, object names, display settings, and the Seg Anything setup. It does not include the source images.
 
 To resume, first select `Load Apple Demo`, then use `Load Masks` → `Replace` → `ZIP / Project ZIP` to open the saved ZIP. Browser autosave is helpful, but **finish the session by saving a Project ZIP** as a portable work record.
+
+### 11-4. Save a training case
+
+After finishing segmentation review, choose `Export` → `Training Data ZIP`. SegRef3D Lite saves one case containing geometry-matched image channel(s), a labelmap that preserves the current Obj IDs, and `manifest.json` with geometry and privacy policy. RGB sources such as the Apple Demo produce separate R/G/B channels; scalar or grayscale sources produce one channel.
+
+Generation is browser-local and does not upload data to a SegRef3D server. DICOM headers are excluded, but burned-in text, facial or unique anatomy, and user-entered object names may still identify someone. Do not treat the Training ZIP as anonymized. SegRef3D Lite does not yet train a model; this ZIP is a versioned case format for future custom-model training.
 
 ## 12. Other useful tools
 

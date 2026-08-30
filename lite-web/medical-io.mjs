@@ -221,14 +221,22 @@ function decodeMonochromeFrame(instance, frameIndex, range, sharedWindow) {
   const pixelCount = instance.rows * instance.columns;
   const bytesPerSample = instance.bitsAllocated / 8;
   const pixels = new Uint8ClampedArray(pixelCount);
+  const trainingPixels = new Float32Array(pixelCount);
   const center = sharedWindow?.center ?? instance.windowCenter;
   const width = sharedWindow?.width ?? instance.windowWidth;
   for (let index = 0; index < pixelCount; index += 1) {
     const value = storedPixelValue(instance, view, start + index * bytesPerSample);
+    trainingPixels[index] = value;
     const output = windowedByte(value, center, width, range);
     pixels[index] = instance.photometric === "MONOCHROME1" ? 255 - output : output;
   }
-  return { kind: "gray", pixels };
+  return {
+    kind: "gray",
+    pixels,
+    trainingKind: "scalar",
+    trainingPixels,
+    trainingIntensityPolicy: "dicom_rescale_slope_intercept_float32",
+  };
 }
 
 function decodeColorFrame(instance, frameIndex) {
@@ -257,7 +265,13 @@ function decodeColorFrame(instance, frameIndex) {
     output[target + 2] = blue;
     output[target + 3] = 255;
   }
-  return { kind: "rgba", pixels: output };
+  return {
+    kind: "rgba",
+    pixels: output,
+    trainingKind: "rgba",
+    trainingPixels: output,
+    trainingIntensityPolicy: "dicom_rgb_8bit",
+  };
 }
 
 function sharedDicomWindow(instances) {
@@ -296,6 +310,7 @@ export function parseTiffStack(input, fileName = "stack.tiff") {
     throw new Error(`${fileName} is too large to process safely in this browser.`);
   }
   const base = filenameBase(fileName);
+  const sourceBitDepth = Math.max(...ifds.flatMap((ifd) => (ifd.t258 || [8]).map(Number)));
   const frames = ifds.map((ifd, index) => {
     const pageWidth = Number(ifd.width || ifd.t256?.[0]);
     const pageHeight = Number(ifd.height || ifd.t257?.[0]);
@@ -321,6 +336,7 @@ export function parseTiffStack(input, fileName = "stack.tiff") {
         height,
         kind: "rgba",
         pixels: new Uint8ClampedArray(rgba),
+        sourceBitDepth,
       };
     }
     const pixels = new Uint8ClampedArray(width * height);
@@ -331,6 +347,7 @@ export function parseTiffStack(input, fileName = "stack.tiff") {
       height,
       kind: "gray",
       pixels,
+      sourceBitDepth,
     };
   });
   return {
@@ -341,6 +358,10 @@ export function parseTiffStack(input, fileName = "stack.tiff") {
     depth: frames.length,
     spacing: [1, 1, 1],
     origin: [0, 0, 0],
+    sourceBitDepth,
+    trainingWarning: sourceBitDepth > 8
+      ? `${sourceBitDepth}-bit TIFF values are decoded to the editor's 8-bit working grid; original high-bit-depth scalar values are not retained.`
+      : null,
     frames,
   };
 }

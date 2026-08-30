@@ -213,6 +213,10 @@ not a general arbitrary-structure segmenter and does not imply clinical validati
 
 - **Project ZIP**: portable SegRef3D masks/settings backup. Keep the original source data available
   and follow the current import instructions for the edition used.
+- **Training Data ZIP**: one versioned case containing scalar/grayscale `_0000`, or RGB
+  `_0000`/`_0001`/`_0002`, plus an Obj-ID-preserving NIfTI labelmap and `manifest.json`. It is
+  generated locally for future custom segmentation-model training; model training is not yet part
+  of Lite. DICOM headers are excluded, but pixel/voxel data and object names may remain identifiable.
 - **Label PNG**: per-slice integer label masks for image-based workflows.
 - **Overlay PNG**: visual review images combining visible labels with source images.
 - **NIfTI Labelmap**: preferred for voxel labels and patient/source geometry in tools such as 3D Slicer.

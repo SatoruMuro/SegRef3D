@@ -50,6 +50,10 @@ SegRef3Dは、連続画像や3D volumeから、構造のsegmentation、mask修�
 校正済みspacingと確認済みmaskを、体積統計、NIfTI labelmap、TIFF stack、STL surface modelへ
 つなげられます。
 
+Liteの`Training Data ZIP`では、geometryを一致させた画像channel、Obj IDを保持するlabelmap、
+versioned manifestを1症例分としてbrowser内で保存できます。これは将来のcustom segmentation
+model学習用であり、学習機能自体はまだ実装されていません。
+
 ### Local first
 
 通常のSegRef3D Liteの編集、計測、exportはbrowser内で処理されます。任意のColab AI workflowでは、

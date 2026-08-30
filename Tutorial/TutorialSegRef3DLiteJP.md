@@ -173,6 +173,7 @@ Objects panelで`Obj 1: Apple`、`Obj 2: Stem`、`Obj 3: Core`を選ぶと、編
 | --- | --- |
 | 複数objectを3D surfaceとして使用 | `STL` |
 | 後日SegRef3D Liteで作業を再開 | `Project ZIP` |
+| 将来のcustom segmentation model用に画像＋maskを保存 | `Training Data ZIP` |
 | 3D Slicer等へlabel volumeとして渡す | `NIfTI Labelmap` |
 | mask画像を保存 | `Label PNG`または`TIFF` |
 | object volumeを表で保存 | `Volume Statistics CSV` |
@@ -208,6 +209,12 @@ Previewを閉じ、`Objects = Visible objects`のまま`Export STL`を押しま�
 `Apple Demo - Kanzi 84_SegRef3D_Project_<timestamp>.zip`にはlabel masks、calibration、object名、表示設定、Seg Anything setupが保存されます。Source images自体は含まれません。
 
 再開するときは、先に`Load Apple Demo`で同じ画像を読み込み、`Load Masks` → `Replace` → `ZIP / Project ZIP`で保存済みZIPを開きます。browser autosaveだけに頼らず、**作業の最後にProject ZIPを保存してください。**
+
+### 11-4. 教師データとして保存する
+
+segmentationの修正が終わったら、上部の`Export` → `Training Data ZIP`を選ぶと、現在の1症例について元画像に対応するimage channel、Obj IDを保持したlabelmap、geometryとprivacy policyを記録した`manifest.json`を保存できます。Apple DemoのようなRGB画像はR／G／Bの3 channel、scalar／grayscale画像は1 channelです。
+
+生成処理はbrowser内だけで行われ、SegRef3D serverへuploadされません。DICOM headerは含まれませんが、画像自体のburned-in text、顔貌・固有の解剖情報、ユーザーが入力したobject名などに識別情報が残る可能性があります。Training ZIPを匿名化済みとは扱わないでください。現時点のSegRef3D Liteにはmodel training機能はなく、このZIPは将来のcustom model学習用case formatです。
 
 ## 12. その他の便利な機能
 

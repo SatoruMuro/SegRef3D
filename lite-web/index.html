@@ -256,6 +256,7 @@
               <button id="export-overlays" type="button" role="menuitem" disabled>Overlay PNG</button>
               <span class="menu-heading">Project</span>
               <button id="export-project" type="button" role="menuitem" disabled>Project ZIP</button>
+              <button id="export-training" type="button" role="menuitem" disabled title="Export image + mask for AI training">Training Data ZIP</button>
               <span class="menu-heading">Volumes</span>
               <button id="export-menu-nifti" type="button" role="menuitem" disabled>NIfTI Labelmap</button>
               <button id="export-menu-nifti-5x" type="button" role="menuitem" disabled>NIfTI Labelmap (5x)</button>
@@ -372,6 +373,7 @@
           <p>Images loaded into SegRef3D Lite are processed locally in your browser.</p>
           <p>SegRef3D Lite does not upload your source images to SegRef3D servers.</p>
           <p>Masks and autosave data are stored locally in your browser. Exported files are downloaded directly to your device.</p>
+          <p>Training ZIP is local and excludes DICOM headers, but image data and user-entered object names may still be identifiable.</p>
         </div>
         <div class="local-file-assurance dialog-exception">
           <strong>Exceptions: Seg Anything and Seg CT/MRI</strong>
@@ -381,6 +383,7 @@
           <h3 id="local-processing-ja-title">ローカル処理について</h3>
           <p>SegRef3D Lite に読み込んだ画像は、通常ブラウザ内で処理され、元画像が SegRef3D のサーバーへ自動的にアップロードされることはありません。</p>
           <p>マスクや自動保存データもブラウザ内に保存され、Exportしたファイルは端末へ直接保存されます。</p>
+          <p>Training ZIPはbrowser内で生成されDICOM headerを含みませんが、画像自体やユーザーが入力したobject名には識別情報が残る可能性があります。</p>
           <p><strong>例外：Seg Anything／Seg CT/MRI</strong><br />これらのAI機能は Google Colab を使用します。作成された入力ZIP（作業用画像または元NIfTIを含む）は、ユーザー自身が Google Colab ランタイムへ明示的にアップロードします。</p>
         </section>
         <div class="local-file-dialog-actions compact-dialog-actions">
@@ -1095,6 +1098,6 @@
         if (status) status.textContent = `Application operation failed: ${message}`;
       });
     </script>
-    <script type="module" src="./app.mjs?v=38"></script>
+    <script type="module" src="./app.mjs?v=39"></script>
   </body>
 </html>

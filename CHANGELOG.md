@@ -3,6 +3,10 @@
 Release and development history moved from the main README. Dates and descriptions before this
 move are preserved in their original language.
 
+## 2026.8.30
+
+- SegRef3D LiteのExportへ、1症例のimage channel、Obj IDを保持するNIfTI labelmap、versioned `manifest.json`をまとめる**Training Data ZIP**を追加。scalar NIfTIの元bytes再利用、DICOM slope/intercept適用済みFloat32、RGB 3-channel分離、geometry再parse validation、PHI metadata非転記、空mask warning、16-bit TIFFの明示的degradation policyに対応。生成はbrowser localのみで、model training自体は未実装。
+
 ## 2026.8.28
 
 - README／READMEJPを、画像種・目的・版選択・Tutorialを中心とする短い導入ページへ再構成。

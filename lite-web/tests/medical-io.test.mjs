@@ -105,6 +105,8 @@ function syntheticDicom(instanceNumber, pixelValues, {
   orientation = [1, 0, 0, 0, 1, 0],
   pixelSpacing = [0.5, 0.75],
   sliceSpacing = 2,
+  rescaleSlope = 1,
+  rescaleIntercept = 0,
 } = {}) {
   const transferSyntax = explicitElement(0x0002, 0x0010, "UI", "1.2.840.10008.1.2.1");
   const metaLength = explicitElement(0x0002, 0x0000, "UL", uint32Bytes(transferSyntax.length));
@@ -128,6 +130,8 @@ function syntheticDicom(instanceNumber, pixelValues, {
     explicitElement(0x0028, 0x0103, "US", uint16Bytes(0)),
     explicitElement(0x0028, 0x1050, "DS", "1500"),
     explicitElement(0x0028, 0x1051, "DS", "3001"),
+    explicitElement(0x0028, 0x1052, "DS", String(rescaleIntercept)),
+    explicitElement(0x0028, 0x1053, "DS", String(rescaleSlope)),
     explicitElement(0x7fe0, 0x0010, "OW", pixelBytes),
   ]);
   const preamble = new Uint8Array(132);
@@ -272,6 +276,19 @@ test("parses extensionless uncompressed DICOM and windows grayscale pixels", () 
     [0, 0, 0, 1],
   ]);
   assert.deepEqual([...series.frames[0].pixels], [0, 85, 170, 255]);
+});
+
+test("DICOM training pixels preserve slope/intercept scalar values instead of windowed bytes", () => {
+  const instance = parseDicomInstance(
+    syntheticDicom(1, [0, 100, 500, 1000], { rescaleSlope: 2, rescaleIntercept: -1024 }),
+    "IM0001",
+    dicomParser,
+  );
+  const decoded = decodeDicomSeries([instance], dicomParser);
+  assert.equal(decoded.frames[0].trainingKind, "scalar");
+  assert.deepEqual([...decoded.frames[0].trainingPixels], [-1024, -824, -24, 976]);
+  assert.equal(decoded.frames[0].trainingIntensityPolicy, "dicom_rescale_slope_intercept_float32");
+  assert.notDeepEqual([...decoded.frames[0].pixels], [...decoded.frames[0].trainingPixels]);
 });
 
 test("DICOM coronal and oblique metadata produce full IJK-to-RAS geometry", () => {

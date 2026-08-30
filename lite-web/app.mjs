@@ -31,7 +31,7 @@ import {
   parseNiftiLabelVolume,
   parseNiftiVolume,
   parseTiffStack,
-} from "./medical-io.mjs?v=20";
+} from "./medical-io.mjs?v=21";
 import {
   axisAlignedAffine,
   geometryWithSpacing,
@@ -39,7 +39,7 @@ import {
   transformGeometryForPreparedImage,
   upsampleGeometryAlongK,
 } from "./medical-geometry.mjs?v=2";
-import { demoDatasetById } from "./demo-datasets.mjs?v=3";
+import { demoDatasetById } from "./demo-datasets.mjs?v=4";
 import { clearProjectMasks, loadMask, saveMask } from "./storage.mjs?v=25";
 import { createZip, parseZip } from "./zip.mjs?v=25";
 import {
@@ -87,6 +87,11 @@ import {
   volumeStatisticsAsync,
 } from "./mask-tools.mjs?v=20";
 import { upgradeWorkspaceLayout } from "./workspace-ui.mjs?v=30";
+import {
+  createTrainingCaseEntries,
+  createTrainingCaseId,
+  prepareTrainingSourceChannels,
+} from "./training-export.mjs?v=1";
 
 try {
   upgradeWorkspaceLayout();
@@ -146,6 +151,7 @@ const elements = {
   exportLabels: document.querySelector("#export-labels"),
   exportOverlays: document.querySelector("#export-overlays"),
   exportProject: document.querySelector("#export-project"),
+  exportTraining: document.querySelector("#export-training"),
   segonwebJobs: document.querySelector("#segonweb-jobs"),
   exportSegonweb: document.querySelector("#export-segonweb"),
   importSegonweb: document.querySelector("#import-segonweb"),
@@ -395,6 +401,7 @@ const state = {
   instant3dMappings: [],
   instant3dPendingAction: null,
   instant3dPendingImport: null,
+  trainingCaseId: null,
 };
 
 const context = elements.canvas.getContext("2d", { alpha: false });
@@ -749,6 +756,7 @@ function setControlsEnabled(enabled) {
     elements.exportLabels,
     elements.exportOverlays,
     elements.exportProject,
+    elements.exportTraining,
     elements.exportNifti,
     elements.exportNifti5x,
     elements.exportNifti10x,
@@ -2337,6 +2345,67 @@ async function exportLabelVolume(format, factor = 1) {
   }
 }
 
+async function exportTrainingDataZip() {
+  if (state.loading || state.images.length === 0) return;
+  const highBitDepth = Math.max(...state.images.map((image) => Number(image.sourceBitDepth) || 8));
+  if (highBitDepth > 8 && !window.confirm(
+    `Warning: this ${highBitDepth}-bit source image was decoded to the editor's 8-bit working grid.\n\n` +
+      "The Training ZIP cannot claim to contain original high-bit-depth intensities. Continue with an explicit degraded-intensity warning in manifest.json?",
+  )) return;
+  if (!window.confirm(
+    "Create one browser-local Training Data ZIP?\n\n" +
+      "DICOM headers and patient identifiers are not included automatically. Image pixels/voxels, facial anatomy, burned-in text, unique anatomy, and user-entered object names may still be identifiable. Nothing is uploaded to SegRef3D.",
+  )) return;
+
+  setLoading(true, "Preparing training data…", "Validating geometry…");
+  try {
+    const { masks, width, height, geometry } = labelVolumeGeometry();
+    const hasForeground = masks.some((mask) => mask.some((value) => value !== 0));
+    if (!hasForeground && !window.confirm(
+      "This training case contains no foreground labels. It can be used as a negative case. Continue?",
+    )) return;
+    elements.loadingDetail.textContent = "Encoding image volume…";
+    const prepared = await prepareTrainingSourceChannels({
+      sourceVolume: state.sourceVolume,
+      images: state.images,
+      width,
+      height,
+      geometry,
+      onProgress(message) {
+        elements.loadingDetail.textContent = message;
+      },
+    });
+    elements.loadingDetail.textContent = "Encoding label volume…";
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const result = createTrainingCaseEntries({
+      caseId: state.trainingCaseId || (state.trainingCaseId = createTrainingCaseId()),
+      sourceFormat: state.images[0].sourceFormat,
+      channels: prepared.channels,
+      masks,
+      width,
+      height,
+      geometry,
+      objectNames: state.objectNames,
+      intensityPolicy: prepared.intensityPolicy,
+      warnings: prepared.warnings || [],
+    });
+    prepared.channels.length = 0;
+    elements.loadingDetail.textContent = "Creating ZIP…";
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const zip = await createZip(result.entries);
+    const filename = `SegRef3D_Train_${result.manifest.case_id}.zip`;
+    downloadBlob(zip, filename);
+    setStatus(`Training Data ZIP created locally: ${result.manifest.image.channel_count} image channel(s), ${result.manifest.label.objects.length} foreground label(s).`);
+    showToast(`Downloaded ${filename}`);
+  } catch (error) {
+    console.error(error);
+    setStatus(`Training Data ZIP export failed: ${error.message}`);
+    window.alert(`Training Data ZIP export failed.\n\n${error.message}`);
+  } finally {
+    setLoading(false);
+  }
+}
+
 function labelIsUsed(label, masks) {
   return masks.some((mask) => mask.includes(label));
 }
@@ -3691,6 +3760,9 @@ async function prepareImageSequence(
       width,
       height,
     );
+    const trainingGridUnchanged =
+      source.width === size.width && source.height === size.height &&
+      width === size.width && height === size.height;
     const sourceSpacing = source.pixelSpacing;
     const pixelSpacing = sourceSpacing
       ? [
@@ -3715,6 +3787,14 @@ async function prepareImageSequence(
       volumeOrigin: source.volumeOrigin || null,
       sourceCanvas,
       basePixels: canvasRgba(sourceCanvas),
+      trainingKind: source.trainingKind || null,
+      trainingPixels: trainingGridUnchanged ? source.trainingPixels || null : null,
+      trainingIntensityPolicy: source.trainingIntensityPolicy || null,
+      trainingWarning: source.trainingWarning || null,
+      trainingUnavailableReason: source.trainingPixels && !trainingGridUnchanged
+        ? "The medical source grid was resized or placed on a shared canvas; original scalar voxels no longer match the editable mask grid."
+        : source.trainingUnavailableReason || null,
+      sourceBitDepth: source.sourceBitDepth || 8,
       displayVersion: -1,
       sourcePixels: null,
       mask: restored ?? new Uint8Array(width * height),
@@ -3761,6 +3841,7 @@ async function prepareImageSequence(
   state.segmentationBoxMode = null;
   setSegmentationObjectNames();
   renderInstant3DMappings();
+  if (state.projectId !== projectId || !state.trainingCaseId) state.trainingCaseId = createTrainingCaseId();
   state.projectId = projectId;
   state.index = clamp(demoDataset?.initialFrameIndex ?? 0, 0, prepared.length - 1);
   state.projectName = projectName;
@@ -3807,12 +3888,22 @@ async function decodeRasterSources(files) {
     elements.loadingDetail.textContent = `Reading ${index + 1} / ${files.length}`;
     const decoded = await decodeImage(files[index]);
     try {
+      let sourceBitDepth = 8;
+      if (/\.png$/i.test(files[index].name)) {
+        const header = new Uint8Array(await files[index].slice(0, 29).arrayBuffer());
+        const pngSignature = [137, 80, 78, 71, 13, 10, 26, 10];
+        if (pngSignature.every((value, offset) => header[offset] === value)) sourceBitDepth = Number(header[24]) || 8;
+      }
       sources.push({
         name: files[index].name,
         width: decoded.image.naturalWidth,
         height: decoded.image.naturalHeight,
         sourceCanvas: imageElementToCanvas(decoded.image),
-        sourceFormat: "raster",
+        sourceFormat: /\.png$/i.test(files[index].name) ? "png" : "jpeg",
+        sourceBitDepth,
+        trainingWarning: sourceBitDepth > 8
+          ? `${sourceBitDepth}-bit PNG values are decoded to the editor's 8-bit working grid; original high-bit-depth values are not retained.`
+          : null,
       });
     } finally {
       URL.revokeObjectURL(decoded.url);
@@ -3881,6 +3972,12 @@ async function decodeDicomSources(files) {
       height: frame.height,
       sourceCanvas: await medicalFrameToCanvas(frame),
       sourceFormat: "dicom",
+      trainingKind: frame.trainingKind || null,
+      trainingPixels: frame.trainingPixels || null,
+      trainingIntensityPolicy: frame.trainingIntensityPolicy || null,
+      trainingUnavailableReason: frame.trainingKind
+        ? null
+        : "This compressed DICOM frame does not expose lossless scalar voxel values for training export.",
       pixelSpacing: decoded.spacing.slice(0, 2),
       sliceSpacing: decoded.spacing[2],
       volumeOrigin: decoded.origin,
@@ -3985,6 +4082,8 @@ async function decodeTiffSources(files) {
         height: frame.height,
         sourceCanvas: await medicalFrameToCanvas(frame),
         sourceFormat: "tiff",
+        sourceBitDepth: frame.sourceBitDepth || volume.sourceBitDepth || 8,
+        trainingWarning: volume.trainingWarning,
         pixelSpacing: [1, 1],
         sliceSpacing: 1,
         volumeOrigin: [0, 0, 0],
@@ -4884,6 +4983,7 @@ function bindEvents() {
   elements.exportMenuTiff.addEventListener("click", () => exportLabelVolume("tiff"));
   elements.exportMenuStatistics.addEventListener("click", exportVolumeStatisticsCsv);
   elements.exportMenuStl.addEventListener("click", exportStlMeshes);
+  elements.exportTraining.addEventListener("click", exportTrainingDataZip);
   elements.exportLabels.addEventListener("click", () => exportSequence("labels"));
   elements.exportOverlays.addEventListener("click", () => exportSequence("overlays"));
   elements.exportProject.addEventListener("click", exportProjectZip);

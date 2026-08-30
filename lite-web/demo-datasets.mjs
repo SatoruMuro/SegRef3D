@@ -10,7 +10,7 @@ export const DEMO_DATASETS = Object.freeze([
     kind: "image-sequence",
     displayName: "Apple Demo",
     projectName: "Apple Demo - Kanzi 84",
-    sourceFormat: "demo",
+    sourceFormat: "jpeg",
     imagePaths: Object.freeze(appleImages),
     calibration: Object.freeze({
       referenceLengthMm: 100,

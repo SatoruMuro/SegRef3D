@@ -79,7 +79,7 @@ test("Apple demo UI uses the normal sequence pipeline and offline cache", async 
   assert.ok(html.indexOf('id="reference-length"') < html.indexOf('id="spacing-z"'));
   assert.match(app, /decodeNiftiSources\(file\)/);
   assert.match(app, /prepareImageSequence\([\s\S]*preserveDimensions: true, demoDataset: dataset/);
-  assert.match(worker, /demo-datasets\.mjs\?v=3/);
+  assert.match(worker, /demo-datasets\.mjs\?v=4/);
   assert.match(worker, /APPLE_DEMO_FILES/);
   assert.doesNotMatch(worker, /RabbitCT_reference_256_corrected/);
 });

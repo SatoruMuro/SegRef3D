@@ -35,6 +35,8 @@ analysis. Reliable pixel/voxel and slice spacing are essential for physical meas
 - **Measure** calibrated object volume.
 - **Reconstruct** and inspect a 3D structure.
 - **Export** masks, label volumes, measurements, or surface models for further analysis.
+- **Export Training Data ZIP** with geometry-matched image channel(s), labelmap, and a versioned
+  manifest for future custom segmentation-model training.
 
 ## Why SegRef3D?
 

@@ -12,6 +12,8 @@ volume measurement, and 3D reconstruction from ordered 2D image stacks and 3D vo
 - Measure object volumes when reliable pixel/voxel and slice spacing are available.
 - Preview and export 3D surface models as STL.
 - Export label data as PNG, TIFF, or NIfTI Labelmap and measurements as CSV.
+- Export one browser-local Training Data ZIP containing geometry-matched image channel(s), an
+  Obj-ID-preserving labelmap, and a versioned manifest for future custom-model training.
 - Continue label analysis in software such as 3D Slicer using NIfTI Labelmap export.
 
 ## Representative data
@@ -61,6 +63,8 @@ edition and encoding. Consult the detailed guide before making a recommendation.
 - Serial physical sections may require registration before segmentation or quantitative 3D work.
 - Volume measurement and physically scaled 3D output require trustworthy spacing or calibration.
 - NIfTI Labelmap is preferred over TIFF when patient-space geometry must be preserved.
+- Training Data ZIP excludes DICOM headers but is not anonymous: image data and user-entered object
+  names may still be identifiable. SegRef3D Lite does not yet train models.
 - 3D reconstruction quality depends on image order, registration, mask quality, and spacing.
 - SegRef3D and external AI outputs require expert review; do not present them as independently
   clinically validated results.
