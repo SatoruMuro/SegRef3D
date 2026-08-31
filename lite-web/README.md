@@ -161,8 +161,11 @@ Compressed DICOM frames whose scalar pixels cannot be recovered losslessly are r
 Training ZIPs are not anonymous data. DICOM headers and automatically copied patient identifiers
 are excluded, but image pixels/voxels may contain burned-in text, facial or unique anatomy, and
 object names are user-entered text. The ZIP is intended as a versioned one-case interchange format
-(`segref3d-training-case-1.0`) for future TrainRef3D-style dataset assembly; model training is not
-included in SegRef3D Lite yet.
+(`segref3d-training-case-1.0`). Use multiple Training Data ZIP files in
+[TrainRef3D](../train-web/README.md) to build a custom binary model: validate cases locally,
+select one Obj and confirm annotation completeness, then explicitly upload the Dataset ZIP to
+your own Colab GPU runtime. The training engine is separate from SegRef3D Lite; internal Dice
+does not establish clinical validity.
 
 VolInfo CSV keeps the Windows-compatible `Width/Height/Depth`, `X/Y/Z Spacing`, and
 `X/Y/Z Origin` rows and now adds the complete 4 x 4 IJK-to-RAS affine. Older six-row VolInfo

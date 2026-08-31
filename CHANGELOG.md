@@ -3,6 +3,18 @@
 Release and development history moved from the main README. Dates and descriptions before this
 move are preserved in their original language.
 
+## 2026.8.31 — TrainRef3D MVP (local implementation / GPU validation pending)
+
+- Separate `train-web/` app validates multiple Training ZIPs locally, selects one binary target,
+  requires annotation-completeness confirmation and packages `trainref3d-dataset-1.0` nested ZIPs.
+- Added bounded ZIP/NIfTI validation, geometry/label/channel consistency and privacy safeguards
+  without changing existing Lite runtime/export modules or LFS assets.
+- Added Colab launcher/notebook and Python MONAI 3D U-Net backend with case-level split,
+  per-axis median spacing, patch sampling, AMP, early stopping, foreground Dice and
+  `trainref3d-model-1.0` state-dictionary model ZIPs. One-case runs are explicitly smoke-only.
+- Added Node/Python units, cross-language fixtures, CPU forward/backward/checkpoint smoke test,
+  optional T4 GPU smoke procedure and CI. No clinical performance claims or automatic uploads.
+
 ## 2026.8.30
 
 - SegRef3D LiteのExportへ、1症例のimage channel、Obj IDを保持するNIfTI labelmap、versioned `manifest.json`をまとめる**Training Data ZIP**を追加。scalar NIfTIの元bytes再利用、DICOM slope/intercept適用済みFloat32、RGB 3-channel分離、geometry再parse validation、PHI metadata非転記、空mask warning、16-bit TIFFの明示的degradation policyに対応。生成はbrowser localのみで、model training自体は未実装。

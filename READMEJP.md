@@ -51,8 +51,10 @@ SegRef3Dは、連続画像や3D volumeから、構造のsegmentation、mask修�
 つなげられます。
 
 Liteの`Training Data ZIP`では、geometryを一致させた画像channel、Obj IDを保持するlabelmap、
-versioned manifestを1症例分としてbrowser内で保存できます。これは将来のcustom segmentation
-model学習用であり、学習機能自体はまだ実装されていません。
+versioned manifestを1症例分としてbrowser内で保存できます。
+[TrainRef3D](train-web/README.md)では複数のTraining ZIPをbrowser内でまとめ、対象Objを1つ選び、
+自分のColab GPUでbinary custom modelを学習できます。Liteはmask作成、TrainRef3Dは症例集約と
+学習を担当します。研究用baselineであり、臨床性能を保証するものではありません。
 
 ### Local first
 

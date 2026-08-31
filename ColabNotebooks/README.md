@@ -1,6 +1,23 @@
 
 # SegRef3D AI Segmentation Notebooks
 
+## TrainRef3D — custom binary model training
+
+Use `TrainRef3D_v1_0.ipynb` through [trainref3d.html](trainref3d.html). Assemble multiple
+SegRef3D Training ZIPs in the separate [TrainRef3D Web app](../train-web/README.md), select
+one target Obj ID and confirm complete annotation, then explicitly upload the Dataset ZIP
+to your own Colab T4 runtime. The notebook delegates validation, preprocessing, MONAI 3D
+U-Net training, best checkpoints, foreground Dice and versioned Model ZIP output to
+`trainref3d_backend.py`. Config is editable in the first code cell; download has its own
+final cell. No automatic image upload or SegRef3D inference/model import is added.
+
+CPU units: `python -m unittest discover -s ColabNotebooks/tests -p "test_trainref3d_backend.py"`.
+Separate CPU/GPU mechanical smoke test: `tests/run_trainref3d_smoke.py` (add `--gpu` for CUDA).
+See the [format and optional GPU validation guide](../train-web/README.md) for dependencies,
+safety limits, one-case resubstitution policy and model schema. Images and names may remain
+identifiable; follow institutional upload rules. Internal validation Dice does not establish
+clinical validity or generalizability.
+
 ## Seg Anything
 
 Use `SegOnWebJob_v1_0.ipynb` for the Gradio-free Seg Anything workflow.

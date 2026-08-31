@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; worker-src 'self'; connect-src 'none'; img-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>TrainRef3D — custom segmentation training</title>
+  <link rel="stylesheet" href="styles.css?v=1">
+</head>
+<body>
+  <header><a href="../lite-web/">← SegRef3D Lite</a><span>RESEARCH WORKFLOW · v1.0 MVP</span></header>
+  <main>
+    <h1>TrainRef3D</h1>
+    <p class="subtitle">Train a custom 3D segmentation model from SegRef3D Training Data ZIP files.</p>
+    <p class="privacy">Training cases are validated locally in your browser.<br>Nothing is uploaded until you explicitly upload the Dataset ZIP to your own Google Colab runtime.</p>
+    <section aria-labelledby="load-heading">
+      <h2 id="load-heading">1. Add training cases</h2>
+      <div id="drop-area"><p>Drop SegRef3D Training ZIP files here</p><label class="button" for="files">Select Training ZIP files</label><input id="files" type="file" accept=".zip" multiple><p class="hint">One ZIP per independent case · 1 scalar or 3 RGB channels · 64 cases / 1 GiB per dataset maximum</p></div>
+      <div class="table-scroll"><table><caption id="case-count">No cases loaded</caption><thead><tr><th>Case ID</th><th>Source format</th><th>Channels</th><th>Shape</th><th>Spacing (mm)</th><th>Labels</th><th>Intensity policy</th><th>Status</th><th>Remove</th></tr></thead><tbody id="case-rows"></tbody></table></div>
+      <ul id="errors" class="errors" aria-label="Excluded cases"></ul>
+      <button id="clear" type="button">Clear all cases</button>
+    </section>
+    <section aria-labelledby="target-heading">
+      <h2 id="target-heading">2. Choose one target structure</h2>
+      <p>One model = one structure. The selected Obj ID becomes foreground; all other labels become background.</p>
+      <label for="target">Target structure</label><select id="target" disabled><option value="">Add cases first</option></select>
+      <label for="target-name">Target name in the trained model</label><input id="target-name" type="text" maxlength="80" disabled>
+      <ul id="warnings" class="warnings"></ul>
+      <label class="confirmation"><input id="complete" type="checkbox" disabled><span>I confirm that the selected target has been completely annotated in every included case.<br>If the target is absent from a labelmap, it will be treated as a true negative/background case.<br><span lang="ja" class="hint">選択した構造について、全症例でannotationが完了していることを確認してください。対象labelがない症例はnegative caseとして扱われます。</span></span></label>
+      <button id="build" class="primary" type="button" disabled>Create Dataset ZIP</button>
+    </section>
+    <section id="ready" hidden aria-labelledby="ready-heading">
+      <h2 id="ready-heading">Dataset ready</h2>
+      <a id="download" class="button primary">Download Dataset ZIP</a>
+      <a class="button" href="../ColabNotebooks/trainref3d.html" target="_blank" rel="noopener noreferrer">Open TrainRef3D Colab</a>
+      <p>Download first, then explicitly upload the ZIP in your own Colab GPU runtime. Opening Colab does not upload this dataset.</p>
+    </section>
+    <p id="status" role="status" aria-live="polite">Ready to validate cases locally.</p>
+    <footer><p>DICOM headers are not included in standard Training ZIPs, but image data and object names may contain identifiable information. These ZIPs are not guaranteed to be anonymous. Check your institution's rules before uploading to Google Colab.</p><p>Performance on the internal validation split does not establish clinical validity or generalizability.</p><a href="README.md">Format, limitations and testing guide</a></footer>
+  </main>
+  <script type="module" src="app.mjs?v=1"></script>
+</body>
+</html>

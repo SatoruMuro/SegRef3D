@@ -1,0 +1,5 @@
+# Install PyTorch for your CPU/CUDA platform separately; do not replace Colab CUDA wheels.
+torch==2.8.0
+monai==1.5.1
+nibabel==5.3.2
+matplotlib==3.10.6

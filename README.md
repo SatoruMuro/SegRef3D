@@ -36,7 +36,9 @@ analysis. Reliable pixel/voxel and slice spacing are essential for physical meas
 - **Reconstruct** and inspect a 3D structure.
 - **Export** masks, label volumes, measurements, or surface models for further analysis.
 - **Export Training Data ZIP** with geometry-matched image channel(s), labelmap, and a versioned
-  manifest for future custom segmentation-model training.
+  manifest for custom segmentation-model training.
+- **[TrainRef3D](train-web/README.md)**: assemble Training ZIPs locally, select one target,
+  and train a binary custom model in your own Colab GPU runtime. Research baseline, not clinical validation.
 
 ## Why SegRef3D?
 

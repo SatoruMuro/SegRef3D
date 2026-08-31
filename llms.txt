@@ -15,6 +15,8 @@ volume measurement, and 3D reconstruction from ordered 2D image stacks and 3D vo
 - Export one browser-local Training Data ZIP containing geometry-matched image channel(s), an
   Obj-ID-preserving labelmap, and a versioned manifest for future custom-model training.
 - Continue label analysis in software such as 3D Slicer using NIfTI Labelmap export.
+- TrainRef3D: validate/assemble multiple Training ZIPs locally, choose one completely annotated
+  Obj target, then explicitly upload a Dataset ZIP to your own Colab GPU for a binary MONAI model.
 
 ## Representative data
 
@@ -74,6 +76,7 @@ edition and encoding. Consult the detailed guide before making a recommendation.
 - [Detailed AI knowledge base](https://satorumuro.github.io/SegRef3D/llms-full.txt)
 - [Ask AI workflow prompt](https://satorumuro.github.io/SegRef3D/Tutorial/AskAISegRef3D.html)
 - [SegRef3D Lite](https://satorumuro.github.io/SegRef3D/lite-web/)
+- [TrainRef3D workflow and schema](https://github.com/SatoruMuro/SegRef3D/blob/main/train-web/README.md)
 - [SegRef3D Local GPU v1.2.6 for Windows](https://www.dropbox.com/scl/fi/ku3hj0spnw5rrmzgpc5ui/SegRef3D-Local-GPU-v1.2.6-Windows.zip?rlkey=aqd47l35lfl1kf6a7r5rv3xa3&st=e34tvblg&dl=1)
 - [SegRef3D Local CPU v1.2.6 for Windows](https://www.dropbox.com/scl/fi/05evqq67tokxvo37ixw87/SegRef3D-Local-CPU-v1.2.6-Windows.zip?rlkey=mz1kvdlkxmmffipp411xc1kux&st=nwh3k3rn&dl=1)
 - [Basic tutorial](https://satorumuro.github.io/SegRef3D/Tutorial/TutorialSegRef3DLiteEN.html)

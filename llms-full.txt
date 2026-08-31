@@ -215,8 +215,19 @@ not a general arbitrary-structure segmenter and does not imply clinical validati
   and follow the current import instructions for the edition used.
 - **Training Data ZIP**: one versioned case containing scalar/grayscale `_0000`, or RGB
   `_0000`/`_0001`/`_0002`, plus an Obj-ID-preserving NIfTI labelmap and `manifest.json`. It is
-  generated locally for future custom segmentation-model training; model training is not yet part
+  generated locally for custom segmentation-model training; model training is not part
   of Lite. DICOM headers are excluded, but pixel/voxel data and object names may remain identifiable.
+- **TrainRef3D** (separate `train-web/` app): locally validates multiple Training ZIPs, selects one
+  target Obj ID, and requires confirmation that this target is completely annotated in every case.
+  Missing target voxels become true negatives, not assumed unannotated cases. Uniform 1-channel
+  scalar or 3-channel RGB datasets are packaged as `trainref3d-dataset-1.0`; upload to the user's
+  Colab GPU is explicit, never automatic. `TrainRef3D_v1_0.ipynb` and `trainref3d_backend.py` train a
+  MONAI 3D U-Net binary baseline using RAS, per-axis median spacing, robust scalar normalization
+  or RGB /255, foreground-aware patches, seed-42 case-level split, and best validation checkpoint.
+  One-case runs use resubstitution smoke-test Dice only. Model ZIP `trainref3d-model-1.0` includes
+  state_dict, architecture/preprocessing/target/split metadata and per-case Dice. Internal validation
+  does not establish clinical validity or generalizability. Multiclass, inference, prediction import,
+  automatic retraining and clinical deployment are not implemented. See `train-web/README.md`.
 - **Label PNG**: per-slice integer label masks for image-based workflows.
 - **Overlay PNG**: visual review images combining visible labels with source images.
 - **NIfTI Labelmap**: preferred for voxel labels and patient/source geometry in tools such as 3D Slicer.
