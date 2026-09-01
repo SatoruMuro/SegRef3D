@@ -7,6 +7,10 @@ import { parseNiftiVolume } from "../medical-io.mjs";
 import { createNiftiLabelVolume } from "../volume-tools.mjs";
 
 const catalog = JSON.parse(await readFile(new URL("../../resources/totalsegmentator_roi_catalog.json", import.meta.url), "utf8"));
+const ribRois = new Set([
+  ...Array.from({ length: 12 }, (_, index) => `rib_left_${index + 1}`),
+  ...Array.from({ length: 12 }, (_, index) => `rib_right_${index + 1}`),
+]);
 const objects = [
   { object_id: 2, display_name: "Kidney, right", task: "total", roi: "kidney_right" },
   { object_id: 7, display_name: "Psoas major, right", task: "abdominal_muscles", roi: "psoas_major_right" },
@@ -32,6 +36,37 @@ test("builds a browser-local Instant3D request with nonsequential object mapping
   assert.equal(manifest.source.orientation.length, 3);
   assert.deepEqual(entries.map((entry) => entry.name), ["manifest.json", "image/source.nii"]);
   assert.match(manifest.source.sha256, /^[0-9a-f]{64}$/);
+});
+
+test("shared catalog exposes 24 searchable ribs and preserves their request identifiers", async () => {
+  const keys = catalog.structures.map((item) => `${item.task}/${item.roi}`);
+  assert.equal(new Set(keys).size, keys.length);
+  const ribs = catalog.structures.filter((item) => ribRois.has(item.roi));
+  assert.equal(ribs.length, 24);
+  assert.deepEqual(new Set(ribs.map((item) => item.roi)), ribRois);
+  for (const item of ribs) {
+    assert.equal(item.task, "total");
+    assert.equal(item.category, "Bone");
+    assert.deepEqual(item.modality, ["CT"]);
+    const haystack = [item.display_name, item.roi, item.category, ...(item.synonyms || [])]
+      .join(" ").toLowerCase();
+    assert.ok(haystack.includes("rib"));
+  }
+
+  const bytes = sourceNifti();
+  const volume = parseNiftiVolume(bytes, "source.nii");
+  const source = {
+    format: "nifti", filename: "source.nii", bytes,
+    shape: [volume.width, volume.height, volume.depth], spacing: volume.spacing,
+    affine: volume.affine, orientation: volume.orientation,
+  };
+  const selected = [
+    { object_id: 1, display_name: "Rib 1, left", task: "total", roi: "rib_left_1" },
+    { object_id: 20, display_name: "Rib 12, right", task: "total", roi: "rib_right_12" },
+  ];
+  const { manifest } = await createInstant3DRequest({ source, objects: selected, catalog, fast: true });
+  assert.deepEqual(manifest.objects, selected);
+  assert.equal(manifest.options.fast, true);
 });
 
 test("rejects duplicate object IDs and source-mismatched results", () => {

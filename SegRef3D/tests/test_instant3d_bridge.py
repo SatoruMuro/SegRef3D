@@ -21,6 +21,7 @@ from instant3d_bridge import (  # noqa: E402
     Instant3DBridgeError,
     create_request_zip,
     labelmap_from_bytes,
+    load_roi_catalog,
     validate_request_zip,
     validate_result_zip,
 )
@@ -31,6 +32,10 @@ OBJECTS = [
     {"object_id": 2, "display_name": "Kidney, right", "task": "total", "roi": "kidney_right"},
     {"object_id": 7, "display_name": "Psoas major, right", "task": "abdominal_muscles", "roi": "psoas_major_right"},
 ]
+RIB_ROIS = {
+    *(f"rib_left_{number}" for number in range(1, 13)),
+    *(f"rib_right_{number}" for number in range(1, 13)),
+}
 
 
 class Instant3DBridgeTests(unittest.TestCase):
@@ -54,6 +59,58 @@ class Instant3DBridgeTests(unittest.TestCase):
         path = self.root / "instant3d_request.zip"
         manifest = create_request_zip(path, self.source, OBJECTS)
         return path, manifest
+
+    def test_catalog_contains_searchable_unique_total_ribs(self):
+        catalog = load_roi_catalog()
+        keys = [(item["task"], item["roi"]) for item in catalog["structures"]]
+        self.assertEqual(len(keys), len(set(keys)))
+        ribs = [item for item in catalog["structures"] if item["roi"] in RIB_ROIS]
+        self.assertEqual(len(ribs), 24)
+        self.assertEqual({item["roi"] for item in ribs}, RIB_ROIS)
+        for item in ribs:
+            self.assertEqual(item["task"], "total")
+            self.assertEqual(item["category"], "Bone")
+            self.assertEqual(item["modality"], ["CT"])
+            haystack = " ".join([
+                item["display_name"], item["roi"], item["category"], *item.get("synonyms", []),
+            ]).lower()
+            self.assertIn("rib", haystack)
+
+    def test_rib_request_preserves_identifier_and_fast_option(self):
+        objects = [{
+            "object_id": 4, "display_name": "Rib 12, right", "task": "total", "roi": "rib_right_12",
+        }]
+        request = self.root / "rib_request.zip"
+        expected = create_request_zip(request, self.source, objects, fast=True)
+        actual, _source = validate_request_zip(request)
+        self.assertEqual(actual["objects"], expected["objects"])
+        self.assertEqual(actual["objects"][0]["roi"], "rib_right_12")
+        self.assertTrue(actual["options"]["fast"])
+
+    def test_fast_total_command_passes_rib_identifiers_unchanged(self):
+        commands = []
+
+        def fake_subprocess(command, **_kwargs):
+            commands.append(command)
+            task_dir = self.root / "totalsegmentator" / "total"
+            task_dir.mkdir(parents=True, exist_ok=True)
+            for roi in ("rib_left_1", "rib_right_12"):
+                nib.save(nib.Nifti1Image(np.zeros((1, 1, 1)), np.eye(4)), task_dir / f"{roi}.nii.gz")
+            return backend.subprocess.CompletedProcess(command, 0, "", "")
+
+        with patch.object(backend.subprocess, "run", side_effect=fake_subprocess):
+            result = backend._run_task(
+                self.source,
+                "total",
+                ["rib_left_1", "rib_right_12"],
+                self.root / "totalsegmentator",
+                True,
+                "cpu",
+            )
+        self.assertEqual(set(result), {"rib_left_1", "rib_right_12"})
+        self.assertIn("--fast", commands[0])
+        subset = commands[0][commands[0].index("--roi_subset") + 1:]
+        self.assertEqual(subset, ["rib_left_1", "rib_right_12"])
 
     def result(self, manifest):
         labelmap = np.zeros((8, 7, 5), dtype=np.uint8)
