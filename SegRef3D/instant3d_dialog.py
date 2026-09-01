@@ -27,10 +27,16 @@ class Instant3DWorkflowDialog(QDialog):
         self.setWindowTitle("Seg CT/MRI")
         self.resize(620, 620)
         self.modality = str(modality or "CT").upper()
-        self.catalog = [
+        self.groups = {
+            item["id"]: item for item in catalog.get("groups", [])
+            if not item.get("license_required", False) and self.modality in item.get("modality", [])
+        }
+        group_entries = [{**item, "group": item["id"]} for item in self.groups.values()]
+        structure_entries = [
             item for item in catalog["structures"]
             if not item.get("license_required", False) and self.modality in item.get("modality", [])
         ]
+        self.catalog = [*group_entries, *structure_entries]
         self.mappings = [dict(item) for item in mappings]
 
         layout = QVBoxLayout(self)
@@ -114,7 +120,8 @@ class Instant3DWorkflowDialog(QDialog):
         self.available.clear()
         for structure in self.catalog:
             haystack = " ".join([
-                structure["display_name"], structure["roi"], structure.get("category", ""),
+                structure["display_name"], structure.get("roi", ""), structure.get("group", ""),
+                structure.get("category", ""),
                 *structure.get("synonyms", []),
             ]).lower()
             if query and query not in haystack:
@@ -128,23 +135,39 @@ class Instant3DWorkflowDialog(QDialog):
         used = {int(item["object_id"]) for item in self.mappings}
         return next((value for value in range(1, 21) if value not in used), 1)
 
+    def _member_keys(self, selection):
+        group_id = selection.get("group")
+        if group_id:
+            group = self.groups[group_id]
+            return {(group["task"], roi) for roi in group["members"]}
+        return {(selection["task"], selection["roi"])}
+
     def _add_selected(self):
         item = self.available.currentItem()
         if item is None:
             return
         structure = dict(item.data(Qt.ItemDataRole.UserRole))
         object_id = self.object_id.currentIndex() + 1
+        member_keys = self._member_keys(structure)
+        if any(
+            int(entry["object_id"]) == object_id and self._member_keys(entry).issuperset(member_keys)
+            for entry in self.mappings
+        ):
+            return
         self.mappings = [entry for entry in self.mappings if int(entry["object_id"]) != object_id]
         self.mappings = [
             entry for entry in self.mappings
-            if (entry["task"], entry["roi"]) != (structure["task"], structure["roi"])
+            if self._member_keys(entry).isdisjoint(member_keys)
         ]
-        self.mappings.append({
+        mapping = {
             "object_id": object_id,
             "display_name": structure["display_name"],
-            "task": structure["task"],
-            "roi": structure["roi"],
-        })
+        }
+        if structure.get("group"):
+            mapping["group"] = structure["group"]
+        else:
+            mapping.update({"task": structure["task"], "roi": structure["roi"]})
+        self.mappings.append(mapping)
         self.mappings.sort(key=lambda entry: int(entry["object_id"]))
         self._render_mappings()
         self.object_id.setCurrentIndex(self._next_free_object_id() - 1)
@@ -160,7 +183,12 @@ class Instant3DWorkflowDialog(QDialog):
     def _render_mappings(self):
         self.selected.clear()
         for mapping in self.mappings:
-            item = QListWidgetItem(f'Obj {mapping["object_id"]}  —  {mapping["display_name"]}')
+            text = (
+                f'{mapping["display_name"]}  →  Obj {mapping["object_id"]}'
+                if mapping.get("group") else
+                f'Obj {mapping["object_id"]}  —  {mapping["display_name"]}'
+            )
+            item = QListWidgetItem(text)
             item.setData(Qt.ItemDataRole.UserRole, int(mapping["object_id"]))
             item.setToolTip(mapping["display_name"])
             self.selected.addItem(item)

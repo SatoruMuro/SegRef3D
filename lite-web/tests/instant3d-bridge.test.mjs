@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-import { createInstant3DRequest, validateInstant3DObjects, validateInstant3DResult } from "../instant3d-bridge.mjs";
+import {
+  collapseInstant3DObjects,
+  createInstant3DRequest,
+  validateInstant3DObjects,
+  validateInstant3DResult,
+} from "../instant3d-bridge.mjs";
 import { parseNiftiVolume } from "../medical-io.mjs";
 import { createNiftiLabelVolume } from "../volume-tools.mjs";
 
@@ -51,6 +56,7 @@ test("shared catalog exposes 24 searchable ribs and preserves their request iden
     const haystack = [item.display_name, item.roi, item.category, ...(item.synonyms || [])]
       .join(" ").toLowerCase();
     assert.ok(haystack.includes("rib"));
+    assert.ok(haystack.includes("ribs"));
   }
 
   const bytes = sourceNifti();
@@ -67,6 +73,48 @@ test("shared catalog exposes 24 searchable ribs and preserves their request iden
   const { manifest } = await createInstant3DRequest({ source, objects: selected, catalog, fast: true });
   assert.deepEqual(manifest.objects, selected);
   assert.equal(manifest.options.fast, true);
+});
+
+test("shared rib groups have exact members and expand to official ROIs on one object", async () => {
+  const groups = new Map(catalog.groups.map((item) => [item.id, item]));
+  assert.deepEqual(new Set(groups.keys()), new Set(["ribs_all", "ribs_left", "ribs_right"]));
+  const left = new Set(Array.from({ length: 12 }, (_, index) => `rib_left_${index + 1}`));
+  const right = new Set(Array.from({ length: 12 }, (_, index) => `rib_right_${index + 1}`));
+  const expected = new Map([
+    ["ribs_all", new Set([...left, ...right])],
+    ["ribs_left", left],
+    ["ribs_right", right],
+  ]);
+  for (const [groupId, members] of expected) {
+    const group = groups.get(groupId);
+    assert.equal(group.category, "Bone");
+    assert.equal(group.members.length, new Set(group.members).size);
+    assert.deepEqual(new Set(group.members), members);
+  }
+
+  const bytes = sourceNifti();
+  const volume = parseNiftiVolume(bytes, "source.nii");
+  const source = {
+    format: "nifti", filename: "source.nii", bytes,
+    shape: [volume.width, volume.height, volume.depth], spacing: volume.spacing,
+    affine: volume.affine, orientation: volume.orientation,
+  };
+  const selected = [{ object_id: 1, display_name: "Ribs, all", group: "ribs_all" }];
+  const { manifest } = await createInstant3DRequest({ source, objects: selected, catalog, fast: true });
+  assert.equal(manifest.objects.length, 24);
+  assert.deepEqual(new Set(manifest.objects.map((item) => item.roi)), ribRois);
+  assert.deepEqual(new Set(manifest.objects.map((item) => item.object_id)), new Set([1]));
+  assert.deepEqual(new Set(manifest.objects.map((item) => item.selection_group)), new Set(["ribs_all"]));
+  assert.ok(manifest.objects.every((item) => !["ribs", "ribs_all", "rib_all", "ribs_left", "ribs_right"].includes(item.roi)));
+  assert.equal(manifest.options.fast, true);
+  assert.deepEqual(collapseInstant3DObjects(manifest.objects, catalog), selected);
+
+  const deduplicated = validateInstant3DObjects([
+    ...selected,
+    { object_id: 1, display_name: "Rib 1, left", task: "total", roi: "rib_left_1" },
+  ], catalog);
+  assert.equal(deduplicated.length, 24);
+  assert.equal(deduplicated.filter((item) => item.roi === "rib_left_1").length, 1);
 });
 
 test("rejects duplicate object IDs and source-mismatched results", () => {

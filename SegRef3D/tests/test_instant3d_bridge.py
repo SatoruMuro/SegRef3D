@@ -19,6 +19,7 @@ for path in (MODULE_DIR, COLAB_DIR):
 
 from instant3d_bridge import (  # noqa: E402
     Instant3DBridgeError,
+    collapse_object_groups,
     create_request_zip,
     labelmap_from_bytes,
     load_roi_catalog,
@@ -75,6 +76,47 @@ class Instant3DBridgeTests(unittest.TestCase):
                 item["display_name"], item["roi"], item["category"], *item.get("synonyms", []),
             ]).lower()
             self.assertIn("rib", haystack)
+            self.assertIn("ribs", haystack)
+
+    def test_catalog_rib_groups_have_exact_unique_members(self):
+        groups = {item["id"]: item for item in load_roi_catalog()["groups"]}
+        self.assertEqual(set(groups), {"ribs_all", "ribs_left", "ribs_right"})
+        expected_left = {f"rib_left_{number}" for number in range(1, 13)}
+        expected_right = {f"rib_right_{number}" for number in range(1, 13)}
+        expected = {
+            "ribs_all": expected_left | expected_right,
+            "ribs_left": expected_left,
+            "ribs_right": expected_right,
+        }
+        for group_id, members in expected.items():
+            group = groups[group_id]
+            self.assertEqual(group["category"], "Bone")
+            self.assertEqual(len(group["members"]), len(set(group["members"])))
+            self.assertEqual(set(group["members"]), members)
+
+    def test_all_ribs_group_expands_to_official_rois_on_one_object(self):
+        selected = [{"object_id": 1, "display_name": "Ribs, all", "group": "ribs_all"}]
+        request = self.root / "all_ribs_request.zip"
+        manifest = create_request_zip(request, self.source, selected, fast=True)
+        self.assertEqual(len(manifest["objects"]), 24)
+        self.assertEqual({item["roi"] for item in manifest["objects"]}, RIB_ROIS)
+        self.assertEqual({item["object_id"] for item in manifest["objects"]}, {1})
+        self.assertEqual({item["selection_group"] for item in manifest["objects"]}, {"ribs_all"})
+        self.assertTrue(manifest["options"]["fast"])
+        fake_rois = {"ribs", "ribs_all", "rib_all", "ribs_left", "ribs_right"}
+        self.assertTrue(fake_rois.isdisjoint({item["roi"] for item in manifest["objects"]}))
+        validated, _source = validate_request_zip(request)
+        self.assertEqual(validated["objects"], manifest["objects"])
+        self.assertEqual(collapse_object_groups(validated["objects"]), selected)
+
+    def test_group_and_redundant_member_are_deduplicated(self):
+        selected = [
+            {"object_id": 1, "display_name": "Ribs, all", "group": "ribs_all"},
+            {"object_id": 1, "display_name": "Rib 1, left", "task": "total", "roi": "rib_left_1"},
+        ]
+        manifest = create_request_zip(self.root / "deduplicated.zip", self.source, selected)
+        self.assertEqual(len(manifest["objects"]), 24)
+        self.assertEqual([item["roi"] for item in manifest["objects"]].count("rib_left_1"), 1)
 
     def test_rib_request_preserves_identifier_and_fast_option(self):
         objects = [{
@@ -184,6 +226,46 @@ class Instant3DBridgeTests(unittest.TestCase):
             self.assertEqual([item["object_id"] for item in result_manifest["objects"]], [2, 7])
             self.assertTrue(result_manifest["overlaps"])
             self.assertEqual(result_manifest["request_id"], manifest["request_id"])
+
+    def test_backend_unions_group_members_into_one_object_label(self):
+        request = self.root / "group_request.zip"
+        manifest = create_request_zip(
+            request,
+            self.source,
+            [{"object_id": 1, "display_name": "Ribs, all", "group": "ribs_all"}],
+            fast=True,
+        )
+
+        def fake_run(_source, task, rois, output, fast, _device):
+            self.assertEqual(task, "total")
+            self.assertTrue(fast)
+            result = {}
+            for index, roi in enumerate(rois):
+                array = np.zeros((8, 7, 5), dtype=np.uint8)
+                array.reshape(-1)[index] = 1
+                path = output / task / f"{roi}.nii.gz"
+                path.parent.mkdir(parents=True, exist_ok=True)
+                nib.save(nib.Nifti1Image(array, self.affine), path)
+                result[roi] = path
+            return result
+
+        output = self.root / "group-result.zip"
+        with patch.object(backend, "validate_installed_rois"), \
+             patch.object(backend, "_device", return_value="cpu"), \
+             patch.object(backend, "_run_task", side_effect=fake_run), \
+             patch.object(backend.importlib.metadata, "version", return_value="test"):
+            backend.process_request(request, output)
+
+        with zipfile.ZipFile(output) as archive:
+            result_manifest = json.loads(archive.read("manifest.json"))
+            label_path = self.root / "group-labels.nii.gz"
+            label_path.write_bytes(archive.read("labelmap/labels.nii.gz"))
+            labelmap = np.asarray(nib.load(label_path).dataobj)
+            self.assertEqual(len(result_manifest["objects"]), 24)
+            self.assertEqual({item["roi"] for item in result_manifest["objects"]}, RIB_ROIS)
+            self.assertEqual({item["object_id"] for item in result_manifest["objects"]}, {1})
+            self.assertEqual(int(np.count_nonzero(labelmap == 1)), 24)
+            self.assertEqual(len([name for name in archive.namelist() if name.startswith("masks/obj01_rib_")]), 24)
 
 
 if __name__ == "__main__":

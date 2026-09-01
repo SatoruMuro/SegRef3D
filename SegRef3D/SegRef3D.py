@@ -67,6 +67,7 @@ from segmentation_job import (
 )
 from instant3d_bridge import (
     Instant3DBridgeError,
+    collapse_object_groups as collapse_instant3d_object_groups,
     create_request_zip as create_instant3d_request_zip,
     labelmap_from_bytes as instant3d_labelmap_from_bytes,
     load_roi_catalog as load_instant3d_roi_catalog,
@@ -1918,14 +1919,14 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             manifest = create_instant3d_request_zip(
                 output_path, self.source_nifti_path, mappings, fast=bool(fast)
             )
-            self.instant3d_mappings = [dict(item) for item in manifest["objects"]]
+            self.instant3d_mappings = collapse_instant3d_object_groups(manifest["objects"])
         except Exception as exc:
             message = str(exc) if isinstance(exc, Instant3DBridgeError) else f"Request export failed: {exc}"
             self.label_status.setText(message)
             QMessageBox.warning(self, "Seg CT/MRI Export", message)
             return
         self.label_status.setText(
-            f"Seg CT/MRI request created: {len(manifest['objects'])} object(s)."
+            f"Seg CT/MRI request created: {len(manifest['objects'])} anatomical ROI(s)."
         )
         box = QMessageBox(self)
         box.setWindowTitle("Seg CT/MRI Request Created")
@@ -2007,12 +2008,12 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
         for item in manifest["objects"]:
             object_id = int(item["object_id"])
-            self.object_label_names[object_id] = item["display_name"]
-        self.instant3d_mappings = [dict(item) for item in manifest["objects"]]
+            self.object_label_names[object_id] = item.get("assignment_name") or item["display_name"]
+        self.instant3d_mappings = collapse_instant3d_object_groups(manifest["objects"])
         self._apply_object_names_to_checkboxes()
         imported = self._commit_mask_transaction(
             changes,
-            f"Imported Seg CT/MRI result: {len(manifest['objects'])} object(s), {mode} mode.",
+            f"Imported Seg CT/MRI result: {len(object_ids)} object(s), {mode} mode.",
         )
         if not imported:
             self.label_status.setText("Seg CT/MRI result contained no mask changes.")

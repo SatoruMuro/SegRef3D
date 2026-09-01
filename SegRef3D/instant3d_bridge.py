@@ -37,7 +37,12 @@ def load_roi_catalog(path: str | os.PathLike | None = None) -> dict:
     except Exception as exc:
         raise Instant3DBridgeError(f"ROI catalog could not be loaded: {exc}") from exc
     structures = catalog.get("structures") if isinstance(catalog, dict) else None
-    if catalog.get("schema_version") != BRIDGE_VERSION or not isinstance(structures, list):
+    groups = catalog.get("groups", []) if isinstance(catalog, dict) else None
+    if (
+        catalog.get("schema_version") != BRIDGE_VERSION
+        or not isinstance(structures, list)
+        or not isinstance(groups, list)
+    ):
         raise Instant3DBridgeError("ROI catalog has an unsupported or invalid schema.")
     seen = set()
     for item in structures:
@@ -45,6 +50,25 @@ def load_roi_catalog(path: str | os.PathLike | None = None) -> dict:
         if not key or not all(isinstance(value, str) and value for value in key) or key in seen:
             raise Instant3DBridgeError("ROI catalog contains an invalid or duplicate task/ROI entry.")
         seen.add(key)
+    seen_groups = set()
+    for group in groups:
+        group_id = group.get("id") if isinstance(group, dict) else None
+        task = group.get("task") if isinstance(group, dict) else None
+        members = group.get("members") if isinstance(group, dict) else None
+        if (
+            not isinstance(group_id, str)
+            or not group_id
+            or group_id in seen_groups
+            or not isinstance(task, str)
+            or not task
+            or not isinstance(members, list)
+            or not members
+            or any(not isinstance(roi, str) or not roi for roi in members)
+            or len(members) != len(set(members))
+            or any((task, roi) not in seen for roi in members)
+        ):
+            raise Instant3DBridgeError("ROI catalog contains an invalid group entry.")
+        seen_groups.add(group_id)
     return catalog
 
 
@@ -90,18 +114,24 @@ def nifti_fingerprint(path: str | os.PathLike) -> dict:
 
 
 def validate_objects(objects: object, catalog: dict | None = None) -> list[dict]:
-    if not isinstance(objects, list) or not 1 <= len(objects) <= 20:
-        raise Instant3DBridgeError("Select between 1 and 20 anatomical structures.")
     catalog = catalog or load_roi_catalog()
+    if not isinstance(objects, list) or not objects:
+        raise Instant3DBridgeError("Select at least one anatomical structure.")
     allowed = {
         (item["task"], item["roi"]): item
         for item in catalog["structures"]
         if not item.get("license_required", False)
     }
+    groups = {
+        item["id"]: item
+        for item in catalog.get("groups", [])
+        if not item.get("license_required", False)
+    }
     normalized = []
-    used_ids = set()
-    used_rois = set()
-    for index, raw in enumerate(objects):
+    used_ids = {}
+    used_rois = {}
+
+    def add_structure(raw, index, *, selection_group=None, assignment_name=None):
         if not isinstance(raw, dict):
             raise Instant3DBridgeError(f"Object {index + 1} is invalid.")
         try:
@@ -112,22 +142,82 @@ def validate_objects(objects: object, catalog: dict | None = None) -> list[dict]
         roi = str(raw.get("roi", ""))
         if not 1 <= object_id <= 20:
             raise Instant3DBridgeError("Object IDs must be between 1 and 20.")
-        if object_id in used_ids:
-            raise Instant3DBridgeError(f"Duplicate object ID: Obj{object_id}.")
-        if (task, roi) in used_rois:
-            raise Instant3DBridgeError(f"Duplicate anatomical structure: {roi}.")
         catalog_item = allowed.get((task, roi))
         if catalog_item is None:
             raise Instant3DBridgeError(f"Unsupported or license-restricted structure: {task}/{roi}.")
-        used_ids.add(object_id)
-        used_rois.add((task, roi))
-        normalized.append({
+
+        selection_group = str(selection_group or raw.get("selection_group") or "") or None
+        if selection_group:
+            group = groups.get(selection_group)
+            if group is None or task != group["task"] or roi not in group["members"]:
+                raise Instant3DBridgeError(f"Invalid catalog group member: {selection_group}/{task}/{roi}.")
+            assignment_name = str(assignment_name or raw.get("assignment_name") or group["display_name"])
+
+        key = (task, roi)
+        if key in used_rois:
+            if used_rois[key] == object_id:
+                return
+            raise Instant3DBridgeError(f"Duplicate anatomical structure: {roi}.")
+        if object_id in used_ids and (not selection_group or used_ids[object_id] != selection_group):
+            raise Instant3DBridgeError(f"Duplicate object ID: Obj{object_id}.")
+        used_ids.setdefault(object_id, selection_group)
+        used_rois[key] = object_id
+        item = {
             "object_id": object_id,
             "display_name": str(raw.get("display_name") or catalog_item["display_name"]),
             "task": task,
             "roi": roi,
-        })
+        }
+        if selection_group:
+            item["selection_group"] = selection_group
+            item["assignment_name"] = assignment_name
+        normalized.append(item)
+
+    for index, raw in enumerate(objects):
+        if not isinstance(raw, dict):
+            raise Instant3DBridgeError(f"Object {index + 1} is invalid.")
+        group_id = str(raw.get("group") or "")
+        if group_id:
+            group = groups.get(group_id)
+            if group is None:
+                raise Instant3DBridgeError(f"Unsupported or license-restricted catalog group: {group_id}.")
+            for roi in group["members"]:
+                catalog_item = allowed[(group["task"], roi)]
+                add_structure({
+                    "object_id": raw.get("object_id"),
+                    "display_name": catalog_item["display_name"],
+                    "task": group["task"],
+                    "roi": roi,
+                }, index, selection_group=group_id, assignment_name=group["display_name"])
+        else:
+            add_structure(raw, index)
+    if len(normalized) > len(allowed):
+        raise Instant3DBridgeError("Too many anatomical structures were selected.")
     return normalized
+
+
+def collapse_object_groups(objects: object, catalog: dict | None = None) -> list[dict]:
+    """Collapse expanded manifest objects back to one UI row per catalog group."""
+    catalog = catalog or load_roi_catalog()
+    groups = {item["id"]: item for item in catalog.get("groups", [])}
+    collapsed = []
+    seen_groups = set()
+    for item in validate_objects(objects, catalog):
+        group_id = item.get("selection_group")
+        if group_id:
+            key = (int(item["object_id"]), group_id)
+            if key in seen_groups:
+                continue
+            seen_groups.add(key)
+            group = groups[group_id]
+            collapsed.append({
+                "object_id": int(item["object_id"]),
+                "display_name": item.get("assignment_name") or group["display_name"],
+                "group": group_id,
+            })
+        else:
+            collapsed.append({key: item[key] for key in ("object_id", "display_name", "task", "roi")})
+    return sorted(collapsed, key=lambda item: int(item["object_id"]))
 
 
 def make_request_manifest(source_path: str | os.PathLike, objects: list[dict], *, fast: bool = False) -> dict:

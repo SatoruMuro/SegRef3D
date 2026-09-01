@@ -186,7 +186,7 @@ def _write_label_pngs(labelmap: np.ndarray, output: Path) -> list[dict]:
     return records
 
 
-def _write_volumes(objects: list[dict], binary_masks: dict[int, np.ndarray], spacing, output: Path) -> None:
+def _write_volumes(objects: list[dict], roi_masks: dict[tuple[int, str, str], np.ndarray], spacing, output: Path) -> None:
     statistics = output / "statistics"
     statistics.mkdir(parents=True, exist_ok=True)
     voxel_mm3 = float(np.prod(spacing))
@@ -196,7 +196,8 @@ def _write_volumes(objects: list[dict], binary_masks: dict[int, np.ndarray], spa
         ])
         writer.writeheader()
         for item in objects:
-            count = int(np.count_nonzero(binary_masks[item["object_id"]]))
+            key = (item["object_id"], item["task"], item["roi"])
+            count = int(np.count_nonzero(roi_masks[key]))
             writer.writerow({
                 **{key: item[key] for key in ("object_id", "display_name", "task", "roi")},
                 "voxel_count": count,
@@ -235,11 +236,16 @@ def process_request(request_zip: str | Path, output_zip: str | Path = "/content/
             masks_dir.mkdir(parents=True)
             labelmap_dir.mkdir(parents=True)
             binary_masks = {}
+            roi_masks = {}
             result_objects = []
             for item in manifest["objects"]:
                 object_id = item["object_id"]
                 binary = _on_source_grid(roi_paths[item["roi"]], source)
-                binary_masks[object_id] = binary
+                roi_masks[(object_id, item["task"], item["roi"])] = binary
+                if object_id in binary_masks:
+                    binary_masks[object_id] |= binary
+                else:
+                    binary_masks[object_id] = binary.copy()
                 filename = f"obj{object_id:02d}_{item['roi']}.nii.gz"
                 _write_nifti(binary, source, masks_dir / filename)
                 result_objects.append({**item, "mask_file": f"masks/{filename}"})
@@ -250,7 +256,7 @@ def process_request(request_zip: str | Path, output_zip: str | Path = "/content/
                 labelmap[(labelmap == 0) & binary_masks[object_id]] = object_id
             _write_nifti(labelmap, source, labelmap_dir / "labels.nii.gz")
             label_records = _write_label_pngs(labelmap, result_root)
-            _write_volumes(manifest["objects"], binary_masks, source.header.get_zooms()[:3], result_root)
+            _write_volumes(manifest["objects"], roi_masks, source.header.get_zooms()[:3], result_root)
 
             source_actual = nifti_fingerprint(source_path)
             mismatch = geometry_mismatches(manifest["source"], source_actual)

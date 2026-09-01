@@ -48,11 +48,12 @@ import {
   validateSegmentationArchive,
 } from "./segmentation-job.mjs?v=17";
 import {
+  collapseInstant3DObjects,
   createInstant3DRequest,
   geometryMismatches as instant3DGeometryMismatches,
   sha256Hex,
   validateInstant3DResult,
-} from "./instant3d-bridge.mjs?v=3";
+} from "./instant3d-bridge.mjs?v=4";
 import {
   adjustedRgba,
   hexToRgb,
@@ -462,14 +463,18 @@ function renderInstant3DCatalog() {
   const query = elements.instant3dSearch.value.trim().toLowerCase();
   const modality = state.sourceVolume?.modality || null;
   elements.instant3dAvailable.replaceChildren();
-  for (const structure of state.instant3dCatalog.structures) {
+  const groups = (state.instant3dCatalog.groups || []).map((item) => ({ ...item, group: item.id }));
+  for (const structure of [...groups, ...state.instant3dCatalog.structures]) {
     if (structure.license_required) continue;
     if (!modality || !(structure.modality || []).includes(modality)) continue;
-    const haystack = [structure.display_name, structure.roi, structure.category, ...(structure.synonyms || [])]
+    const haystack = [
+      structure.display_name, structure.roi || "", structure.group || "", structure.category,
+      ...(structure.synonyms || []),
+    ]
       .join(" ").toLowerCase();
     if (query && !haystack.includes(query)) continue;
     const option = document.createElement("option");
-    option.value = `${structure.task}/${structure.roi}`;
+    option.value = structure.group ? `group/${structure.group}` : `${structure.task}/${structure.roi}`;
     option.textContent = `${structure.display_name} · ${structure.category || "Other"}`;
     option.dataset.structure = JSON.stringify(structure);
     elements.instant3dAvailable.append(option);
@@ -479,6 +484,12 @@ function renderInstant3DCatalog() {
 function nextInstant3DObjectId() {
   const used = new Set(state.instant3dMappings.map((item) => Number(item.object_id)));
   return Array.from({ length: 20 }, (_, index) => index + 1).find((value) => !used.has(value)) || 1;
+}
+
+function instant3DSelectionMembers(selection) {
+  if (!selection.group) return new Set([`${selection.task}/${selection.roi}`]);
+  const group = (state.instant3dCatalog.groups || []).find((item) => item.id === selection.group);
+  return new Set(group.members.map((roi) => `${group.task}/${roi}`));
 }
 
 function renderInstant3DMappings() {
@@ -493,9 +504,9 @@ function renderInstant3DMappings() {
     const row = document.createElement("div");
     row.className = "instant3d-selected-row";
     const object = document.createElement("strong");
-    object.textContent = `Obj ${mapping.object_id}`;
+    object.textContent = mapping.group ? mapping.display_name : `Obj ${mapping.object_id}`;
     const name = document.createElement("span");
-    name.textContent = mapping.display_name;
+    name.textContent = mapping.group ? `→ Obj ${mapping.object_id}` : mapping.display_name;
     name.title = mapping.display_name;
     const remove = document.createElement("button");
     remove.type = "button";
@@ -531,14 +542,25 @@ function addInstant3DStructure() {
   if (!option) return;
   const structure = JSON.parse(option.dataset.structure);
   const objectId = Number(elements.instant3dObjectId.value);
-  state.instant3dMappings = state.instant3dMappings.filter((item) =>
-    Number(item.object_id) !== objectId && !(item.task === structure.task && item.roi === structure.roi));
-  state.instant3dMappings.push({
+  const members = instant3DSelectionMembers(structure);
+  const alreadyCovered = state.instant3dMappings.some((item) => {
+    if (Number(item.object_id) !== objectId) return false;
+    const existing = instant3DSelectionMembers(item);
+    return [...members].every((key) => existing.has(key));
+  });
+  if (alreadyCovered) return;
+  state.instant3dMappings = state.instant3dMappings.filter((item) => {
+    if (Number(item.object_id) === objectId) return false;
+    const existing = instant3DSelectionMembers(item);
+    return [...members].every((key) => !existing.has(key));
+  });
+  const mapping = {
     object_id: objectId,
     display_name: structure.display_name,
-    task: structure.task,
-    roi: structure.roi,
-  });
+  };
+  if (structure.group) mapping.group = structure.group;
+  else Object.assign(mapping, { task: structure.task, roi: structure.roi });
+  state.instant3dMappings.push(mapping);
   state.instant3dMappings.sort((left, right) => left.object_id - right.object_id);
   renderInstant3DMappings();
 }
@@ -554,7 +576,7 @@ async function exportInstant3DRequest() {
     });
     const filename = `${outputFileStem()}_instant3d_request.zip`;
     downloadBlob(await createZip(entries), filename);
-    setStatus(`Seg CT/MRI request created: ${manifest.objects.length} structure(s).`);
+    setStatus(`Seg CT/MRI request created: ${manifest.objects.length} anatomical ROI(s).`);
     showToast(`Downloaded ${filename}`);
   } catch (error) {
     console.error(error);
@@ -585,12 +607,14 @@ async function applyInstant3DImport(mode) {
     }
     return next;
   });
-  for (const item of manifest.objects) state.objectNames[Number(item.object_id)] = item.display_name;
-  state.instant3dMappings = manifest.objects.map((item) => ({ ...item }));
+  for (const item of manifest.objects) {
+    state.objectNames[Number(item.object_id)] = item.assignment_name || item.display_name;
+  }
+  state.instant3dMappings = collapseInstant3DObjects(manifest.objects, state.instant3dCatalog);
   setSegmentationObjectNames();
   updateLabelTargets();
   await applyMaskVolumeTransaction(nextMasks,
-    `Imported Seg CT/MRI result: ${manifest.objects.length} object(s), ${mode} mode.`);
+    `Imported Seg CT/MRI result: ${objectIds.size} object(s), ${mode} mode.`);
   enableLabelsUsedByMasks(nextMasks);
   renderInstant3DMappings();
   state.instant3dPendingImport = null;

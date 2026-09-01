@@ -13,33 +13,106 @@ function closeNumber(left, right, tolerance = 1e-5) {
 }
 
 export function validateInstant3DObjects(objects, catalog) {
-  requireValue(Array.isArray(objects) && objects.length >= 1 && objects.length <= 20,
-    "Select between 1 and 20 anatomical structures.");
+  requireValue(Array.isArray(objects) && objects.length >= 1, "Select at least one anatomical structure.");
   const allowed = new Map(
     catalog.structures
       .filter((item) => !item.license_required)
       .map((item) => [`${item.task}/${item.roi}`, item]),
   );
-  const usedIds = new Set();
-  const usedStructures = new Set();
-  return objects.map((raw, index) => {
+  const groups = new Map(
+    (catalog.groups || [])
+      .filter((item) => !item.license_required)
+      .map((item) => [item.id, item]),
+  );
+  const usedIds = new Map();
+  const usedStructures = new Map();
+  const normalized = [];
+
+  function addStructure(raw, index, selectionGroup = null, assignmentName = null) {
     const objectId = Number(raw.object_id);
     const key = `${raw.task}/${raw.roi}`;
     requireValue(Number.isInteger(objectId) && objectId >= 1 && objectId <= 20,
       `Object ${index + 1} has an invalid object ID.`);
-    requireValue(!usedIds.has(objectId), `Duplicate object ID: Obj${objectId}.`);
-    requireValue(!usedStructures.has(key), `Duplicate anatomical structure: ${raw.roi}.`);
     const catalogItem = allowed.get(key);
     requireValue(catalogItem, `Unsupported or license-restricted structure: ${key}.`);
-    usedIds.add(objectId);
-    usedStructures.add(key);
-    return {
+
+    selectionGroup = String(selectionGroup || raw.selection_group || "") || null;
+    if (selectionGroup) {
+      const group = groups.get(selectionGroup);
+      requireValue(group && raw.task === group.task && group.members.includes(raw.roi),
+        `Invalid catalog group member: ${selectionGroup}/${key}.`);
+      assignmentName = String(assignmentName || raw.assignment_name || group.display_name);
+    }
+    if (usedStructures.has(key)) {
+      requireValue(usedStructures.get(key) === objectId, `Duplicate anatomical structure: ${raw.roi}.`);
+      return;
+    }
+    requireValue(!usedIds.has(objectId) || (selectionGroup && usedIds.get(objectId) === selectionGroup),
+      `Duplicate object ID: Obj${objectId}.`);
+    if (!usedIds.has(objectId)) usedIds.set(objectId, selectionGroup);
+    usedStructures.set(key, objectId);
+    const item = {
       object_id: objectId,
       display_name: String(raw.display_name || catalogItem.display_name),
       task: String(raw.task),
       roi: String(raw.roi),
     };
+    if (selectionGroup) {
+      item.selection_group = selectionGroup;
+      item.assignment_name = assignmentName;
+    }
+    normalized.push(item);
+  }
+
+  objects.forEach((raw, index) => {
+    requireValue(raw && typeof raw === "object", `Object ${index + 1} is invalid.`);
+    const groupId = String(raw.group || "");
+    if (!groupId) {
+      addStructure(raw, index);
+      return;
+    }
+    const group = groups.get(groupId);
+    requireValue(group, `Unsupported or license-restricted catalog group: ${groupId}.`);
+    for (const roi of group.members) {
+      const catalogItem = allowed.get(`${group.task}/${roi}`);
+      requireValue(catalogItem, `Invalid catalog group member: ${groupId}/${group.task}/${roi}.`);
+      addStructure({
+        object_id: raw.object_id,
+        display_name: catalogItem.display_name,
+        task: group.task,
+        roi,
+      }, index, groupId, group.display_name);
+    }
   });
+  requireValue(normalized.length <= allowed.size, "Too many anatomical structures were selected.");
+  return normalized;
+}
+
+export function collapseInstant3DObjects(objects, catalog) {
+  const groups = new Map((catalog.groups || []).map((item) => [item.id, item]));
+  const collapsed = [];
+  const seenGroups = new Set();
+  for (const item of validateInstant3DObjects(objects, catalog)) {
+    if (item.selection_group) {
+      const key = `${item.object_id}/${item.selection_group}`;
+      if (seenGroups.has(key)) continue;
+      seenGroups.add(key);
+      const group = groups.get(item.selection_group);
+      collapsed.push({
+        object_id: item.object_id,
+        display_name: item.assignment_name || group.display_name,
+        group: item.selection_group,
+      });
+    } else {
+      collapsed.push({
+        object_id: item.object_id,
+        display_name: item.display_name,
+        task: item.task,
+        roi: item.roi,
+      });
+    }
+  }
+  return collapsed.sort((left, right) => left.object_id - right.object_id);
 }
 
 export async function sha256Hex(bytes) {
