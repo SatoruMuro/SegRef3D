@@ -7,6 +7,8 @@ import { gzipSync } from "node:zlib";
 import {
   decodeDicomSeries,
   decodeDicomSeriesAsync,
+  dicomMappingPreview,
+  dicomSliceMapping,
   dicomTransferSyntaxName,
   groupDicomSeries,
   isNiftiFilename,
@@ -682,4 +684,27 @@ test("groups DICOM series and sorts slices by instance number", () => {
   const groups = groupDicomSeries([later, earlier]);
   assert.equal(groups.length, 1);
   assert.equal(groups[0].items[0].name, "IM0003");
+});
+
+test("512-slice coronal UI mapping keeps display N equal to canonical z N-1", () => {
+  const orientation = [1, 0, 0, 0, 0, 1];
+  const instances = Array.from({ length: 512 }, (_, canonicalZ) => ({
+    name: `source${String(512 - canonicalZ).padStart(4, "0")}.dcm`,
+    instanceNumber: 512 - canonicalZ,
+    imagePosition: [18, 300 - canonicalZ * 0.629, -42],
+    imageOrientation: orientation,
+    sortCoordinate: -(300 - canonicalZ * 0.629),
+    sliceLocation: 300 - canonicalZ * 0.629,
+  })).reverse();
+
+  const mapping = dicomSliceMapping(instances);
+  for (const displaySlice of [1, 50, 100, 400, 512]) {
+    const record = mapping[displaySlice - 1];
+    assert.equal(record.zIndex, displaySlice - 1);
+    assert.equal(record.displaySlice, displaySlice);
+    assert.equal(record.sourceFilename, `source${String(513 - displaySlice).padStart(4, "0")}.dcm`);
+    assert.equal(record.instanceNumber, 513 - displaySlice);
+  }
+  assert.ok(mapping[0].projectedPosition < mapping.at(-1).projectedPosition);
+  assert.equal(dicomMappingPreview(instances).length, 6);
 });

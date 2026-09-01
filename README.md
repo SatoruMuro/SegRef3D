@@ -57,6 +57,10 @@ Automatic results remain editable before measurement or reconstruction.
 SegRef3D connects calibrated spacing and reviewed masks to volume statistics, NIfTI labelmaps, TIFF
 stacks, and STL surface models.
 
+Saved mask PNG sequences use the displayed canonical volume order: volume z=0 is `mask0001.png`
+and volume z=N-1 is `maskNNNN.png`. New SegRef3D mask sets include
+`segref3d-mask-manifest.json` declaring `segref3d-canonical-v1` ordering.
+
 ### Local first
 
 Normal SegRef3D Lite editing, measurement, and export run in your browser. Optional Colab-based AI

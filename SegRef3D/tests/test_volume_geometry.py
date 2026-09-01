@@ -14,7 +14,11 @@ if str(MODULE_DIR) not in sys.path:
 
 from volume_geometry import (  # noqa: E402
     VolumeGeometry,
+    VolumeGeometryError,
+    dicom_datasets_to_mapping,
+    dicom_datasets_to_order,
     dicom_datasets_to_geometry,
+    dicom_mapping_preview,
     nifti_image_with_geometry,
     reverse_axis_affine,
     upsample_geometry_along_k,
@@ -34,6 +38,88 @@ def dicom_slice(position, orientation, *, rows=320, columns=320, pixel_spacing=(
 
 
 class VolumeGeometryTests(unittest.TestCase):
+    @staticmethod
+    def _coronal_512_series():
+        orientation = (1, 0, 0, 0, 0, 1)
+        datasets = []
+        names = []
+        for canonical_z in range(512):
+            dataset = dicom_slice(
+                (18.0, 300.0 - canonical_z * 0.629, -42.0),
+                orientation,
+                rows=542,
+                columns=512,
+                pixel_spacing=(0.625, 0.625),
+            )
+            dataset.InstanceNumber = 512 - canonical_z
+            dataset.SliceLocation = 300.0 - canonical_z * 0.629
+            datasets.append(dataset)
+            names.append(f"source{512 - canonical_z:04d}.dcm")
+        return datasets, names
+
+    def test_coronal_512_display_mapping_uses_iop_projection_not_filename_or_instance(self):
+        canonical, canonical_names = self._coronal_512_series()
+        datasets = list(reversed(canonical))
+        names = list(reversed(canonical_names))
+
+        order = dicom_datasets_to_order(datasets, source_names=names)
+        mapping = dicom_datasets_to_mapping(datasets, source_names=names, order=order)
+
+        for display_slice in (1, 50, 100, 400, 512):
+            record = mapping[display_slice - 1]
+            self.assertEqual(record["zIndex"], display_slice - 1)
+            self.assertEqual(record["displaySlice"], display_slice)
+            self.assertEqual(record["sourceFilename"], f"source{513 - display_slice:04d}.dcm")
+            self.assertEqual(record["instanceNumber"], 513 - display_slice)
+        np.testing.assert_allclose(mapping[0]["sliceNormal"], [0, -1, 0], atol=1e-12)
+        self.assertLess(mapping[0]["projectedPosition"], mapping[-1]["projectedPosition"])
+        self.assertEqual(len(dicom_mapping_preview(mapping)), 6)
+
+        ordered = [datasets[index] for index in order]
+        geometry, geometry_order = dicom_datasets_to_geometry(ordered)
+        self.assertEqual(geometry_order, list(range(512)))
+        # LPS Y decreases with K; LPS-to-RAS therefore gives the reported +0.629 RAS Y K axis.
+        np.testing.assert_allclose(geometry.affine_ras[:3, 2], [0, 0.629, 0], atol=1e-10)
+
+    def test_irregular_coronal_geometry_fallback_does_not_discard_projected_order(self):
+        canonical, canonical_names = self._coronal_512_series()
+        canonical[250].ImagePositionPatient = (18.0, 300.0 - 250 * 0.629 + 0.2, -42.0)
+        datasets = list(reversed(canonical))
+        names = list(reversed(canonical_names))
+
+        order = dicom_datasets_to_order(datasets, source_names=names)
+        ordered = [datasets[index] for index in order]
+        with self.assertRaises(VolumeGeometryError):
+            dicom_datasets_to_geometry(ordered)
+
+        mapping = dicom_datasets_to_mapping(datasets, source_names=names, order=order)
+        self.assertEqual(mapping[0]["sourceFilename"], "source0512.dcm")
+        self.assertEqual(mapping[49]["sourceFilename"], "source0463.dcm")
+        self.assertEqual(mapping[99]["sourceFilename"], "source0413.dcm")
+        self.assertEqual(mapping[399]["sourceFilename"], "source0113.dcm")
+        self.assertEqual(mapping[511]["sourceFilename"], "source0001.dcm")
+
+    def test_quantized_512_coronal_ipp_uses_fitted_step_without_false_fallback(self):
+        spacing = 0.62915234375
+        orientation = (1, 0, 0, 0, 0, -1)
+        slices = [
+            dicom_slice(
+                (-156.274, round(-326.248 + index * spacing, 3), 1995.97),
+                orientation,
+                rows=542,
+                columns=512,
+                pixel_spacing=(spacing, spacing),
+            )
+            for index in range(512)
+        ]
+
+        geometry, order = dicom_datasets_to_geometry(slices)
+
+        self.assertEqual(order, list(range(512)))
+        self.assertEqual(geometry.source_kind, "dicom")
+        np.testing.assert_allclose(geometry.origin, [156.274, 326.248, 1995.97], atol=1e-12)
+        np.testing.assert_allclose(geometry.affine_ras[:3, 2], [0, -spacing, 0], atol=2e-6)
+
     def test_shared_desktop_web_nifti_fixture_preserves_affine_and_labels(self):
         fixture_path = MODULE_DIR.parent / "test-data" / "volume_geometry_parity.json"
         fixture = json.loads(fixture_path.read_text(encoding="utf-8"))

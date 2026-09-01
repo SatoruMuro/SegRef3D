@@ -230,8 +230,13 @@ export function dicomSeriesGeometry(ordered, { positionToleranceMm = 1e-3 } = {}
   let sliceStep;
   const warnings = [];
   if (positions.length >= 2) {
-    const steps = positions.slice(1).map((position, index) => subtract(position, positions[index]));
-    sliceStep = [0, 1, 2].map((axis) => median(steps.map((step) => step[axis])));
+    const denominator = positions.reduce((sum, _position, index) => sum + index * index, 0);
+    // Fit through the exact first IPP. This avoids accumulating normal DICOM
+    // decimal rounding (for example alternating 0.629/0.630 mm increments).
+    sliceStep = [0, 1, 2].map((axis) => positions.reduce(
+      (sum, position, index) => sum + index * (position[axis] - positions[0][axis]),
+      0,
+    ) / denominator);
     const stepLength = norm(sliceStep);
     if (!(stepLength > positionToleranceMm)) throw new Error("DICOM slices contain duplicate positions.");
     const errors = positions.map((position, index) =>

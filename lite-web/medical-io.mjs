@@ -1,7 +1,7 @@
 import * as nifti from "./vendor/nifti-reader.js";
 import UTIF from "./vendor/utif.module.js";
 import { getDicomCodecs } from "./dicom-codec.mjs?v=1";
-import { dicomSeriesGeometry, makeVolumeGeometry } from "./medical-geometry.mjs?v=2";
+import { dicomSeriesGeometry, makeVolumeGeometry } from "./medical-geometry.mjs?v=3";
 
 const DICOM_UID = Object.freeze({
   implicitLittle: "1.2.840.10008.1.2",
@@ -689,6 +689,35 @@ function compressedDecoderName(transferSyntax) {
   return null;
 }
 
+export function dicomSliceMapping(instances) {
+  const ordered = sortDicomInstances(instances);
+  return ordered.map((instance, zIndex) => ({
+    zIndex,
+    displaySlice: zIndex + 1,
+    sourceFilename: instance.name,
+    instanceNumber: instance.instanceNumber,
+    imagePositionPatient: [...(instance.imagePosition || [])],
+    imageOrientationPatient: [...(instance.imageOrientation || [])],
+    projectedPosition: Number.isFinite(instance.sortCoordinate) ? instance.sortCoordinate : null,
+  }));
+}
+
+export function dicomMappingPreview(instances) {
+  const mapping = dicomSliceMapping(instances);
+  const indices = [];
+  for (const displaySlice of [1, 2, 50, 100, 400, mapping.length]) {
+    const index = displaySlice - 1;
+    if (index >= 0 && index < mapping.length && !indices.includes(index)) indices.push(index);
+  }
+  return indices.map((index) => {
+    const record = mapping[index];
+    return `display slice ${record.displaySlice} -> canonical z=${record.zIndex} ` +
+      `-> source=${record.sourceFilename} -> InstanceNumber=${record.instanceNumber ?? "unavailable"} ` +
+      `-> ImagePositionPatient=[${record.imagePositionPatient.join(", ")}] ` +
+      `-> projected=${record.projectedPosition ?? "unavailable"}`;
+  });
+}
+
 function decodedFrameInstance(instance, decodedContext) {
   const valueOr = (getter, fallback) => {
     const value = decodedContext[getter]?.();
@@ -806,6 +835,13 @@ function decodedDicomVolume(ordered, rawFrames) {
       height: instance.rows,
       transferSyntax: instance.transferSyntax,
       transferSyntaxName: dicomTransferSyntaxName(instance.transferSyntax),
+      dicom: {
+        sourceFilename: instance.name,
+        instanceNumber: instance.instanceNumber,
+        imagePositionPatient: [...instance.imagePosition],
+        imageOrientationPatient: [...instance.imageOrientation],
+        projectedPosition: Number.isFinite(instance.sortCoordinate) ? instance.sortCoordinate : null,
+      },
     };
     if (instance.samplesPerPixel === 1) {
       return {

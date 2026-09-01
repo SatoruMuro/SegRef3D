@@ -2,6 +2,7 @@ import * as nifti from "./vendor/nifti-reader.js";
 import { affineOrientation, parseNiftiLabelVolume } from "./medical-io.mjs?v=21";
 import { makeVolumeGeometry, normalizeAffine, spacingFromAffine } from "./medical-geometry.mjs?v=2";
 import { createNiftiLabelVolume } from "./volume-tools.mjs?v=17";
+import { MASK_SLICE_ORDER } from "./mask-sequence.mjs?v=1";
 
 export const TRAINING_CASE_FORMAT = "segref3d-training-case-1.0";
 export const TRAINING_GEOMETRY_TOLERANCE = 1e-5;
@@ -489,6 +490,8 @@ export function createTrainingCaseEntries({
     label: {
       file: labelName,
       datatype: "uint8",
+      slice_index_base: 1,
+      slice_order: MASK_SLICE_ORDER,
       objects: normalizedObjects(labelIds, objectNames),
     },
     geometry: {

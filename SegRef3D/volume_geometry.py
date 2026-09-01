@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+import re
 from typing import Iterable, Sequence
 
 import nibabel as nib
@@ -15,6 +16,137 @@ LPS_TO_RAS = np.diag([-1.0, -1.0, 1.0, 1.0])
 
 class VolumeGeometryError(ValueError):
     """Raised when source metadata cannot describe one regular 3D volume."""
+
+
+def _natural_name_key(value: str) -> list:
+    return [int(part) if part.isdigit() else part.lower() for part in re.split(r"(\d+)", Path(value).name)]
+
+
+def _optional_float(value) -> float | None:
+    try:
+        result = float(value)
+    except (TypeError, ValueError):
+        return None
+    return result if np.isfinite(result) else None
+
+
+def _optional_vector(value, length: int) -> np.ndarray | None:
+    try:
+        result = np.asarray([float(item) for item in value], dtype=float)
+    except Exception:
+        return None
+    if result.shape != (length,) or not np.all(np.isfinite(result)):
+        return None
+    return result
+
+
+def dicom_slice_normal(dataset) -> np.ndarray | None:
+    """Return the normalized IOP row x column direction, or None when unavailable."""
+    orientation = _optional_vector(getattr(dataset, "ImageOrientationPatient", None), 6)
+    if orientation is None:
+        return None
+    normal = np.cross(orientation[:3], orientation[3:])
+    length = float(np.linalg.norm(normal))
+    if not np.isfinite(length) or length <= 0:
+        return None
+    return normal / length
+
+
+def dicom_datasets_to_order(
+    datasets: Sequence,
+    *,
+    source_names: Sequence[str] | None = None,
+) -> list[int]:
+    """Order a series independently from whether one regular affine can be built.
+
+    The affine validator is intentionally stricter than display ordering.  Missing or
+    irregular spacing must not make Local silently fall back to filename order while
+    Lite continues to use ImagePositionPatient.
+    """
+    if not datasets:
+        raise VolumeGeometryError("No DICOM slices were provided.")
+    names = list(source_names or [str(index) for index in range(len(datasets))])
+    if len(names) != len(datasets):
+        raise VolumeGeometryError("DICOM source name count does not match the slice count.")
+
+    normals = [dicom_slice_normal(dataset) for dataset in datasets]
+    reference_normal = next((normal for normal in normals if normal is not None), None)
+    projections: list[float | None] = []
+    for dataset in datasets:
+        position = _optional_vector(getattr(dataset, "ImagePositionPatient", None), 3)
+        projections.append(
+            float(np.dot(position, reference_normal))
+            if position is not None and reference_normal is not None
+            else None
+        )
+    if all(value is not None for value in projections):
+        return sorted(range(len(datasets)), key=lambda index: (projections[index], _natural_name_key(names[index])))
+
+    slice_locations = [_optional_float(getattr(dataset, "SliceLocation", None)) for dataset in datasets]
+    if all(value is not None for value in slice_locations):
+        return sorted(range(len(datasets)), key=lambda index: (slice_locations[index], _natural_name_key(names[index])))
+
+    instance_numbers = [_optional_float(getattr(dataset, "InstanceNumber", None)) for dataset in datasets]
+    if all(value is not None for value in instance_numbers):
+        return sorted(range(len(datasets)), key=lambda index: (instance_numbers[index], _natural_name_key(names[index])))
+    return sorted(range(len(datasets)), key=lambda index: _natural_name_key(names[index]))
+
+
+def dicom_datasets_to_mapping(
+    datasets: Sequence,
+    *,
+    source_names: Sequence[str] | None = None,
+    order: Sequence[int] | None = None,
+) -> list[dict]:
+    """Describe source metadata for each canonical/UI slice without changing data."""
+    names = list(source_names or [str(index) for index in range(len(datasets))])
+    indices = list(order if order is not None else range(len(datasets)))
+    normals = [dicom_slice_normal(dataset) for dataset in datasets]
+    reference_normal = next((normal for normal in normals if normal is not None), None)
+    records = []
+    for z_index, source_index in enumerate(indices):
+        dataset = datasets[source_index]
+        position = _optional_vector(getattr(dataset, "ImagePositionPatient", None), 3)
+        orientation = _optional_vector(getattr(dataset, "ImageOrientationPatient", None), 6)
+        records.append({
+            "zIndex": z_index,
+            "displaySlice": z_index + 1,
+            "sourceIndex": source_index,
+            "sourceFilename": Path(names[source_index]).name,
+            "instanceNumber": _optional_float(getattr(dataset, "InstanceNumber", None)),
+            "imagePositionPatient": tuple(float(value) for value in position) if position is not None else None,
+            "imageOrientationPatient": tuple(float(value) for value in orientation) if orientation is not None else None,
+            "sliceNormal": tuple(float(value) for value in reference_normal) if reference_normal is not None else None,
+            "projectedPosition": float(np.dot(position, reference_normal))
+            if position is not None and reference_normal is not None else None,
+        })
+    return records
+
+
+def dicom_mapping_preview(mapping: Sequence[dict]) -> list[str]:
+    """Return diagnostic mappings for the contract slices requested in bug reports."""
+    if not mapping:
+        return []
+    indices = []
+    for display_slice in (1, 2, 50, 100, 400, len(mapping)):
+        index = display_slice - 1
+        if 0 <= index < len(mapping) and index not in indices:
+            indices.append(index)
+    lines = []
+    for index in indices:
+        record = mapping[index]
+        position = record["imagePositionPatient"]
+        position_text = "unavailable" if position is None else "[" + ", ".join(f"{value:.10g}" for value in position) + "]"
+        projection = record["projectedPosition"]
+        projection_text = "unavailable" if projection is None else f"{projection:.10g}"
+        instance = record["instanceNumber"]
+        instance_text = "unavailable" if instance is None else f"{instance:g}"
+        lines.append(
+            f"display slice {record['displaySlice']} -> canonical z={record['zIndex']} "
+            f"-> source={record['sourceFilename']} -> InstanceNumber={instance_text} "
+            f"-> ImagePositionPatient={position_text} -> projected={projection_text}"
+        )
+    return lines
 
 
 def _as_affine(value) -> np.ndarray:
@@ -223,8 +355,18 @@ def dicom_datasets_to_geometry(
     ordered_positions = np.stack([item[2] for item in positions])
     warnings = []
     if len(ordered_positions) >= 2:
-        steps = np.diff(ordered_positions, axis=0)
-        slice_step_lps = np.median(steps, axis=0)
+        # DICOM IPP values are commonly rounded (for example alternating
+        # 0.629/0.630 mm steps for a true 0.629152... mm spacing).  Taking the
+        # median adjacent step accumulates that rounding over hundreds of
+        # slices and can falsely reject an otherwise regular series.  Fit one
+        # step vector through the first IPP so the affine keeps the exact first
+        # slice origin without cumulative rounding drift.
+        sample_indices = np.arange(len(ordered_positions), dtype=float)
+        denominator = float(np.dot(sample_indices, sample_indices))
+        slice_step_lps = np.sum(
+            sample_indices[:, None] * (ordered_positions - ordered_positions[0]),
+            axis=0,
+        ) / denominator
         step_length = float(np.linalg.norm(slice_step_lps))
         if step_length <= position_tolerance_mm:
             raise VolumeGeometryError("DICOM slices contain duplicate positions.")
@@ -289,6 +431,45 @@ def dicom_files_to_geometry(paths: Iterable[str | Path]) -> tuple[VolumeGeometry
             geometry.warnings + (f"Selected the largest of {len(groups)} DICOM series.",),
         )
     return geometry, ordered_paths
+
+
+def _dicom_file_records(paths: Iterable[str | Path]) -> list[tuple[str, str, object]]:
+    import pydicom
+
+    records = []
+    for path in paths:
+        source = str(path)
+        try:
+            dataset = pydicom.dcmread(source, stop_before_pixels=True, force=True)
+            if not hasattr(dataset, "Rows") or not hasattr(dataset, "Columns"):
+                continue
+            uid = str(getattr(dataset, "SeriesInstanceUID", "default-series"))
+            records.append((uid, source, dataset))
+        except Exception:
+            continue
+    return records
+
+
+def dicom_files_to_order(paths: Iterable[str | Path]) -> list[str]:
+    """Select the largest series and return its stable canonical display order."""
+    records = _dicom_file_records(paths)
+    if not records:
+        raise VolumeGeometryError("No DICOM metadata could be read.")
+    groups: dict[str, list[tuple[str, object]]] = {}
+    for uid, source, dataset in records:
+        groups.setdefault(uid, []).append((source, dataset))
+    selected = max(groups.values(), key=len)
+    names = [item[0] for item in selected]
+    order = dicom_datasets_to_order([item[1] for item in selected], source_names=names)
+    return [names[index] for index in order]
+
+
+def dicom_files_to_mapping(paths: Iterable[str | Path]) -> list[dict]:
+    """Read metadata for paths that are already in canonical/UI order."""
+    records = _dicom_file_records(paths)
+    names = [item[1] for item in records]
+    datasets = [item[2] for item in records]
+    return dicom_datasets_to_mapping(datasets, source_names=names)
 
 
 def simpleitk_image_to_geometry(image, *, source_kind: str = "dicom-simpleitk") -> VolumeGeometry:

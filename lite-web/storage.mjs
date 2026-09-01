@@ -16,27 +16,40 @@ function openDatabase() {
   });
 }
 
-export async function saveMask(projectId, imageName, width, height, mask) {
+export function createMaskStorageRecord(
+  projectId,
+  imageName,
+  width,
+  height,
+  mask,
+  { zIndex = null, sliceOrder = null } = {},
+) {
+  return {
+    key: `${projectId}:${imageName}`,
+    projectId,
+    imageName,
+    width,
+    height,
+    mask: mask.slice().buffer,
+    zIndex: Number.isInteger(zIndex) ? zIndex : null,
+    sliceOrder: typeof sliceOrder === "string" ? sliceOrder : null,
+    updatedAt: Date.now(),
+  };
+}
+
+export async function saveMask(projectId, imageName, width, height, mask, metadata = {}) {
   const database = await openDatabase();
-  const key = `${projectId}:${imageName}`;
+  const record = createMaskStorageRecord(projectId, imageName, width, height, mask, metadata);
   await new Promise((resolve, reject) => {
     const transaction = database.transaction(MASK_STORE, "readwrite");
-    transaction.objectStore(MASK_STORE).put({
-      key,
-      projectId,
-      imageName,
-      width,
-      height,
-      mask: mask.slice().buffer,
-      updatedAt: Date.now(),
-    });
+    transaction.objectStore(MASK_STORE).put(record);
     transaction.oncomplete = resolve;
     transaction.onerror = () => reject(transaction.error);
   });
   database.close();
 }
 
-export async function loadMask(projectId, imageName, width, height) {
+export async function loadMask(projectId, imageName, width, height, metadata = {}) {
   const database = await openDatabase();
   const key = `${projectId}:${imageName}`;
   const record = await new Promise((resolve, reject) => {
@@ -49,6 +62,13 @@ export async function loadMask(projectId, imageName, width, height) {
   });
   database.close();
   if (!record || record.width !== width || record.height !== height) return null;
+  if (
+    record.sliceOrder && metadata.sliceOrder && record.sliceOrder !== metadata.sliceOrder
+  ) return null;
+  if (
+    Number.isInteger(record.zIndex) && Number.isInteger(metadata.zIndex) &&
+    record.zIndex !== metadata.zIndex
+  ) return null;
   const restored = new Uint8Array(record.mask);
   return restored.length === width * height ? restored : null;
 }

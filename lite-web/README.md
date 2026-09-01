@@ -143,6 +143,15 @@ data to Google Colab, so users should confirm that this use is permitted before 
 Project ZIP files do not contain the source images. Load the original image folder first, then
 open the Project ZIP from **Open > Masks / Project ZIP** to restore its masks and editor settings.
 
+### Canonical mask slice order
+
+Mask PNG numbering always follows the displayed SegRef3D volume order after source/DICOM sorting:
+display slice 1 (volume z=0) is `mask0001.png`, and display slice N (volume z=N-1) is
+`maskNNNN.png`. Label PNG ZIP and Project ZIP exports include
+`segref3d-mask-manifest.json` with `sliceOrder: "segref3d-canonical-v1"`. Browser autosave stores
+the same zero-based canonical z index with each IndexedDB record; it does not create autosave PNG
+files. Training Data ZIP records the same order in its label metadata.
+
 ### Training Data ZIP
 
 After reviewing or correcting a segmentation, choose **Export > Training Data ZIP** to save one

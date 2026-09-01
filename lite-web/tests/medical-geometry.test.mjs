@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import {
+  dicomSeriesGeometry,
   makeVolumeGeometry,
   transformGeometryForPreparedImage,
   upsampleGeometryAlongK,
@@ -107,4 +108,29 @@ test("5x and 10x K interpolation preserve oblique endpoint world coordinates", (
     world5.forEach((value, index) => assert.ok(Math.abs(value - expected[index]) < 1e-10));
     world10.forEach((value, index) => assert.ok(Math.abs(value - expected[index]) < 1e-10));
   }
+});
+
+test("512 quantized coronal IPPs fit one affine without false fallback", () => {
+  const spacing = 0.62915234375;
+  const ordered = Array.from({ length: 512 }, (_, index) => ({
+    name: `IMG${String(index + 1).padStart(4, "0")}.dcm`,
+    rows: 542,
+    columns: 512,
+    frameCount: 1,
+    imageOrientation: [1, 0, 0, 0, 0, -1],
+    imagePosition: [-156.274, Number((-326.248 + index * spacing).toFixed(3)), 1995.97],
+    pixelSpacing: [spacing, spacing],
+    sliceSpacing: spacing,
+  }));
+
+  const geometry = dicomSeriesGeometry(ordered);
+
+  assert.equal(geometry.sourceKind, "dicom");
+  assert.deepEqual(geometry.shape, [512, 542, 512]);
+  [156.274, 326.248, 1995.97].forEach((value, index) => {
+    assert.ok(Math.abs(geometry.origin[index] - value) < 1e-10);
+  });
+  [0, -spacing, 0].forEach((value, index) => {
+    assert.ok(Math.abs(geometry.affine[index][2] - value) < 2e-6);
+  });
 });

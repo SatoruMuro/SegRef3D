@@ -50,6 +50,10 @@ SegRef3Dは、連続画像や3D volumeから、構造のsegmentation、mask修�
 校正済みspacingと確認済みmaskを、体積統計、NIfTI labelmap、TIFF stack、STL surface modelへ
 つなげられます。
 
+mask PNGの保存順は表示中のcanonical volume順です。volume z=0は`mask0001.png`、
+volume z=N-1は`maskNNNN.png`となります。新しくSegRef3Dが保存するmask setには、
+`segref3d-canonical-v1`を宣言する`segref3d-mask-manifest.json`が含まれます。
+
 Liteの`Training Data ZIP`では、geometryを一致させた画像channel、Obj IDを保持するlabelmap、
 versioned manifestを1症例分としてbrowser内で保存できます。
 [TrainRef3D](train-web/README.md)では複数のTraining ZIPをbrowser内でまとめ、対象Objを1つ選び、

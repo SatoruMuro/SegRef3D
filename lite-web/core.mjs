@@ -66,9 +66,7 @@ export function timestamp(date = new Date()) {
   ].join("");
 }
 
-export function maskFilename(index) {
-  return `mask${String(index + 1).padStart(4, "0")}.png`;
-}
+export { canonicalMaskFilename as maskFilename } from "./mask-sequence.mjs?v=1";
 
 export function overlayFilename(index) {
   return `overlay${String(index + 1).padStart(4, "0")}.png`;

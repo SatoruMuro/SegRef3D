@@ -20,6 +20,11 @@ def segref3d_product_name() -> str:
         return "SegRef3D Local CPU"
     return "SegRef3D"
 
+
+SLICE_MAPPING_DEBUG = os.environ.get(
+    "SEGREF3D_DEBUG_SLICE_MAPPING", ""
+).strip().lower() in ("1", "true", "yes", "on")
+
 from PyQt6.QtWidgets import (
     QApplication,
     QMainWindow,
@@ -88,10 +93,21 @@ from volume_geometry import (
     VolumeGeometry,
     VolumeGeometryError,
     axis_aligned_affine,
+    dicom_files_to_mapping,
+    dicom_files_to_order,
     dicom_files_to_geometry,
+    dicom_mapping_preview,
     nifti_image_with_geometry,
     simpleitk_image_to_geometry,
     upsample_geometry_along_k,
+)
+from mask_sequence import (
+    MASK_MANIFEST_FILENAME,
+    canonical_mask_filename,
+    canonical_mask_records,
+    create_mask_manifest,
+    export_mapping_preview,
+    write_mask_manifest,
 )
 
 from svgpathtools import parse_path
@@ -736,6 +752,8 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         self.box_per_frame = {}  # 例: {0: ((x1,y1), (x2,y2)), 1: ((x1,y1), (x2,y2)), ...}
         self.object_label_names = {}
         self.original_image_filenames = {}
+        self.dicom_source_paths = {}
+        self.dicom_slice_mapping = []
         self.source_dataset_name = None
         self.source_nifti_path = None
         self.source_nifti_fingerprint = None
@@ -1609,11 +1627,81 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             key: self.get_label_png_path(key)
             for key in getattr(self, "label_masks", {}).keys()
         }
+        self._write_mask_sequence_manifest(self.output_label_dir)
         print(f"[INFO] Autosave label PNG folder: {self.output_label_dir}")
+        self._log_mask_export_mapping("Autosave")
 
 
     def get_label_png_path(self, key: str) -> str:
-        return os.path.join(self.output_label_dir, f"mask{key}.png")
+        keys = list(getattr(self, "image_paths", {}).keys())
+        try:
+            z_index = keys.index(key)
+        except ValueError:
+            # Compatibility fallback for a mask loaded before its source sequence is available.
+            if not str(key).isdigit() or int(key) < 1:
+                raise KeyError(f"No canonical image index found for key: {key}")
+            z_index = int(key) - 1
+        return os.path.join(self.output_label_dir, canonical_mask_filename(z_index))
+
+
+    def _canonical_mask_records(self) -> list[dict]:
+        # Loaders insert slices in canonical volume order; get_current_image_key uses this order.
+        return canonical_mask_records(list(getattr(self, "image_paths", {}).keys()))
+
+
+    def _mask_sequence_dimensions(self) -> tuple[int | None, int | None]:
+        records = self._canonical_mask_records()
+        if not records:
+            return None, None
+        first_key = records[0]["key"]
+        size = getattr(self, "image_sizes", {}).get(first_key)
+        if size and len(size) >= 2:
+            return int(size[0]), int(size[1])
+        mask = getattr(self, "label_masks", {}).get(first_key)
+        if mask is not None and getattr(mask, "ndim", 0) == 2:
+            return int(mask.shape[1]), int(mask.shape[0])
+        return None, None
+
+
+    def _write_mask_sequence_manifest(self, directory: str) -> str | None:
+        records = self._canonical_mask_records()
+        if not records:
+            return None
+        width, height = self._mask_sequence_dimensions()
+        manifest = create_mask_manifest(
+            records,
+            width,
+            height,
+            exported_by="SegRef3D",
+            edition=segref3d_product_name(),
+        )
+        return str(write_mask_manifest(directory, manifest))
+
+
+    def _log_mask_export_mapping(self, destination: str) -> None:
+        if not SLICE_MAPPING_DEBUG:
+            return
+        records = self._canonical_mask_records()
+        if not records:
+            return
+        print(f"[DEBUG] {destination} export mapping ({len(records)} canonical slices):")
+        for line in export_mapping_preview(records):
+            print(f"[DEBUG]   {line}")
+        self._log_dicom_display_mapping(f"{destination} source")
+
+
+    def _log_dicom_display_mapping(self, destination: str = "DICOM UI") -> None:
+        if not SLICE_MAPPING_DEBUG:
+            return
+        mapping = getattr(self, "dicom_slice_mapping", None) or []
+        if not mapping:
+            return
+        print(f"[DEBUG] {destination} mapping ({len(mapping)} canonical slices):")
+        normal = mapping[0].get("sliceNormal")
+        if normal is not None:
+            print(f"[DEBUG]   slice normal LPS={normal}")
+        for line in dicom_mapping_preview(mapping):
+            print(f"[DEBUG]   {line}")
     
     
     def create_empty_label_mask(self, key: str) -> np.ndarray:
@@ -1651,6 +1739,9 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             raise KeyError(f"No label mask in memory for key: {key}")
     
         os.makedirs(self.output_label_dir, exist_ok=True)
+        manifest_path = os.path.join(self.output_label_dir, MASK_MANIFEST_FILENAME)
+        if not os.path.exists(manifest_path):
+            self._write_mask_sequence_manifest(self.output_label_dir)
         save_path = self.get_label_png_path(key)
         ok = cv2.imwrite(save_path, self.label_masks[key])
         if not ok:
@@ -1658,6 +1749,13 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
         self.label_mask_paths[key] = save_path
         message = f"Autosaved label PNG: {os.path.basename(save_path)}"
+        if SLICE_MAPPING_DEBUG:
+            records = self._canonical_mask_records()
+            z_index = next(
+                (record["zIndex"] for record in records if record["key"] == key),
+                int(key) - 1 if str(key).isdigit() else -1,
+            )
+            message += f" (volume z={z_index}, display slice={z_index + 1})"
         print(f"[INFO] {message}")
         if hasattr(self, "label_status"):
             self.label_status.setText(message)
@@ -1686,8 +1784,9 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         """
         現在メモリ上にある全 label mask を保存する。
         """
-        for key in sorted(self.label_masks.keys()):
-            self.save_label_mask_png(key)
+        for record in self._canonical_mask_records():
+            if record["key"] in self.label_masks:
+                self.save_label_mask_png(record["key"])
         if hasattr(self, "label_status"):
             self.label_status.setText(f"Autosaved label PNGs to: {self.output_label_dir}")
     
@@ -5020,6 +5119,8 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         self.batch_object_data.clear()
         self.object_label_names.clear()
         self.original_image_filenames.clear()
+        self.dicom_source_paths.clear()
+        self.dicom_slice_mapping.clear()
         self.source_dataset_name = None
         self.source_nifti_path = None
         self.source_nifti_fingerprint = None
@@ -5273,11 +5374,20 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             elif extension in valid_exts:
                 non_dicom_image_paths.append(candidate_path)
         if dicom_candidate_paths and not non_dicom_image_paths:
+            ordered_paths = list(dicom_candidate_paths)
             try:
-                dicom_geometry, ordered_paths = dicom_files_to_geometry(dicom_candidate_paths)
+                # Display ordering is less strict than affine validation.  Keep the
+                # ImagePositionPatient/IOP projection order even when irregular
+                # spacing later requires axis-aligned fallback geometry.
+                ordered_paths = dicom_files_to_order(dicom_candidate_paths)
                 selected_files = [os.path.basename(path) for path in ordered_paths]
+                print("[INFO] DICOM display order follows projected ImagePositionPatient.")
+            except VolumeGeometryError as exc:
+                print(f"[WARN] DICOM metadata ordering unavailable; using natural filenames: {exc}")
+            try:
+                dicom_geometry, _ = dicom_files_to_geometry(ordered_paths)
                 self._set_volume_geometry(dicom_geometry)
-                print("[INFO] DICOM display order follows the canonical affine K axis.")
+                print("[INFO] DICOM physical geometry follows the same canonical K axis.")
             except VolumeGeometryError as exc:
                 print(f"[WARN] DICOM physical geometry unavailable: {exc}")
                 self.label_status.setText(
@@ -5323,6 +5433,8 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
                     self.image_paths[key] = output_jpg_path
                     self.image_sizes[key] = Image.open(output_jpg_path).size
                     self.original_image_filenames[key] = filename
+                    if SLICE_MAPPING_DEBUG:
+                        self.dicom_source_paths[key] = input_path
                     num_converted += 1
                     next_idx += 1   # ★ 採用したのでカウントアップ
                     continue                
@@ -5592,6 +5704,8 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
                         self.image_paths[key] = out2
                         self.image_sizes[key] = (W, H)
                         self.original_image_filenames[key] = os.path.basename(file_names[s])
+                        if SLICE_MAPPING_DEBUG:
+                            self.dicom_source_paths[key] = str(file_names[s])
                         num_converted += 1
                         next_idx += 1   # ★                        
         
@@ -5614,6 +5728,15 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
                 "Files may be invalid/unsupported or all failed to parse."
             )
             return
+
+        if SLICE_MAPPING_DEBUG and self.dicom_source_paths:
+            canonical_sources = [
+                self.dicom_source_paths[key]
+                for key in self.image_paths.keys()
+                if key in self.dicom_source_paths
+            ]
+            self.dicom_slice_mapping = dicom_files_to_mapping(canonical_sources)
+            self._log_dicom_display_mapping("DICOM load/UI")
 
         self.reset_autosave_label_dir()
         
@@ -5915,16 +6038,35 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             return
     
         loaded_count = 0
+        canonical_keys = list(self.image_paths.keys()) if SLICE_MAPPING_DEBUG else []
+        observed_display_slices = {1, 2, 50, 100, 400, len(canonical_keys)}
     
         for filename in mask_files:
             src_path = os.path.join(folder, filename)
     
             nums = re.findall(r'\d+', filename)
             if nums:
-                key = f"{int(nums[-1]):04d}"
+                display_slice = int(nums[-1])
+                key = f"{display_slice:04d}"
             else:
                 loaded_count += 1
                 key = f"{loaded_count:04d}"
+                display_slice = loaded_count
+
+            if SLICE_MAPPING_DEBUG and display_slice in observed_display_slices:
+                expected_z = display_slice - 1
+                expected_key = canonical_keys[expected_z] if 0 <= expected_z < len(canonical_keys) else None
+                try:
+                    actual_z = canonical_keys.index(key)
+                    redisplay_slice = actual_z + 1
+                except ValueError:
+                    actual_z = None
+                    redisplay_slice = None
+                print(
+                    f"[DEBUG] Load Masks observation: {filename} -> key={key} "
+                    f"-> canonical z={actual_z} -> display slice={redisplay_slice}; "
+                    f"canonical contract target key={expected_key} at z={expected_z}"
+                )
     
             try:
                 if filename.lower().endswith(".png"):
@@ -6395,11 +6537,14 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
         count_label = 0
 
-        for key in sorted(self.image_paths.keys()):
+        records = self._canonical_mask_records()
+        self._log_mask_export_mapping("Save Masks")
+        for record in records:
+            key = record["key"]
             try:
                 label_mask = self.ensure_label_mask_exists(key)
 
-                label_dst_path = os.path.join(label_folder, f"mask{key}.png")
+                label_dst_path = os.path.join(label_folder, record["filename"])
                 ok_label = cv2.imwrite(label_dst_path, label_mask)
                 if ok_label:
                     count_label += 1
@@ -6408,6 +6553,8 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
             except Exception as e:
                 print(f"[WARN] Failed to save mask for {key}: {e}")
+
+        self._write_mask_sequence_manifest(label_folder)
 
         self.label_status.setText(
             f"✅ Saved {count_label} label PNGs to: {label_folder}"
@@ -6500,18 +6647,13 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             self._show_empty_canvas_message()
             return
     
-        key = f"{self.current_index + 1:04}"
-    
-        # 指定 key が無ければ最初のキーへフォールバック
-        img_path = self.image_paths.get(key)
-        if not img_path:
-            first_key = sorted(self.image_paths.keys())[0]
-            key = first_key
-            try:
-                self.current_index = int(first_key) - 1
-            except Exception:
-                self.current_index = 0
-            img_path = self.image_paths[key]
+        # The UI number is the one-based position in canonical insertion order.
+        # Do not reconstruct a numeric key independently from that sequence.
+        key = self.get_current_image_key()
+        if key is None:
+            self.current_index = 0
+            key = self.get_current_image_key()
+        img_path = self.image_paths[key]
     
         filename = os.path.basename(img_path)
         self.label_status.setText(f"Displaying {filename} ({self.current_index + 1}/{len(self.image_paths)})")

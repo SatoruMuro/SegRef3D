@@ -21,9 +21,10 @@ import {
   traceRegionPath,
   transferLabel,
   zoomAroundPoint,
-} from "./core.mjs?v=27";
+} from "./core.mjs?v=28";
 import {
   decodeDicomSeriesAsync,
+  dicomMappingPreview,
   groupDicomSeries,
   isNiftiFilename,
   isTiffFilename,
@@ -31,16 +32,16 @@ import {
   parseNiftiLabelVolume,
   parseNiftiVolume,
   parseTiffStack,
-} from "./medical-io.mjs?v=22";
+} from "./medical-io.mjs?v=23";
 import {
   axisAlignedAffine,
   geometryWithSpacing,
   makeVolumeGeometry,
   transformGeometryForPreparedImage,
   upsampleGeometryAlongK,
-} from "./medical-geometry.mjs?v=2";
+} from "./medical-geometry.mjs?v=3";
 import { demoDatasetById } from "./demo-datasets.mjs?v=4";
-import { clearProjectMasks, loadMask, saveMask } from "./storage.mjs?v=25";
+import { clearProjectMasks, loadMask, saveMask } from "./storage.mjs?v=26";
 import { createZip, parseZip } from "./zip.mjs?v=25";
 import {
   SEGMENTATION_RESULT_KIND,
@@ -92,7 +93,19 @@ import {
   createTrainingCaseEntries,
   createTrainingCaseId,
   prepareTrainingSourceChannels,
-} from "./training-export.mjs?v=1";
+} from "./training-export.mjs?v=2";
+import {
+  MASK_MANIFEST_FILENAME,
+  MASK_SLICE_ORDER,
+  createLabelPngEntries,
+  exportMappingPreview,
+  maskManifestBlob,
+  validateMaskManifest,
+} from "./mask-sequence.mjs?v=1";
+
+const DEBUG_SLICE_MAPPING = new URLSearchParams(
+  globalThis.location?.search || "",
+).get("debugSliceMapping") === "1";
 
 try {
   upgradeWorkspaceLayout();
@@ -1202,7 +1215,11 @@ async function autosave(image, message = "Autosaved in browser") {
   setSaveState("Saving…", "saving");
   state.saveQueue = state.saveQueue.then(async () => {
     try {
-      await saveMask(state.projectId, image.name, image.width, image.height, snapshot);
+      const zIndex = state.images.indexOf(image);
+      await saveMask(state.projectId, image.name, image.width, image.height, snapshot, {
+        zIndex,
+        sliceOrder: MASK_SLICE_ORDER,
+      });
       setSaveState(message, "saved");
     } catch (error) {
       console.error(error);
@@ -2239,22 +2256,22 @@ function downloadBlob(blob, filename) {
   setTimeout(() => URL.revokeObjectURL(url), 3000);
 }
 
-async function labelPngBlob(image) {
-  const canvas = document.createElement("canvas");
-  canvas.width = image.width;
-  canvas.height = image.height;
-  const outputContext = canvas.getContext("2d");
-  const pixels = outputContext.createImageData(image.width, image.height);
-  for (let index = 0; index < image.mask.length; index += 1) {
-    const value = image.mask[index];
-    const offset = index * 4;
-    pixels.data[offset] = value;
-    pixels.data[offset + 1] = value;
-    pixels.data[offset + 2] = value;
-    pixels.data[offset + 3] = 255;
-  }
-  outputContext.putImageData(pixels, 0, 0);
-  return canvasToBlob(canvas);
+function logMaskExportMapping(destination) {
+  if (!DEBUG_SLICE_MAPPING) return;
+  let message =
+    `[SegRef3D] ${destination} export mapping (${state.images.length} canonical slices):\n` +
+      exportMappingPreview(state.images).map((line) => `  ${line}`).join("\n");
+  const indices = [...new Set([0, 1, 49, 99, 399, state.images.length - 1])]
+    .filter((index) => index >= 0 && index < state.images.length);
+  const dicomLines = indices
+    .filter((index) => state.images[index].dicom)
+    .map((index) => {
+      const image = state.images[index];
+      return `  UI display ${index + 1} -> canonical z=${index} -> ${maskFilename(index)} ` +
+        `-> source=${image.dicom.sourceFilename} -> InstanceNumber=${image.dicom.instanceNumber ?? "unavailable"}`;
+    });
+  if (dicomLines.length > 0) message += `\n[SegRef3D] ${destination} DICOM source mapping:\n${dicomLines.join("\n")}`;
+  console.debug(message);
 }
 
 async function overlayPngBlob(image) {
@@ -2272,23 +2289,28 @@ async function exportSequence(kind) {
   if (state.images.length === 0 || state.loading) return;
   setLoading(true, kind === "labels" ? "Exporting label PNG" : "Exporting overlay PNG", "Preparing files");
   try {
-    const entries = [];
-    for (let index = 0; index < state.images.length; index += 1) {
-      const image = state.images[index];
-      elements.loadingDetail.textContent = `${index + 1} / ${state.images.length}`;
-      const blob = kind === "labels" ? await labelPngBlob(image) : await overlayPngBlob(image);
-      entries.push({
-        name: kind === "labels" ? maskFilename(index) : overlayFilename(index),
-        blob,
+    let entries = [];
+    if (kind === "labels") {
+      logMaskExportMapping("Label PNG");
+      entries = await createLabelPngEntries(state.images, {
+        onProgress(completed, total) {
+          elements.loadingDetail.textContent = `${completed} / ${total}`;
+        },
       });
-      await new Promise((resolve) => setTimeout(resolve, 0));
+    } else {
+      for (let index = 0; index < state.images.length; index += 1) {
+        const image = state.images[index];
+        elements.loadingDetail.textContent = `${index + 1} / ${state.images.length}`;
+        entries.push({ name: overlayFilename(index), blob: await overlayPngBlob(image) });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
     }
     elements.loadingDetail.textContent = "Creating ZIP";
     const zip = await createZip(entries);
     const prefix = kind === "labels" ? "label_png" : "overlay_png";
     const filename = `${outputFileStem()}_${prefix}_${timestamp()}.zip`;
     downloadBlob(zip, filename);
-    setStatus(`Exported ${entries.length} ${kind === "labels" ? "label" : "overlay"} PNGs.`);
+    setStatus(`Exported ${state.images.length} ${kind === "labels" ? "label" : "overlay"} PNGs.`);
     showToast(`Downloaded ${filename}`);
   } catch (error) {
     console.error(error);
@@ -2327,6 +2349,7 @@ async function exportLabelVolume(format, factor = 1) {
   closeToolsDockOnNarrow();
   setLoading(true, `Exporting ${format.toUpperCase()}`, "Preparing label volume");
   try {
+    logMaskExportMapping(`${format.toUpperCase()} label volume`);
     const { masks, width, height, geometry } = labelVolumeGeometry();
     let exportMasks = masks;
     let exportGeometry = geometry;
@@ -2383,6 +2406,7 @@ async function exportTrainingDataZip() {
 
   setLoading(true, "Preparing training data…", "Validating geometry…");
   try {
+    logMaskExportMapping("Training Data ZIP");
     const { masks, width, height, geometry } = labelVolumeGeometry();
     const hasForeground = masks.some((mask) => mask.some((value) => value !== 0));
     if (!hasForeground && !window.confirm(
@@ -2631,6 +2655,42 @@ function selectLabelPngEntries(entries) {
   return selected.sort((left, right) => naturalCompare(left.name, right.name));
 }
 
+async function readEntryText(entry) {
+  if (entry.bytes) return new TextDecoder().decode(entry.bytes);
+  if (entry.blob?.text) return entry.blob.text();
+  throw new Error(`Cannot read ${entry.name}.`);
+}
+
+async function selectCanonicalLabelEntries(entries) {
+  const manifestEntry = entries.find(
+    (entry) => entryBasename(entry.name).toLowerCase() === MASK_MANIFEST_FILENAME,
+  );
+  if (!manifestEntry) return selectLabelPngEntries(entries);
+
+  let manifest;
+  try {
+    manifest = JSON.parse(await readEntryText(manifestEntry));
+  } catch {
+    throw new Error(`${MASK_MANIFEST_FILENAME} is not valid JSON.`);
+  }
+  validateMaskManifest(manifest);
+  const byPath = new Map(entries.map((entry) => [normalizedEntryPath(entry.name), entry]));
+  const byBasename = new Map();
+  for (const entry of entries) {
+    const basename = entryBasename(entry.name).toLowerCase();
+    if (!byBasename.has(basename)) byBasename.set(basename, []);
+    byBasename.get(basename).push(entry);
+  }
+  return manifest.files.map((file) => {
+    const normalized = normalizedEntryPath(file.filename);
+    const direct = byPath.get(normalized);
+    const basenameMatches = byBasename.get(entryBasename(file.filename).toLowerCase()) || [];
+    const entry = direct || (basenameMatches.length === 1 ? basenameMatches[0] : null);
+    if (!entry) throw new Error(`Manifest mask is missing or ambiguous: ${file.filename}`);
+    return entry;
+  });
+}
+
 async function decodeLabelPng(entry) {
   const result = await decodeImage(entry.blob, entry.name);
   try {
@@ -2790,7 +2850,7 @@ async function prepareImportedMasks(mappings) {
 }
 
 async function importLabelEntries(entries, sourceName, mode = "replace") {
-  const selected = selectLabelPngEntries(entries);
+  const selected = await selectCanonicalLabelEntries(entries);
   if (selected.length === 0) throw new Error("No label PNG files were found.");
   const importCount = Math.min(selected.length, state.images.length);
   if (
@@ -2809,6 +2869,16 @@ async function importLabelEntries(entries, sourceName, mode = "replace") {
     entry,
     image: state.images[index],
   }));
+  if (DEBUG_SLICE_MAPPING) {
+    const observed = [...new Set([0, 1, 49, 99, 399, importCount - 1])]
+      .filter((index) => index >= 0 && index < importCount)
+      .map((index) => {
+        const image = state.images[index];
+        return `  ${selected[index].name} -> canonical z=${index} -> display slice=${index + 1}` +
+          (image.dicom ? ` -> source=${image.dicom.sourceFilename}` : "");
+      });
+    console.debug(`[SegRef3D Lite] Load Masks observation:\n${observed.join("\n")}`);
+  }
   const imported = await prepareImportedMasks(mappings);
   if (!imported) {
     setStatus("Mask import canceled. Current masks were not changed.");
@@ -3061,11 +3131,13 @@ async function exportProjectZip() {
   if (state.images.length === 0 || state.loading) return;
   setLoading(true, "Exporting project ZIP", "Preparing project manifest");
   try {
+    logMaskExportMapping("Project ZIP");
     const manifest = {
       format: PROJECT_FORMAT,
       version: PROJECT_VERSION,
       createdAt: new Date().toISOString(),
       projectName: state.projectName,
+      maskManifest: MASK_MANIFEST_FILENAME,
       images: state.images.map((image, index) => ({
         name: image.name,
         width: image.width,
@@ -3102,15 +3174,18 @@ async function exportProjectZip() {
         name: "segref3d-project.json",
         blob: new Blob([JSON.stringify(manifest, null, 2)], { type: "application/json" }),
       },
+      {
+        name: MASK_MANIFEST_FILENAME,
+        blob: maskManifestBlob(state.images, { prefix: "label_png/" }),
+      },
     ];
-    for (let index = 0; index < state.images.length; index += 1) {
-      elements.loadingDetail.textContent = `Preparing ${index + 1} / ${state.images.length}`;
-      entries.push({
-        name: `label_png/${maskFilename(index)}`,
-        blob: await labelPngBlob(state.images[index]),
-      });
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    }
+    entries.push(...await createLabelPngEntries(state.images, {
+      prefix: "label_png/",
+      includeManifest: false,
+      onProgress(completed, total) {
+        elements.loadingDetail.textContent = `Preparing ${completed} / ${total}`;
+      },
+    }));
     elements.loadingDetail.textContent = "Creating ZIP";
     const zip = await createZip(entries);
     const filename = `${outputFileStem()}_SegRef3D_Project_${timestamp()}.zip`;
@@ -3794,7 +3869,10 @@ async function prepareImageSequence(
           Number(sourceSpacing[1]) * (source.height / size.height),
         ]
       : null;
-    const restored = await loadMask(projectId, source.name, width, height).catch(() => null);
+    const restored = await loadMask(projectId, source.name, width, height, {
+      zIndex: index,
+      sliceOrder: MASK_SLICE_ORDER,
+    }).catch(() => null);
     prepared.push({
       name: source.name,
       width,
@@ -3809,6 +3887,7 @@ async function prepareImageSequence(
       pixelSpacing,
       sliceSpacing: source.sliceSpacing || null,
       volumeOrigin: source.volumeOrigin || null,
+      dicom: source.dicom || null,
       sourceCanvas,
       basePixels: canvasRgba(sourceCanvas),
       trainingKind: source.trainingKind || null,
@@ -3991,6 +4070,12 @@ async function decodeDicomSources(files) {
         `Decoding DICOM ${completed} / ${total} · ${instance.name}`;
     },
   });
+  if (DEBUG_SLICE_MAPPING) {
+    console.debug(
+      `[SegRef3D Lite] DICOM load/UI mapping (${decoded.frames.length} canonical slices):\n` +
+        dicomMappingPreview(selected.items).map((line) => `  ${line}`).join("\n"),
+    );
+  }
   const sources = [];
   for (let index = 0; index < decoded.frames.length; index += 1) {
     elements.loadingDetail.textContent = `Preparing DICOM ${index + 1} / ${decoded.frames.length}`;
@@ -4010,6 +4095,7 @@ async function decodeDicomSources(files) {
       pixelSpacing: decoded.spacing.slice(0, 2),
       sliceSpacing: decoded.spacing[2],
       volumeOrigin: decoded.origin,
+      dicom: frame.dicom,
     });
     await new Promise((resolve) => setTimeout(resolve, 0));
   }

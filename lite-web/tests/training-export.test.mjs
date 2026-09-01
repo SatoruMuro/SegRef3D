@@ -145,6 +145,8 @@ test("manifest and ZIP carry the versioned one-case training layout", async () =
   assert.equal(manifest.case_id, CASE_ID);
   assert.equal(manifest.image.channels[0].file, `imagesTr/${CASE_ID}_0000.nii`);
   assert.equal(manifest.label.file, `labelsTr/${CASE_ID}.nii`);
+  assert.equal(manifest.label.slice_index_base, 1);
+  assert.equal(manifest.label.slice_order, "segref3d-canonical-v1");
   assert.deepEqual(manifest.geometry.shape, [4, 3, 2]);
   assert.equal(manifest.privacy.dicom_headers_included, false);
 });
