@@ -808,11 +808,11 @@
           <div class="tool-grid display-tool-grid">
             <label class="range-field">
               <span>Window center <output id="window-center-value">127.5</output></span>
-              <input id="window-center" type="range" min="0" max="255" step="0.5" value="127.5" />
+              <input id="window-center" type="range" min="-4096" max="4095" step="0.5" value="127.5" />
             </label>
             <label class="range-field">
               <span>Window width <output id="window-width-value">255</output></span>
-              <input id="window-width" type="range" min="1" max="510" step="1" value="255" />
+              <input id="window-width" type="range" min="1" max="8192" step="0.5" value="255" />
             </label>
             <label class="range-field">
               <span>Brightness <output id="brightness-value">0</output></span>
@@ -1098,6 +1098,6 @@
         if (status) status.textContent = `Application operation failed: ${message}`;
       });
     </script>
-    <script type="module" src="./app.mjs?v=43"></script>
+    <script type="module" src="./app.mjs?v=44"></script>
   </body>
 </html>

@@ -103,6 +103,12 @@ function uint16Bytes(value) {
   return bytes;
 }
 
+function int16Bytes(value) {
+  const bytes = new Uint8Array(2);
+  new DataView(bytes.buffer).setInt16(0, value, true);
+  return bytes;
+}
+
 function uint32Bytes(value) {
   const bytes = new Uint8Array(4);
   new DataView(bytes.buffer).setUint32(0, value, true);
@@ -196,6 +202,13 @@ function syntheticDicom(instanceNumber, pixelValues, {
   bitsStored = bitsAllocated === 8 ? 8 : 12,
   highBit = bitsStored - 1,
   pixelRepresentation = 0,
+  windowCenter = 1500,
+  windowWidth = 3001,
+  voiLutFunction = null,
+  pixelPaddingValue = null,
+  pixelPaddingRangeLimit = null,
+  rows = 2,
+  columns = 2,
 } = {}) {
   const transferSyntax = explicitElement(0x0002, 0x0010, "UI", transferSyntaxUid);
   const metaLength = explicitElement(0x0002, 0x0000, "UL", uint32Bytes(transferSyntax.length));
@@ -205,6 +218,24 @@ function syntheticDicom(instanceNumber, pixelValues, {
     if (bitsAllocated === 8) pixelView.setUint8(index, value);
     else pixelView.setUint16(index * 2, value, true);
   });
+  const optionalVoi = [];
+  if (windowCenter !== null) {
+    optionalVoi.push(explicitElement(0x0028, 0x1050, "DS", String(windowCenter)));
+  }
+  if (windowWidth !== null) {
+    optionalVoi.push(explicitElement(0x0028, 0x1051, "DS", String(windowWidth)));
+  }
+  if (voiLutFunction !== null) {
+    optionalVoi.push(explicitElement(0x0028, 0x1056, "CS", voiLutFunction));
+  }
+  const paddingVr = pixelRepresentation === 1 ? "SS" : "US";
+  const paddingBytes = pixelRepresentation === 1 ? int16Bytes : uint16Bytes;
+  if (pixelPaddingValue !== null) {
+    optionalVoi.push(explicitElement(0x0028, 0x0120, paddingVr, paddingBytes(pixelPaddingValue)));
+  }
+  if (pixelPaddingRangeLimit !== null) {
+    optionalVoi.push(explicitElement(0x0028, 0x0121, paddingVr, paddingBytes(pixelPaddingRangeLimit)));
+  }
   const dataSet = joinBytes([
     explicitElement(0x0020, 0x000e, "UI", "1.2.3.4.5"),
     explicitElement(0x0020, 0x0013, "IS", String(instanceNumber)),
@@ -213,15 +244,14 @@ function syntheticDicom(instanceNumber, pixelValues, {
     explicitElement(0x0018, 0x0050, "DS", String(sliceSpacing)),
     explicitElement(0x0028, 0x0002, "US", uint16Bytes(1)),
     explicitElement(0x0028, 0x0004, "CS", photometric),
-    explicitElement(0x0028, 0x0010, "US", uint16Bytes(2)),
-    explicitElement(0x0028, 0x0011, "US", uint16Bytes(2)),
+    explicitElement(0x0028, 0x0010, "US", uint16Bytes(rows)),
+    explicitElement(0x0028, 0x0011, "US", uint16Bytes(columns)),
     explicitElement(0x0028, 0x0030, "DS", pixelSpacing.join("\\")),
     explicitElement(0x0028, 0x0100, "US", uint16Bytes(bitsAllocated)),
     explicitElement(0x0028, 0x0101, "US", uint16Bytes(bitsStored)),
     explicitElement(0x0028, 0x0102, "US", uint16Bytes(highBit)),
     explicitElement(0x0028, 0x0103, "US", uint16Bytes(pixelRepresentation)),
-    explicitElement(0x0028, 0x1050, "DS", "1500"),
-    explicitElement(0x0028, 0x1051, "DS", "3001"),
+    ...optionalVoi,
     explicitElement(0x0028, 0x1052, "DS", String(rescaleIntercept)),
     explicitElement(0x0028, 0x1053, "DS", String(rescaleSlope)),
     pixelDataElement || explicitElement(0x7fe0, 0x0010, bitsAllocated === 8 ? "OB" : "OW", pixelBytes),
@@ -475,6 +505,111 @@ test("DICOM signed pixels and MONOCHROME1 preserve raw modality values", () => {
   assert.deepEqual(decoded.pixelValueRange, [-2058, 2036]);
   assert.equal(decoded.frames[0].pixels[0], 255);
   assert.ok(decoded.frames[0].pixels[0] > decoded.frames[0].pixels.at(-1));
+});
+
+test("DICOM series initial window uses robust DICOM presets instead of the first air slice", () => {
+  const instances = [
+    parseDicomInstance(syntheticDicom(1, [-1062, -1025, -1000, -945], {
+      pixelRepresentation: 1, bitsStored: 16, windowCenter: -1003.5, windowWidth: 117,
+    }), "air-first.dcm", dicomParser),
+    parseDicomInstance(syntheticDicom(2, [-1187, -1024, 489, 1723], {
+      pixelRepresentation: 1, bitsStored: 16, windowCenter: 268, windowWidth: 2910,
+    }), "anatomy.dcm", dicomParser),
+    parseDicomInstance(syntheticDicom(3, [-1100, -900, 300, 1200], {
+      pixelRepresentation: 1, bitsStored: 16, windowCenter: 240, windowWidth: 2682,
+    }), "anatomy-2.dcm", dicomParser),
+  ];
+  const decoded = decodeDicomSeries(instances);
+  assert.deepEqual(decoded.initialWindow, {
+    center: 240,
+    width: 2682,
+    source: "dicom-series-median",
+    dicomWindowCount: 3,
+  });
+  assert.ok(decoded.frames[1].pixels.some((value) => value > 0 && value < 255));
+  assert.notEqual(decoded.frames[1].pixels.filter((value) => value === 255).length, 4);
+});
+
+test("DICOM parses multivalue VOI settings and supports negative WC with large WW", () => {
+  const instance = parseDicomInstance(
+    syntheticDicom(1, [0, 100, 500, 1000], {
+      rescaleIntercept: -1024,
+      windowCenter: "-600\\40",
+      windowWidth: "1500\\400",
+      voiLutFunction: "LINEAR",
+    }),
+    "multivalue-window.dcm",
+    dicomParser,
+  );
+  assert.deepEqual(instance.windowCenters, [-600, 40]);
+  assert.deepEqual(instance.windowWidths, [1500, 400]);
+  assert.equal(instance.windowCenter, -600);
+  assert.equal(instance.windowWidth, 1500);
+  const decoded = decodeDicomSeries([instance]);
+  assert.equal(decoded.initialWindow.center, -600);
+  assert.equal(decoded.initialWindow.width, 1500);
+  assert.deepEqual([...decoded.frames[0].modalityPixels], [-1024, -924, -524, -24]);
+});
+
+test("DICOM auto-window excludes signed Pixel Padding when WC/WW are absent", () => {
+  const pixels = [
+    ...Array(80).fill(-2000),
+    ...Array.from({ length: 20 }, (_, index) => -1000 + index * (2000 / 19)),
+  ].map(Math.round);
+  const instance = parseDicomInstance(
+    syntheticDicom(1, pixels, {
+      rows: 10,
+      columns: 10,
+      pixelRepresentation: 1,
+      bitsStored: 16,
+      windowCenter: null,
+      windowWidth: null,
+      pixelPaddingValue: -2000,
+    }),
+    "padding-auto-window.dcm",
+    dicomParser,
+  );
+  assert.equal(instance.pixelPaddingValue, -2000);
+  const decoded = decodeDicomSeries([instance]);
+  assert.equal(decoded.initialWindow.source, "modality-p0.5-p99.5");
+  assert.equal(decoded.modalityStatistics.minimum, -2000);
+  assert.equal(decoded.modalityStatistics.validMinimum, -1000);
+  assert.equal(decoded.modalityStatistics.validMaximum, 1000);
+  assert.equal(decoded.initialWindow.center, 0);
+  assert.equal(decoded.initialWindow.width, 2000);
+});
+
+test("compressed and uncompressed DICOM use the same modality and display window pipeline", async () => {
+  const values = [0, 100, 500, 1000];
+  const metadata = {
+    rescaleSlope: 1.5,
+    rescaleIntercept: -1024,
+    windowCenter: -600,
+    windowWidth: 1500,
+  };
+  const uncompressed = parseDicomInstance(
+    syntheticDicom(1, values, metadata),
+    "uncompressed.dcm",
+    dicomParser,
+  );
+  const compressedInput = await syntheticCompressedDicom(
+    1,
+    values,
+    "1.2.840.10008.1.2.4.70",
+    "encodeJpeg",
+    { predictor: 1, pointTransform: 0 },
+    metadata,
+  );
+  const compressed = parseDicomInstance(compressedInput, "compressed.dcm", dicomParser);
+  const codecs = await loadTestCodecs();
+  const plainVolume = decodeDicomSeries([uncompressed]);
+  const compressedVolume = await decodeDicomSeriesAsync([compressed], { parser: dicomParser, codecs });
+  assert.deepEqual(
+    [...compressedVolume.frames[0].modalityPixels],
+    [...plainVolume.frames[0].modalityPixels],
+  );
+  assert.deepEqual([...compressedVolume.frames[0].pixels], [...plainVolume.frames[0].pixels]);
+  assert.deepEqual(compressedVolume.initialWindow, plainVolume.initialWindow);
 });
 
 test("decodes lossless compressed DICOM pixels with the browser WASM codecs", async () => {

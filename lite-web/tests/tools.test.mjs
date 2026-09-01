@@ -2,11 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   adjustedRgba,
+  displayControlRange,
   hexToRgb,
+  modalityToRgba,
   rgbAt,
   rgbRaster,
   rgbToHex,
   thresholdRaster,
+  windowModalityValue,
 } from "../image-tools.mjs";
 import {
   createBinaryStl,
@@ -32,6 +35,58 @@ test("display adjustment preserves alpha and changes RGB channels", () => {
   });
   assert.deepEqual([...output], [30, 50, 70, 200, 210, 230, 250, 255]);
   assert.deepEqual([...source], [20, 40, 60, 200, 200, 220, 240, 255]);
+});
+
+test("DICOM modality renderer windows negative HU before brightness and contrast", () => {
+  const hu = new Float32Array([-1000, -600, 0, 100, 1000]);
+  const output = modalityToRgba(hu, {
+    windowCenter: -600,
+    windowWidth: 1500,
+    brightness: 0,
+    contrast: 1,
+    photometricInterpretation: "MONOCHROME2",
+  });
+  assert.deepEqual(
+    Array.from({ length: hu.length }, (_, index) => output[index * 4]),
+    [60, 128, 230, 247, 255],
+  );
+  assert.equal(windowModalityValue(-2000, -600, 1500), 0);
+  assert.equal(windowModalityValue(1000, -600, 1500), 255);
+});
+
+test("MONOCHROME1 inverts display bytes without changing modality values", () => {
+  const modality = new Float32Array([-1000, 0, 1000]);
+  const original = [...modality];
+  const mono2 = modalityToRgba(modality, {
+    windowCenter: 0,
+    windowWidth: 2000,
+    photometricInterpretation: "MONOCHROME2",
+  });
+  const mono1 = modalityToRgba(modality, {
+    windowCenter: 0,
+    windowWidth: 2000,
+    photometricInterpretation: "MONOCHROME1",
+  });
+  for (let index = 0; index < modality.length; index += 1) {
+    assert.equal(mono1[index * 4], 255 - mono2[index * 4]);
+  }
+  assert.deepEqual([...modality], original);
+});
+
+test("DICOM display controls include negative centers and widths above 255", () => {
+  assert.deepEqual(
+    displayControlRange(
+      { minimum: -1187, maximum: 1723 },
+      { windowCenter: -600, windowWidth: 1500 },
+    ),
+    {
+      centerMinimum: -1187,
+      centerMaximum: 1723,
+      centerStep: 0.5,
+      widthMaximum: 5820,
+      widthStep: 0.5,
+    },
+  );
 });
 
 test("threshold and RGB extraction produce binary rasters", () => {

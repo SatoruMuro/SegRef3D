@@ -32,7 +32,7 @@ import {
   parseNiftiLabelVolume,
   parseNiftiVolume,
   parseTiffStack,
-} from "./medical-io.mjs?v=23";
+} from "./medical-io.mjs?v=24";
 import {
   axisAlignedAffine,
   geometryWithSpacing,
@@ -57,12 +57,14 @@ import {
 } from "./instant3d-bridge.mjs?v=4";
 import {
   adjustedRgba,
+  displayControlRange,
   hexToRgb,
+  modalityToRgba,
   rgbAt,
   rgbRaster,
   rgbToHex,
   thresholdRaster,
-} from "./image-tools.mjs?v=25";
+} from "./image-tools.mjs?v=26";
 import {
   createBinaryStl,
   createNiftiLabelVolume,
@@ -106,6 +108,9 @@ import {
 const DEBUG_SLICE_MAPPING = new URLSearchParams(
   globalThis.location?.search || "",
 ).get("debugSliceMapping") === "1";
+const DEBUG_DICOM_DISPLAY = new URLSearchParams(
+  globalThis.location?.search || "",
+).get("debugDicomDisplay") === "1";
 
 try {
   upgradeWorkspaceLayout();
@@ -389,6 +394,8 @@ const state = {
   loading: false,
   pendingPicker: "folder",
   maskImportMode: "replace",
+  displayDefaults: { windowCenter: 127.5, windowWidth: 255, brightness: 0, contrast: 1 },
+  displayRange: { minimum: 0, maximum: 255 },
   displaySettings: { windowCenter: 127.5, windowWidth: 255, brightness: 0, contrast: 1 },
   displayVersion: 0,
   calibration: { xSpacing: 1, ySpacing: 1, zSpacing: 1, referenceLength: 10 },
@@ -902,15 +909,84 @@ function canvasRgba(canvas) {
     .getImageData(0, 0, canvas.width, canvas.height).data.slice();
 }
 
+function displayDiagnosticStatistics(length, valueAt) {
+  const values = new Float64Array(length);
+  for (let index = 0; index < length; index += 1) values[index] = valueAt(index);
+  values.sort();
+  const percentile = (percentage) => {
+    const position = (values.length - 1) * percentage / 100;
+    const lower = Math.floor(position);
+    const upper = Math.ceil(position);
+    const weight = position - lower;
+    return values[lower] * (1 - weight) + values[upper] * weight;
+  };
+  return {
+    min: values[0],
+    max: values.at(-1),
+    p0_5: percentile(0.5),
+    p1: percentile(1),
+    p50: percentile(50),
+    p99: percentile(99),
+    p99_5: percentile(99.5),
+  };
+}
+
+function logDicomDisplayDiagnostics(image, output) {
+  if (!DEBUG_DICOM_DISPLAY || !image.modalityPixels || !image.dicom) return;
+  const slope = Number(image.dicom.rescaleSlope) || 1;
+  const intercept = Number(image.dicom.rescaleIntercept) || 0;
+  const modality = displayDiagnosticStatistics(
+    image.modalityPixels.length,
+    (index) => image.modalityPixels[index],
+  );
+  const raw = displayDiagnosticStatistics(
+    image.modalityPixels.length,
+    (index) => (image.modalityPixels[index] - intercept) / slope,
+  );
+  const display = displayDiagnosticStatistics(
+    image.modalityPixels.length,
+    (index) => output[index * 4],
+  );
+  console.debug("[SegRef3D Lite] DICOM display diagnostics", {
+    slice: state.index + 1,
+    sourceFilename: image.dicom.sourceFilename,
+    raw,
+    pixelRepresentation: image.dicom.pixelRepresentation === 1 ? "signed" : "unsigned",
+    bitsAllocated: image.dicom.bitsAllocated,
+    bitsStored: image.dicom.bitsStored,
+    highBit: image.dicom.highBit,
+    rescaleSlope: slope,
+    rescaleIntercept: intercept,
+    modality,
+    dicomWindowCenter: image.dicom.windowCenters,
+    dicomWindowWidth: image.dicom.windowWidths,
+    activeWindowCenter: state.displaySettings.windowCenter,
+    activeWindowWidth: state.displaySettings.windowWidth,
+    photometricInterpretation: image.dicom.photometricInterpretation,
+    pixelPaddingValue: image.dicom.pixelPaddingValue,
+    pixelPaddingRangeLimit: image.dicom.pixelPaddingRangeLimit,
+    display,
+  });
+}
+
 function ensureDisplayImage(image) {
-  if (!image.basePixels || image.displayVersion === state.displayVersion) return;
-  const output = adjustedRgba(image.basePixels, state.displaySettings);
+  const modalityReady =
+    image.modalityPixels instanceof Float32Array &&
+    image.modalityPixels.length === image.width * image.height;
+  if ((!modalityReady && !image.basePixels) || image.displayVersion === state.displayVersion) return;
+  const output = modalityReady
+    ? modalityToRgba(image.modalityPixels, {
+        ...state.displaySettings,
+        photometricInterpretation: image.dicom?.photometricInterpretation,
+      })
+    : adjustedRgba(image.basePixels, state.displaySettings);
   const outputContext = image.sourceCanvas.getContext("2d");
   const imageData = outputContext.createImageData(image.width, image.height);
   imageData.data.set(output);
   outputContext.putImageData(imageData, 0, 0);
   image.sourcePixels = null;
   image.displayVersion = state.displayVersion;
+  if (modalityReady) logDicomDisplayDiagnostics(image, output);
 }
 
 function buildOverlay(image) {
@@ -1650,6 +1726,16 @@ function syncDisplayControls() {
   elements.contrastValue.textContent = Number(settings.contrast).toFixed(2);
 }
 
+function syncDisplayControlRanges() {
+  const range = displayControlRange(state.displayRange, state.displayDefaults);
+  elements.windowCenter.min = String(range.centerMinimum);
+  elements.windowCenter.max = String(range.centerMaximum);
+  elements.windowCenter.step = String(range.centerStep);
+  elements.windowWidth.min = "1";
+  elements.windowWidth.max = String(range.widthMaximum);
+  elements.windowWidth.step = String(range.widthStep);
+}
+
 function updateDisplaySettingsFromControls() {
   state.displaySettings = {
     windowCenter: Number(elements.windowCenter.value),
@@ -1663,8 +1749,9 @@ function updateDisplaySettingsFromControls() {
 }
 
 function resetDisplaySettings({ announce = true } = {}) {
-  state.displaySettings = { windowCenter: 127.5, windowWidth: 255, brightness: 0, contrast: 1 };
+  state.displaySettings = { ...state.displayDefaults };
   state.displayVersion += 1;
+  syncDisplayControlRanges();
   syncDisplayControls();
   render();
   if (announce) setStatus("Display settings reset.");
@@ -2928,6 +3015,7 @@ function applyProjectSettings(settings = {}) {
     contrast: Math.max(0.1, Number(savedDisplay.contrast) || 1),
   };
   state.displayVersion += 1;
+  syncDisplayControlRanges();
   state.calibration = {
     xSpacing: Number(savedCalibration.xSpacing) > 0
       ? Number(savedCalibration.xSpacing)
@@ -3862,6 +3950,10 @@ async function prepareImageSequence(
     const trainingGridUnchanged =
       source.width === size.width && source.height === size.height &&
       width === size.width && height === size.height;
+    const modalityPixels =
+      trainingGridUnchanged && source.modalityPixels instanceof Float32Array
+        ? source.modalityPixels
+        : null;
     const sourceSpacing = source.pixelSpacing;
     const pixelSpacing = sourceSpacing
       ? [
@@ -3889,7 +3981,10 @@ async function prepareImageSequence(
       volumeOrigin: source.volumeOrigin || null,
       dicom: source.dicom || null,
       sourceCanvas,
-      basePixels: canvasRgba(sourceCanvas),
+      basePixels: modalityPixels ? null : canvasRgba(sourceCanvas),
+      modalityPixels,
+      displayDefaults: source.displayDefaults || null,
+      displayRange: source.displayRange || null,
       trainingKind: source.trainingKind || null,
       trainingPixels: trainingGridUnchanged ? source.trainingPixels || null : null,
       trainingIntensityPolicy: source.trainingIntensityPolicy || null,
@@ -3950,6 +4045,13 @@ async function prepareImageSequence(
   state.projectName = projectName;
   state.activeDemoDatasetId = demoDataset?.id ?? null;
   state.visibleLabels = Array.from({ length: 21 }, (_, label) => label === 1);
+  const modalityDisplay = prepared.find((image) => image.modalityPixels && image.displayDefaults);
+  state.displayDefaults = modalityDisplay
+    ? { ...modalityDisplay.displayDefaults, brightness: 0, contrast: 1 }
+    : { windowCenter: 127.5, windowWidth: 255, brightness: 0, contrast: 1 };
+  state.displayRange = modalityDisplay?.displayRange
+    ? { ...modalityDisplay.displayRange }
+    : { minimum: 0, maximum: 255 };
   resetDisplaySettings({ announce: false });
   initializeCalibrationFromImages();
   if (demoDataset) {
@@ -4086,6 +4188,15 @@ async function decodeDicomSources(files) {
       height: frame.height,
       sourceCanvas: await medicalFrameToCanvas(frame),
       sourceFormat: "dicom",
+      modalityPixels: frame.modalityPixels || null,
+      displayDefaults: {
+        windowCenter: decoded.initialWindow.center,
+        windowWidth: decoded.initialWindow.width,
+      },
+      displayRange: {
+        minimum: decoded.modalityStatistics.minimum,
+        maximum: decoded.modalityStatistics.maximum,
+      },
       trainingKind: frame.trainingKind || null,
       trainingPixels: frame.trainingPixels || null,
       trainingIntensityPolicy: frame.trainingIntensityPolicy || null,
@@ -5220,6 +5331,7 @@ loadInstant3DCatalog();
 elements.penColorSwatch.style.background = state.penColor;
 setAutoApplyMode("off", { announce: false });
 setMaskImportMode("replace");
+syncDisplayControlRanges();
 syncDisplayControls();
 syncExtractionControls();
 syncCalibrationControls();

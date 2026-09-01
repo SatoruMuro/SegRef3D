@@ -18,6 +18,65 @@ export function adjustedRgba(
   return output;
 }
 
+export function windowModalityValue(value, windowCenter, windowWidth) {
+  const center = Number(windowCenter);
+  const width = Math.max(1, Number(windowWidth));
+  if (!Number.isFinite(value) || !Number.isFinite(center) || !Number.isFinite(width)) return 0;
+  if (width <= 1) return value > center - 0.5 ? 255 : 0;
+  const lower = center - 0.5 - (width - 1) / 2;
+  const upper = center - 0.5 + (width - 1) / 2;
+  if (value <= lower) return 0;
+  if (value > upper) return 255;
+  return clampByte(((value - (center - 0.5)) / (width - 1) + 0.5) * 255);
+}
+
+export function modalityToRgba(
+  source,
+  {
+    windowCenter,
+    windowWidth,
+    brightness = 0,
+    contrast = 1,
+    photometricInterpretation = "MONOCHROME2",
+  } = {},
+) {
+  const output = new Uint8ClampedArray(source.length * 4);
+  const invert = String(photometricInterpretation).toUpperCase() === "MONOCHROME1";
+  const displayContrast = Math.max(0.1, Number(contrast));
+  const displayBrightness = Number(brightness);
+  for (let index = 0; index < source.length; index += 1) {
+    let display = windowModalityValue(source[index], windowCenter, windowWidth);
+    if (invert) display = 255 - display;
+    display = clampByte(
+      (display - 127.5) * displayContrast + 127.5 + displayBrightness,
+    );
+    const offset = index * 4;
+    output[offset] = display;
+    output[offset + 1] = display;
+    output[offset + 2] = display;
+    output[offset + 3] = 255;
+  }
+  return output;
+}
+
+export function displayControlRange(
+  { minimum = 0, maximum = 255 } = {},
+  { windowCenter = 127.5, windowWidth = 255 } = {},
+) {
+  const finiteMinimum = Number.isFinite(Number(minimum)) ? Number(minimum) : 0;
+  const finiteMaximum = Number.isFinite(Number(maximum)) && Number(maximum) > finiteMinimum
+    ? Number(maximum)
+    : finiteMinimum + 255;
+  const span = Math.max(1, finiteMaximum - finiteMinimum);
+  return {
+    centerMinimum: Math.floor(Math.min(finiteMinimum, Number(windowCenter))),
+    centerMaximum: Math.ceil(Math.max(finiteMaximum, Number(windowCenter))),
+    centerStep: span > 4096 ? 1 : 0.5,
+    widthMaximum: Math.ceil(Math.max(510, span * 2, Number(windowWidth) * 2)),
+    widthStep: span > 4096 ? 1 : 0.5,
+  };
+}
+
 export function thresholdRaster(source, minimum, maximum) {
   let low = Number(minimum);
   let high = Number(maximum);

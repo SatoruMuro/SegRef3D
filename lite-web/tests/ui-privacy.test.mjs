@@ -42,11 +42,13 @@ test("offline cache uses the current UI asset generation", async () => {
   assert.match(html, /favicon\.ico/);
   assert.match(html, /apple-touch-icon\.png/);
   assert.match(html, /class="brand-icon" src="\.\/icon-192\.png"/);
-  assert.match(html, /app\.mjs\?v=43/);
-  assert.match(html, /<script type="module" src="\.\/app\.mjs\?v=43"><\/script>/);
+  assert.match(html, /app\.mjs\?v=44/);
+  assert.match(html, /<script type="module" src="\.\/app\.mjs\?v=44"><\/script>/);
+  assert.match(html, /id="window-center"[^>]+min="-4096"[^>]+max="4095"/);
+  assert.match(html, /id="window-width"[^>]+max="8192"/);
   assert.match(html, /TutorialSegRef3DLiteEN\.html/);
   assert.match(html, /AskAISegRef3D\.html/);
-  assert.match(worker, /segref3d-lite-web-v46/);
+  assert.match(worker, /segref3d-lite-web-v47/);
   assert.match(worker, /medical-geometry\.mjs\?v=3/);
   assert.match(worker, /mask-tools\.mjs\?v=20/);
   assert.match(worker, /styles\.css\?v=32/);
@@ -54,8 +56,9 @@ test("offline cache uses the current UI asset generation", async () => {
   assert.match(worker, /apple-touch-icon\.png/);
   assert.match(worker, /icon-192\.png/);
   assert.match(worker, /icon-512\.png/);
-  assert.match(worker, /app\.mjs\?v=43/);
-  assert.match(worker, /medical-io\.mjs\?v=23/);
+  assert.match(worker, /app\.mjs\?v=44/);
+  assert.match(worker, /image-tools\.mjs\?v=26/);
+  assert.match(worker, /medical-io\.mjs\?v=24/);
   assert.match(worker, /dicom-codec\.mjs\?v=1/);
   assert.match(worker, /training-export\.mjs\?v=2/);
   assert.match(worker, /mask-sequence\.mjs\?v=1/);
@@ -86,4 +89,13 @@ test("SegRef3D Lite runtime has no image-upload or telemetry transport", async (
   assert.match(app, /url\.origin !== window\.location\.origin/);
   assert.match(app, /fetch\(url, \{ credentials: "same-origin" \}\)/);
   assert.doesNotMatch(app, /method\s*:\s*["'](?:POST|PUT|PATCH|DELETE)["']/i);
+});
+
+test("DICOM modality display diagnostics are opt-in and the renderer keeps HU until windowing", async () => {
+  const app = await readLiteWebFile("app.mjs");
+  assert.match(app, /get\("debugDicomDisplay"\) === "1"/);
+  assert.match(app, /modalityToRgba\(image\.modalityPixels/);
+  assert.match(app, /displayDefaults: \{[\s\S]*windowCenter: decoded\.initialWindow\.center/);
+  assert.match(app, /displayRange: \{[\s\S]*minimum: decoded\.modalityStatistics\.minimum/);
+  assert.doesNotMatch(app, /DEBUG_DICOM_DISPLAY\s*=\s*true/);
 });

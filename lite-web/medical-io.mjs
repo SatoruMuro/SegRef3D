@@ -130,6 +130,12 @@ function uint16(dataSet, tag, fallback = null) {
   return Number.isFinite(value) ? value : fallback;
 }
 
+function storedTagNumber(dataSet, tag, pixelRepresentation, fallback = null) {
+  const getter = pixelRepresentation === 1 ? "int16" : "uint16";
+  const value = dataSet[getter]?.(tag);
+  return Number.isFinite(value) ? value : fallback;
+}
+
 function normalizedUid(value) {
   return (value || "").replace(/\0/g, "").trim();
 }
@@ -215,7 +221,7 @@ function uncompressedFrameBytes(instance, frameIndex) {
   return instance.dataSet.byteArray.subarray(start, end);
 }
 
-function storedPixelValue(instance, view, byteOffset, littleEndian) {
+function storedRawPixelValue(instance, view, byteOffset, littleEndian) {
   let raw =
     instance.bitsAllocated === 8
       ? view.getUint8(byteOffset)
@@ -226,25 +232,94 @@ function storedPixelValue(instance, view, byteOffset, littleEndian) {
     const signBit = 2 ** (instance.bitsStored - 1);
     if (raw >= signBit) raw -= 2 ** instance.bitsStored;
   }
+  return raw;
+}
+
+function modalityPixelValue(instance, raw) {
   return raw * instance.rescaleSlope + instance.rescaleIntercept;
 }
 
-function dicomFramesRange(rawFrames) {
+function isPixelPadding(instance, raw) {
+  if (!Number.isFinite(instance.pixelPaddingValue)) return false;
+  if (!Number.isFinite(instance.pixelPaddingRangeLimit)) return raw === instance.pixelPaddingValue;
+  const lower = Math.min(instance.pixelPaddingValue, instance.pixelPaddingRangeLimit);
+  const upper = Math.max(instance.pixelPaddingValue, instance.pixelPaddingRangeLimit);
+  return raw >= lower && raw <= upper;
+}
+
+function percentile(sorted, percentage) {
+  if (sorted.length === 0) return null;
+  const position = (sorted.length - 1) * percentage / 100;
+  const lower = Math.floor(position);
+  const upper = Math.ceil(position);
+  const weight = position - lower;
+  return sorted[lower] * (1 - weight) + sorted[upper] * weight;
+}
+
+function dicomFramesStatistics(rawFrames) {
   let minimum = Infinity;
   let maximum = -Infinity;
+  let validMinimum = Infinity;
+  let validMaximum = -Infinity;
+  const totalPixels = rawFrames.reduce(
+    (sum, { instance }) => sum + (instance.samplesPerPixel === 1 ? instance.rows * instance.columns : 0),
+    0,
+  );
+  const stride = Math.max(1, Math.ceil(totalPixels / 1_000_000));
+  const sampled = new Float32Array(Math.max(1, Math.ceil(totalPixels / stride)));
+  let sampleCount = 0;
+  let validIndex = 0;
   for (const { instance, bytes, littleEndian } of rawFrames) {
     if (instance.samplesPerPixel !== 1) continue;
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     const bytesPerSample = instance.bitsAllocated / 8;
     const pixelCount = instance.rows * instance.columns;
     for (let index = 0; index < pixelCount; index += 1) {
-      const value = storedPixelValue(instance, view, index * bytesPerSample, littleEndian);
+      const raw = storedRawPixelValue(instance, view, index * bytesPerSample, littleEndian);
+      const value = modalityPixelValue(instance, raw);
       if (value < minimum) minimum = value;
       if (value > maximum) maximum = value;
+      if (isPixelPadding(instance, raw)) continue;
+      if (value < validMinimum) validMinimum = value;
+      if (value > validMaximum) validMaximum = value;
+      if (validIndex % stride === 0 && sampleCount < sampled.length) {
+        sampled[sampleCount] = value;
+        sampleCount += 1;
+      }
+      validIndex += 1;
     }
   }
-  if (!Number.isFinite(minimum) || !Number.isFinite(maximum)) return { minimum: 0, maximum: 1 };
-  return { minimum, maximum };
+  if (!Number.isFinite(minimum) || !Number.isFinite(maximum)) {
+    return {
+      minimum: 0,
+      maximum: 1,
+      validMinimum: 0,
+      validMaximum: 1,
+      p0_5: 0,
+      p1: 0,
+      p50: 0.5,
+      p99: 1,
+      p99_5: 1,
+    };
+  }
+  if (!Number.isFinite(validMinimum) || !Number.isFinite(validMaximum)) {
+    validMinimum = minimum;
+    validMaximum = maximum;
+  }
+  const values = sampled.subarray(0, sampleCount);
+  values.sort();
+  const robust = values.length >= 100;
+  return {
+    minimum,
+    maximum,
+    validMinimum,
+    validMaximum,
+    p0_5: robust ? percentile(values, 0.5) : validMinimum,
+    p1: robust ? percentile(values, 1) : validMinimum,
+    p50: robust ? percentile(values, 50) : (validMinimum + validMaximum) / 2,
+    p99: robust ? percentile(values, 99) : validMaximum,
+    p99_5: robust ? percentile(values, 99.5) : validMaximum,
+  };
 }
 
 function windowedByte(value, windowCenter, windowWidth, range) {
@@ -255,18 +330,19 @@ function windowedByte(value, windowCenter, windowWidth, range) {
   return clampByte(((value - range.minimum) / (range.maximum - range.minimum)) * 255);
 }
 
-function decodeMonochromeFrame(instance, bytes, littleEndian, range, sharedWindow) {
+function decodeMonochromeFrame(instance, bytes, littleEndian, statistics, initialWindow) {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const pixelCount = instance.rows * instance.columns;
   const bytesPerSample = instance.bitsAllocated / 8;
   const pixels = new Uint8ClampedArray(pixelCount);
   const trainingPixels = new Float32Array(pixelCount);
-  const center = sharedWindow?.center ?? instance.windowCenter;
-  const width = sharedWindow?.width ?? instance.windowWidth;
+  const center = initialWindow.center;
+  const width = initialWindow.width;
   for (let index = 0; index < pixelCount; index += 1) {
-    const value = storedPixelValue(instance, view, index * bytesPerSample, littleEndian);
+    const raw = storedRawPixelValue(instance, view, index * bytesPerSample, littleEndian);
+    const value = modalityPixelValue(instance, raw);
     trainingPixels[index] = value;
-    const output = windowedByte(value, center, width, range);
+    const output = windowedByte(value, center, width, statistics);
     pixels[index] = instance.photometric === "MONOCHROME1" ? 255 - output : output;
   }
   return {
@@ -274,6 +350,7 @@ function decodeMonochromeFrame(instance, bytes, littleEndian, range, sharedWindo
     pixels,
     trainingKind: "scalar",
     trainingPixels,
+    modalityPixels: trainingPixels,
     trainingIntensityPolicy: "dicom_rescale_slope_intercept_float32",
   };
 }
@@ -311,11 +388,40 @@ function decodeColorFrame(instance, bytes) {
   };
 }
 
-function sharedDicomWindow(instances) {
-  const item = instances.find(
-    (instance) => Number.isFinite(instance.windowCenter) && instance.windowWidth > 1,
-  );
-  return item ? { center: item.windowCenter, width: item.windowWidth } : null;
+function median(values) {
+  const sorted = [...values].sort((left, right) => left - right);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
+function initialDicomWindow(instances, statistics) {
+  const windows = instances
+    .filter((instance) => Number.isFinite(instance.windowCenter) && instance.windowWidth > 1)
+    .map((instance) => ({ center: instance.windowCenter, width: instance.windowWidth }));
+  if (windows.length > 0) {
+    return {
+      center: median(windows.map((item) => item.center)),
+      width: median(windows.map((item) => item.width)),
+      source: windows.length === 1 ? "dicom" : "dicom-series-median",
+      dicomWindowCount: windows.length,
+    };
+  }
+  let lower = statistics.p0_5;
+  let upper = statistics.p99_5;
+  if (!Number.isFinite(lower) || !Number.isFinite(upper) || upper <= lower) {
+    lower = statistics.validMinimum;
+    upper = statistics.validMaximum;
+  }
+  if (!Number.isFinite(lower) || !Number.isFinite(upper) || upper <= lower) {
+    lower = statistics.minimum;
+    upper = statistics.maximum > statistics.minimum ? statistics.maximum : statistics.minimum + 1;
+  }
+  return {
+    center: (lower + upper) / 2,
+    width: Math.max(1, upper - lower),
+    source: "modality-p0.5-p99.5",
+    dicomWindowCount: 0,
+  };
 }
 
 export function isNiftiFilename(name) {
@@ -602,6 +708,9 @@ export function parseDicomInstance(input, fileName, parser = globalThis.dicomPar
     );
   }
 
+  const pixelRepresentation = uint16(dataSet, "x00280103", 0);
+  const windowCenters = numericList(dataSet, "x00281050");
+  const windowWidths = numericList(dataSet, "x00281051");
   const instance = {
     name: fileName,
     dataSet,
@@ -618,11 +727,18 @@ export function parseDicomInstance(input, fileName, parser = globalThis.dicomPar
     bitsAllocated: uint16(dataSet, "x00280100", 8),
     bitsStored: uint16(dataSet, "x00280101", uint16(dataSet, "x00280100", 8)),
     highBit: uint16(dataSet, "x00280102", uint16(dataSet, "x00280101", 8) - 1),
-    pixelRepresentation: uint16(dataSet, "x00280103", 0),
+    pixelRepresentation,
     rescaleSlope: firstNumber(dataSet, "x00281053", 1),
     rescaleIntercept: firstNumber(dataSet, "x00281052", 0),
-    windowCenter: firstNumber(dataSet, "x00281050"),
-    windowWidth: firstNumber(dataSet, "x00281051"),
+    windowCenters,
+    windowWidths,
+    windowCenter: windowCenters[0] ?? null,
+    windowWidth: windowWidths[0] ?? null,
+    voiLutFunction: (dataSet.string("x00281056") || "LINEAR").trim().toUpperCase(),
+    pixelPaddingValue: storedTagNumber(dataSet, "x00280120", pixelRepresentation),
+    pixelPaddingRangeLimit: storedTagNumber(dataSet, "x00280121", pixelRepresentation),
+    smallestImagePixelValue: storedTagNumber(dataSet, "x00280106", pixelRepresentation),
+    largestImagePixelValue: storedTagNumber(dataSet, "x00280107", pixelRepresentation),
     seriesUid: normalizedUid(dataSet.string("x0020000e")) || "default-series",
     seriesNumber: firstInteger(dataSet, "x00200011", 0),
     seriesDescription: (dataSet.string("x0008103e") || "").trim(),
@@ -826,8 +942,8 @@ async function decodeCompressedFrame(instance, frameIndex, parser, suppliedCodec
 }
 
 function decodedDicomVolume(ordered, rawFrames) {
-  const range = dicomFramesRange(rawFrames);
-  const window = sharedDicomWindow(ordered);
+  const statistics = dicomFramesStatistics(rawFrames);
+  const initialWindow = initialDicomWindow(ordered, statistics);
   const frames = rawFrames.map(({ instance, frameIndex, bytes, littleEndian }) => {
     const common = {
       name: dicomFrameName(instance.name, frameIndex, instance.frameCount),
@@ -841,12 +957,29 @@ function decodedDicomVolume(ordered, rawFrames) {
         imagePositionPatient: [...instance.imagePosition],
         imageOrientationPatient: [...instance.imageOrientation],
         projectedPosition: Number.isFinite(instance.sortCoordinate) ? instance.sortCoordinate : null,
+        bitsAllocated: instance.bitsAllocated,
+        bitsStored: instance.bitsStored,
+        highBit: instance.highBit,
+        pixelRepresentation: instance.pixelRepresentation,
+        samplesPerPixel: instance.samplesPerPixel,
+        photometricInterpretation: instance.photometric,
+        rescaleSlope: instance.rescaleSlope,
+        rescaleIntercept: instance.rescaleIntercept,
+        windowCenters: [...instance.windowCenters],
+        windowWidths: [...instance.windowWidths],
+        windowCenter: instance.windowCenter,
+        windowWidth: instance.windowWidth,
+        voiLutFunction: instance.voiLutFunction,
+        pixelPaddingValue: instance.pixelPaddingValue,
+        pixelPaddingRangeLimit: instance.pixelPaddingRangeLimit,
+        smallestImagePixelValue: instance.smallestImagePixelValue,
+        largestImagePixelValue: instance.largestImagePixelValue,
       },
     };
     if (instance.samplesPerPixel === 1) {
       return {
         ...common,
-        ...decodeMonochromeFrame(instance, bytes, littleEndian, range, window),
+        ...decodeMonochromeFrame(instance, bytes, littleEndian, statistics, initialWindow),
       };
     }
     return { ...common, ...decodeColorFrame(instance, bytes) };
@@ -873,7 +1006,9 @@ function decodedDicomVolume(ordered, rawFrames) {
     affine: geometry?.affine || null,
     geometry,
     geometryWarnings,
-    pixelValueRange: [range.minimum, range.maximum],
+    pixelValueRange: [statistics.minimum, statistics.maximum],
+    modalityStatistics: statistics,
+    initialWindow,
     frames,
   };
 }

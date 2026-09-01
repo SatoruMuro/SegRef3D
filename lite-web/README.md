@@ -222,8 +222,14 @@ cannot restore information already discarded by lossy compression.
 - DICOM Bits Allocated/Stored, High Bit, signed/unsigned representation, window center/width, and
   rescale slope/intercept are applied after decompression. MONOCHROME1 is inverted for display only;
   raw/training scalar values are not inverted.
+- DICOM modality values remain `Float32Array` data through rendering. The initial window uses the
+  median of valid per-slice DICOM window presets, avoiding a scout/air-only first slice from clipping
+  the whole series. If WC/WW are absent, a padding-excluded p0.5-p99.5 modality window is used.
+- Window controls expand to the loaded modality range, including negative centers and widths above
+  255. Add `?debugDicomDisplay=1` to log raw, modality, DICOM-window, active-window, and display
+  statistics for the currently rendered DICOM slice.
 - NIfTI slope/intercept are applied before grayscale display conversion
-- Post-load display and threshold values operate on the normalized 0-255 image used by the editor
+- JPG/PNG and extraction tools continue to operate on the normalized 0-255 editor image.
 
 Deflated Explicit VR Little Endian, JPEG Extended 12-bit, JPEG 2000 Part 2 multicomponent, MPEG,
 and other unlisted transfer syntaxes are rejected with their UID instead of being rendered
