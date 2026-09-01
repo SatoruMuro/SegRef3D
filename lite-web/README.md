@@ -152,11 +152,11 @@ the existing Obj IDs without renumbering. Image channels, labelmap, spacing, ori
 and affine are re-parsed and compared before download.
 
 For scalar NIfTI with unchanged working geometry, the exact source `.nii`/`.nii.gz` bytes are reused.
-Uncompressed monochrome DICOM is exported as Float32 after stored-value × rescale-slope +
-rescale-intercept; DICOM headers are never included. The current TIFF loader converts high-bit-depth
+Monochrome DICOM, including supported compressed frames, is exported as Float32 after lossless
+pixel decoding and stored-value × rescale-slope + rescale-intercept; DICOM headers are never
+included. The current TIFF loader converts high-bit-depth
 TIFF to an 8-bit working image, so Training export requires explicit confirmation and records this
 limitation in `intensity_policy` and `warnings` rather than claiming original intensity retention.
-Compressed DICOM frames whose scalar pixels cannot be recovered losslessly are rejected.
 
 Training ZIPs are not anonymous data. DICOM headers and automatically copied patient identifiers
 are excluded, but image pixels/voxels may contain burned-in text, facial or unique anatomy, and
@@ -188,15 +188,42 @@ the entire loaded project after confirmation.
 
 ### Medical image support
 
-- DICOM: uncompressed Implicit VR Little Endian, Explicit VR Little Endian, Explicit VR Big
-  Endian, and browser-decodable JPEG Baseline frames
+#### Supported DICOM Transfer Syntax
+
+| Transfer Syntax UID | Name | Pixel decoder |
+| --- | --- | --- |
+| `1.2.840.10008.1.2` | Implicit VR Little Endian | Native typed-array reader |
+| `1.2.840.10008.1.2.1` | Explicit VR Little Endian | Native typed-array reader |
+| `1.2.840.10008.1.2.2` | Explicit VR Big Endian | Native typed-array reader |
+| `1.2.840.10008.1.2.5` | RLE Lossless | dcmjs-codecs WASM |
+| `1.2.840.10008.1.2.4.50` | JPEG Baseline (Process 1) | dcmjs-codecs WASM |
+| `1.2.840.10008.1.2.4.57` | JPEG Lossless (Process 14) | dcmjs-codecs WASM |
+| `1.2.840.10008.1.2.4.70` | JPEG Lossless (Process 14, Selection Value 1) | dcmjs-codecs WASM |
+| `1.2.840.10008.1.2.4.80` | JPEG-LS Lossless | dcmjs-codecs WASM (CharLS) |
+| `1.2.840.10008.1.2.4.81` | JPEG-LS Near-Lossless | dcmjs-codecs WASM (CharLS) |
+| `1.2.840.10008.1.2.4.90` | JPEG 2000 Lossless | dcmjs-codecs WASM (OpenJPEG) |
+| `1.2.840.10008.1.2.4.91` | JPEG 2000 | dcmjs-codecs WASM (OpenJPEG) |
+
+Automated tests decode RLE, both JPEG Lossless UIDs, JPEG-LS, and JPEG 2000 into scalar arrays and
+verify dimensions, min/max, pixel values, slice order, and spacing. JPEG Baseline, JPEG-LS
+Near-Lossless, and lossy JPEG 2000 retain the values represented by the compressed bitstream, but
+cannot restore information already discarded by lossy compression.
+
 - NIfTI: common integer and floating-point scalar datatypes plus RGB/RGBA volumes
-- DICOM window center/width and rescale slope/intercept are applied when available
+- DICOM Bits Allocated/Stored, High Bit, signed/unsigned representation, window center/width, and
+  rescale slope/intercept are applied after decompression. MONOCHROME1 is inverted for display only;
+  raw/training scalar values are not inverted.
 - NIfTI slope/intercept are applied before grayscale display conversion
 - Post-load display and threshold values operate on the normalized 0-255 image used by the editor
 
-JPEG-LS, JPEG 2000, RLE, other compressed DICOM transfer syntaxes, and 4D NIfTI volumes are
-currently rejected with a clear error instead of being rendered incorrectly.
+Deflated Explicit VR Little Endian, JPEG Extended 12-bit, JPEG 2000 Part 2 multicomponent, MPEG,
+and other unlisted transfer syntaxes are rejected with their UID instead of being rendered
+incorrectly. 4D NIfTI volumes are also rejected.
+
+The codec scripts and `dcmjs-native-codecs.wasm` are loaded from `lite-web/vendor/` only when a
+compressed series is selected. URLs are resolved relative to `dicom-codec.mjs`, so the GitHub Pages
+repository base path is preserved. The service worker caches these same-origin files after first
+use; no DICOM bytes or metadata are uploaded.
 
 ### Seg Anything workflow
 

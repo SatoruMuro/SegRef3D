@@ -23,7 +23,7 @@ import {
   zoomAroundPoint,
 } from "./core.mjs?v=27";
 import {
-  decodeDicomSeries,
+  decodeDicomSeriesAsync,
   groupDicomSeries,
   isNiftiFilename,
   isTiffFilename,
@@ -31,7 +31,7 @@ import {
   parseNiftiLabelVolume,
   parseNiftiVolume,
   parseTiffStack,
-} from "./medical-io.mjs?v=21";
+} from "./medical-io.mjs?v=22";
 import {
   axisAlignedAffine,
   geometryWithSpacing,
@@ -3985,7 +3985,12 @@ async function decodeDicomSources(files) {
   }
   const selected = chooseDicomSeries(groupDicomSeries(instances));
   if (!selected) return null;
-  const decoded = decodeDicomSeries(selected.items);
+  const decoded = await decodeDicomSeriesAsync(selected.items, {
+    onProgress: (completed, total, instance) => {
+      elements.loadingDetail.textContent =
+        `Decoding DICOM ${completed} / ${total} · ${instance.name}`;
+    },
+  });
   const sources = [];
   for (let index = 0; index < decoded.frames.length; index += 1) {
     elements.loadingDetail.textContent = `Preparing DICOM ${index + 1} / ${decoded.frames.length}`;
@@ -4001,7 +4006,7 @@ async function decodeDicomSources(files) {
       trainingIntensityPolicy: frame.trainingIntensityPolicy || null,
       trainingUnavailableReason: frame.trainingKind
         ? null
-        : "This compressed DICOM frame does not expose lossless scalar voxel values for training export.",
+        : "This DICOM frame does not expose scalar voxel values for training export.",
       pixelSpacing: decoded.spacing.slice(0, 2),
       sliceSpacing: decoded.spacing[2],
       volumeOrigin: decoded.origin,

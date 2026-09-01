@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
+import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import test from "node:test";
 import { gzipSync } from "node:zlib";
 
 import {
   decodeDicomSeries,
+  decodeDicomSeriesAsync,
+  dicomTransferSyntaxName,
   groupDicomSeries,
   isNiftiFilename,
   isTiffFilename,
@@ -17,6 +20,36 @@ import { createNiftiLabelVolume, createTiffLabelStack } from "../volume-tools.mj
 
 const require = createRequire(import.meta.url);
 const dicomParser = require("../vendor/dicom-parser.min.js");
+let testCodecsPromise = null;
+
+function loadTestCodecs() {
+  if (!testCodecsPromise) {
+    testCodecsPromise = (async () => {
+      const dcmjs = require("../vendor/dcmjs.min.js");
+      const Module = require("node:module");
+      const originalLoad = Module._load;
+      Module._load = function loadWithVendoredDcmjs(request, parent, isMain) {
+        if (request === "dcmjs") return dcmjs;
+        return originalLoad.call(this, request, parent, isMain);
+      };
+      let codecs;
+      try {
+        codecs = require("../vendor/dcmjs-codecs.min.js");
+      } finally {
+        Module._load = originalLoad;
+      }
+      if (!codecs.NativeCodecs.isInitialized()) {
+        await codecs.NativeCodecs.initializeAsync({
+          webAssemblyModulePathOrUrl: fileURLToPath(
+            new URL("../vendor/dcmjs-native-codecs.wasm", import.meta.url),
+          ),
+        });
+      }
+      return codecs;
+    })();
+  }
+  return testCodecsPromise;
+}
 
 function syntheticNifti({ timePoints = 1 } = {}) {
   const width = 3;
@@ -89,6 +122,53 @@ function explicitElement(group, element, vr, rawValue) {
   return output;
 }
 
+function explicitBigEndianElement(group, element, vr, rawValue) {
+  const value = evenBytes(rawValue, vr);
+  const longVr = ["OB", "OD", "OF", "OL", "OW", "SQ", "UC", "UN", "UR", "UT"].includes(vr);
+  const headerLength = longVr ? 12 : 8;
+  const output = new Uint8Array(headerLength + value.length);
+  const view = new DataView(output.buffer);
+  view.setUint16(0, group, false);
+  view.setUint16(2, element, false);
+  output.set(new TextEncoder().encode(vr), 4);
+  if (longVr) view.setUint32(8, value.length, false);
+  else view.setUint16(6, value.length, false);
+  output.set(value, headerLength);
+  return output;
+}
+
+function uint16BigEndianBytes(value) {
+  const bytes = new Uint8Array(2);
+  new DataView(bytes.buffer).setUint16(0, value, false);
+  return bytes;
+}
+
+function encapsulatedPixelElement(encodedFrame, emptyOffsetTable = false) {
+  const frame = evenBytes(encodedFrame, "OB");
+  const header = new Uint8Array(12);
+  const headerView = new DataView(header.buffer);
+  headerView.setUint16(0, 0x7fe0, true);
+  headerView.setUint16(2, 0x0010, true);
+  header.set(new TextEncoder().encode("OB"), 4);
+  headerView.setUint32(8, 0xffffffff, true);
+  const item = (payload) => {
+    const output = new Uint8Array(8 + payload.length);
+    const view = new DataView(output.buffer);
+    view.setUint16(0, 0xfffe, true);
+    view.setUint16(2, 0xe000, true);
+    view.setUint32(4, payload.length, true);
+    output.set(payload, 8);
+    return output;
+  };
+  const offsetTable = item(emptyOffsetTable ? new Uint8Array() : uint32Bytes(0));
+  const fragment = item(frame);
+  const delimiter = new Uint8Array(8);
+  const delimiterView = new DataView(delimiter.buffer);
+  delimiterView.setUint16(0, 0xfffe, true);
+  delimiterView.setUint16(2, 0xe0dd, true);
+  return joinBytes([header, offsetTable, fragment, delimiter]);
+}
+
 function joinBytes(parts) {
   const length = parts.reduce((sum, part) => sum + part.length, 0);
   const output = new Uint8Array(length);
@@ -107,12 +187,22 @@ function syntheticDicom(instanceNumber, pixelValues, {
   sliceSpacing = 2,
   rescaleSlope = 1,
   rescaleIntercept = 0,
+  transferSyntaxUid = "1.2.840.10008.1.2.1",
+  pixelDataElement = null,
+  photometric = "MONOCHROME2",
+  bitsAllocated = 16,
+  bitsStored = bitsAllocated === 8 ? 8 : 12,
+  highBit = bitsStored - 1,
+  pixelRepresentation = 0,
 } = {}) {
-  const transferSyntax = explicitElement(0x0002, 0x0010, "UI", "1.2.840.10008.1.2.1");
+  const transferSyntax = explicitElement(0x0002, 0x0010, "UI", transferSyntaxUid);
   const metaLength = explicitElement(0x0002, 0x0000, "UL", uint32Bytes(transferSyntax.length));
-  const pixelBytes = new Uint8Array(pixelValues.length * 2);
+  const pixelBytes = new Uint8Array(pixelValues.length * (bitsAllocated / 8));
   const pixelView = new DataView(pixelBytes.buffer);
-  pixelValues.forEach((value, index) => pixelView.setUint16(index * 2, value, true));
+  pixelValues.forEach((value, index) => {
+    if (bitsAllocated === 8) pixelView.setUint8(index, value);
+    else pixelView.setUint16(index * 2, value, true);
+  });
   const dataSet = joinBytes([
     explicitElement(0x0020, 0x000e, "UI", "1.2.3.4.5"),
     explicitElement(0x0020, 0x0013, "IS", String(instanceNumber)),
@@ -120,19 +210,83 @@ function syntheticDicom(instanceNumber, pixelValues, {
     explicitElement(0x0020, 0x0037, "DS", orientation.join("\\")),
     explicitElement(0x0018, 0x0050, "DS", String(sliceSpacing)),
     explicitElement(0x0028, 0x0002, "US", uint16Bytes(1)),
-    explicitElement(0x0028, 0x0004, "CS", "MONOCHROME2"),
+    explicitElement(0x0028, 0x0004, "CS", photometric),
     explicitElement(0x0028, 0x0010, "US", uint16Bytes(2)),
     explicitElement(0x0028, 0x0011, "US", uint16Bytes(2)),
     explicitElement(0x0028, 0x0030, "DS", pixelSpacing.join("\\")),
-    explicitElement(0x0028, 0x0100, "US", uint16Bytes(16)),
-    explicitElement(0x0028, 0x0101, "US", uint16Bytes(12)),
-    explicitElement(0x0028, 0x0102, "US", uint16Bytes(11)),
-    explicitElement(0x0028, 0x0103, "US", uint16Bytes(0)),
+    explicitElement(0x0028, 0x0100, "US", uint16Bytes(bitsAllocated)),
+    explicitElement(0x0028, 0x0101, "US", uint16Bytes(bitsStored)),
+    explicitElement(0x0028, 0x0102, "US", uint16Bytes(highBit)),
+    explicitElement(0x0028, 0x0103, "US", uint16Bytes(pixelRepresentation)),
     explicitElement(0x0028, 0x1050, "DS", "1500"),
     explicitElement(0x0028, 0x1051, "DS", "3001"),
     explicitElement(0x0028, 0x1052, "DS", String(rescaleIntercept)),
     explicitElement(0x0028, 0x1053, "DS", String(rescaleSlope)),
-    explicitElement(0x7fe0, 0x0010, "OW", pixelBytes),
+    pixelDataElement || explicitElement(0x7fe0, 0x0010, bitsAllocated === 8 ? "OB" : "OW", pixelBytes),
+  ]);
+  const preamble = new Uint8Array(132);
+  preamble.set([0x44, 0x49, 0x43, 0x4d], 128);
+  return joinBytes([preamble, metaLength, transferSyntax, dataSet]).buffer;
+}
+
+async function syntheticCompressedDicom(
+  instanceNumber,
+  pixelValues,
+  transferSyntaxUid,
+  encoderName,
+  encoderOptions = {},
+  metadata = {},
+) {
+  const codecs = await loadTestCodecs();
+  const bitsAllocated = metadata.bitsAllocated || 16;
+  const bitsStored = metadata.bitsStored || (bitsAllocated === 8 ? 8 : 12);
+  const decodedBuffer = new Uint8Array(pixelValues.length * (bitsAllocated / 8));
+  const view = new DataView(decodedBuffer.buffer);
+  pixelValues.forEach((value, index) => {
+    if (bitsAllocated === 8) view.setUint8(index, value);
+    else view.setUint16(index * 2, value, true);
+  });
+  const context = new codecs.Context({
+    width: 2,
+    height: 2,
+    bitsAllocated,
+    bitsStored,
+    samplesPerPixel: 1,
+    pixelRepresentation: 0,
+    planarConfiguration: 0,
+    photometricInterpretation: "MONOCHROME2",
+    decodedBuffer,
+  });
+  const encoded = codecs.NativeCodecs[encoderName](context, encoderOptions).getEncodedBuffer();
+  return syntheticDicom(instanceNumber, pixelValues, {
+    ...metadata,
+    transferSyntaxUid,
+    pixelDataElement: encapsulatedPixelElement(encoded, metadata.emptyOffsetTable === true),
+  });
+}
+
+function syntheticBigEndianDicom(pixelValues) {
+  const transferSyntax = explicitElement(0x0002, 0x0010, "UI", "1.2.840.10008.1.2.2");
+  const metaLength = explicitElement(0x0002, 0x0000, "UL", uint32Bytes(transferSyntax.length));
+  const pixelBytes = new Uint8Array(pixelValues.length * 2);
+  const pixelView = new DataView(pixelBytes.buffer);
+  pixelValues.forEach((value, index) => pixelView.setUint16(index * 2, value, false));
+  const dataSet = joinBytes([
+    explicitBigEndianElement(0x0020, 0x000e, "UI", "1.2.3.4.6"),
+    explicitBigEndianElement(0x0020, 0x0013, "IS", "1"),
+    explicitBigEndianElement(0x0020, 0x0032, "DS", "10\\20\\30"),
+    explicitBigEndianElement(0x0020, 0x0037, "DS", "1\\0\\0\\0\\1\\0"),
+    explicitBigEndianElement(0x0018, 0x0050, "DS", "2"),
+    explicitBigEndianElement(0x0028, 0x0002, "US", uint16BigEndianBytes(1)),
+    explicitBigEndianElement(0x0028, 0x0004, "CS", "MONOCHROME2"),
+    explicitBigEndianElement(0x0028, 0x0010, "US", uint16BigEndianBytes(2)),
+    explicitBigEndianElement(0x0028, 0x0011, "US", uint16BigEndianBytes(2)),
+    explicitBigEndianElement(0x0028, 0x0030, "DS", "0.5\\0.75"),
+    explicitBigEndianElement(0x0028, 0x0100, "US", uint16BigEndianBytes(16)),
+    explicitBigEndianElement(0x0028, 0x0101, "US", uint16BigEndianBytes(12)),
+    explicitBigEndianElement(0x0028, 0x0102, "US", uint16BigEndianBytes(11)),
+    explicitBigEndianElement(0x0028, 0x0103, "US", uint16BigEndianBytes(0)),
+    explicitBigEndianElement(0x7fe0, 0x0010, "OW", pixelBytes),
   ]);
   const preamble = new Uint8Array(132);
   preamble.set([0x44, 0x49, 0x43, 0x4d], 128);
@@ -278,6 +432,18 @@ test("parses extensionless uncompressed DICOM and windows grayscale pixels", () 
   assert.deepEqual([...series.frames[0].pixels], [0, 85, 170, 255]);
 });
 
+test("decodes Explicit VR Big Endian stored pixels without byte swapping errors", () => {
+  const instance = parseDicomInstance(
+    syntheticBigEndianDicom([0, 1000, 2000, 4095]),
+    "big-endian.dcm",
+    dicomParser,
+  );
+  assert.equal(instance.transferSyntax, "1.2.840.10008.1.2.2");
+  const volume = decodeDicomSeries([instance]);
+  assert.deepEqual(volume.pixelValueRange, [0, 4095]);
+  assert.deepEqual([...volume.frames[0].trainingPixels], [0, 1000, 2000, 4095]);
+});
+
 test("DICOM training pixels preserve slope/intercept scalar values instead of windowed bytes", () => {
   const instance = parseDicomInstance(
     syntheticDicom(1, [0, 100, 500, 1000], { rescaleSlope: 2, rescaleIntercept: -1024 }),
@@ -289,6 +455,173 @@ test("DICOM training pixels preserve slope/intercept scalar values instead of wi
   assert.deepEqual([...decoded.frames[0].trainingPixels], [-1024, -824, -24, 976]);
   assert.equal(decoded.frames[0].trainingIntensityPolicy, "dicom_rescale_slope_intercept_float32");
   assert.notDeepEqual([...decoded.frames[0].pixels], [...decoded.frames[0].trainingPixels]);
+});
+
+test("DICOM signed pixels and MONOCHROME1 preserve raw modality values", () => {
+  const instance = parseDicomInstance(
+    syntheticDicom(1, [-1024, -1, 0, 1023], {
+      pixelRepresentation: 1,
+      photometric: "MONOCHROME1",
+      rescaleSlope: 2,
+      rescaleIntercept: -10,
+    }),
+    "signed-monochrome1.dcm",
+    dicomParser,
+  );
+  const decoded = decodeDicomSeries([instance]);
+  assert.deepEqual([...decoded.frames[0].trainingPixels], [-2058, -12, -10, 2036]);
+  assert.deepEqual(decoded.pixelValueRange, [-2058, 2036]);
+  assert.equal(decoded.frames[0].pixels[0], 255);
+  assert.ok(decoded.frames[0].pixels[0] > decoded.frames[0].pixels.at(-1));
+});
+
+test("decodes lossless compressed DICOM pixels with the browser WASM codecs", async () => {
+  const cases = [
+    {
+      name: "RLE Lossless",
+      uid: "1.2.840.10008.1.2.5",
+      encoder: "encodeRle",
+    },
+    {
+      name: "JPEG Lossless Process 14",
+      uid: "1.2.840.10008.1.2.4.57",
+      encoder: "encodeJpeg",
+      options: { predictor: 6, pointTransform: 0 },
+    },
+    {
+      name: "JPEG Lossless Process 14 SV1",
+      uid: "1.2.840.10008.1.2.4.70",
+      encoder: "encodeJpeg",
+      options: { predictor: 1, pointTransform: 0 },
+      metadata: { emptyOffsetTable: true },
+    },
+    {
+      name: "JPEG-LS Lossless",
+      uid: "1.2.840.10008.1.2.4.80",
+      encoder: "encodeJpegLs",
+      options: { lossy: false },
+    },
+    {
+      name: "JPEG 2000 Lossless",
+      uid: "1.2.840.10008.1.2.4.90",
+      encoder: "encodeJpeg2000",
+      options: { lossy: false },
+    },
+  ];
+  const expected = [0, 100, 500, 4095];
+  const codecs = await loadTestCodecs();
+  for (const item of cases) {
+    const input = await syntheticCompressedDicom(
+      1,
+      expected,
+      item.uid,
+      item.encoder,
+      item.options,
+      { pixelSpacing: [0.5, 0.75], sliceSpacing: 2, ...item.metadata },
+    );
+    const instance = parseDicomInstance(input, `${item.name}.dcm`, dicomParser);
+    assert.equal(instance.compressed, true, item.name);
+    assert.equal(dicomTransferSyntaxName(item.uid).startsWith(item.name.split(" Process")[0]), true);
+    const volume = await decodeDicomSeriesAsync([instance], { parser: dicomParser, codecs });
+    assert.deepEqual([volume.width, volume.height, volume.depth], [2, 2, 1], item.name);
+    assert.deepEqual(volume.spacing, [0.75, 0.5, 2], item.name);
+    assert.deepEqual(volume.pixelValueRange, [0, 4095], item.name);
+    assert.deepEqual([...volume.frames[0].trainingPixels], expected, item.name);
+    assert.deepEqual(
+      [Math.min(...volume.frames[0].trainingPixels), Math.max(...volume.frames[0].trainingPixels)],
+      [0, 4095],
+      item.name,
+    );
+  }
+});
+
+test("loads JPEG Baseline, JPEG-LS Near-Lossless, and lossy JPEG 2000 frames", async () => {
+  const codecs = await loadTestCodecs();
+  const cases = [
+    {
+      name: "JPEG Baseline",
+      uid: "1.2.840.10008.1.2.4.50",
+      encoder: "encodeJpeg",
+      options: { lossy: true, quality: 95 },
+      values: [0, 64, 128, 255],
+      metadata: { bitsAllocated: 8, bitsStored: 8, highBit: 7 },
+    },
+    {
+      name: "JPEG-LS Near-Lossless",
+      uid: "1.2.840.10008.1.2.4.81",
+      encoder: "encodeJpegLs",
+      options: { lossy: true, allowedLossyError: 3 },
+      values: [0, 100, 500, 4095],
+    },
+    {
+      name: "JPEG 2000",
+      uid: "1.2.840.10008.1.2.4.91",
+      encoder: "encodeJpeg2000",
+      options: { lossy: true, rate: 8 },
+      values: [0, 100, 500, 4095],
+    },
+  ];
+  for (const item of cases) {
+    const input = await syntheticCompressedDicom(
+      1,
+      item.values,
+      item.uid,
+      item.encoder,
+      item.options,
+      item.metadata,
+    );
+    const instance = parseDicomInstance(input, `${item.name}.dcm`, dicomParser);
+    const volume = await decodeDicomSeriesAsync([instance], { parser: dicomParser, codecs });
+    assert.deepEqual([volume.width, volume.height, volume.depth], [2, 2, 1], item.name);
+    assert.equal(volume.frames[0].trainingPixels.length, 4, item.name);
+    assert.ok(volume.frames[0].trainingPixels.every(Number.isFinite), item.name);
+    assert.ok(volume.pixelValueRange[0] <= volume.pixelValueRange[1], item.name);
+  }
+});
+
+test("compressed DICOM series keep geometry and patient-position slice order", async () => {
+  const codecs = await loadTestCodecs();
+  const later = parseDicomInstance(
+    await syntheticCompressedDicom(
+      20,
+      [200, 201, 202, 203],
+      "1.2.840.10008.1.2.4.70",
+      "encodeJpeg",
+      { predictor: 1 },
+      { position: [10, 20, 32] },
+    ),
+    "slice20.dcm",
+    dicomParser,
+  );
+  const earlier = parseDicomInstance(
+    await syntheticCompressedDicom(
+      10,
+      [100, 101, 102, 103],
+      "1.2.840.10008.1.2.4.70",
+      "encodeJpeg",
+      { predictor: 1 },
+      { position: [10, 20, 30] },
+    ),
+    "slice10.dcm",
+    dicomParser,
+  );
+  const volume = await decodeDicomSeriesAsync([later, earlier], { parser: dicomParser, codecs });
+  assert.deepEqual(volume.spacing, [0.75, 0.5, 2]);
+  assert.deepEqual(volume.frames.map((frame) => [...frame.trainingPixels]), [
+    [100, 101, 102, 103],
+    [200, 201, 202, 203],
+  ]);
+  assert.deepEqual(volume.pixelValueRange, [100, 203]);
+});
+
+test("reports an unsupported compressed transfer syntax by name and UID", () => {
+  const input = syntheticDicom(1, [0, 1, 2, 3], {
+    transferSyntaxUid: "1.2.840.10008.1.2.4.92",
+  });
+  assert.throws(
+    () => parseDicomInstance(input, "unsupported.dcm", dicomParser),
+    /Unsupported DICOM compression: JPEG 2000 Part 2 Multicomponent Lossless \(1\.2\.840\.10008\.1\.2\.4\.92\)/,
+  );
 });
 
 test("DICOM coronal and oblique metadata produce full IJK-to-RAS geometry", () => {

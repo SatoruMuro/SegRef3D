@@ -1,5 +1,6 @@
 import * as nifti from "./vendor/nifti-reader.js";
 import UTIF from "./vendor/utif.module.js";
+import { getDicomCodecs } from "./dicom-codec.mjs?v=1";
 import { dicomSeriesGeometry, makeVolumeGeometry } from "./medical-geometry.mjs?v=2";
 
 const DICOM_UID = Object.freeze({
@@ -8,7 +9,49 @@ const DICOM_UID = Object.freeze({
   explicitBig: "1.2.840.10008.1.2.2",
   deflatedLittle: "1.2.840.10008.1.2.1.99",
   jpegBaseline: "1.2.840.10008.1.2.4.50",
+  jpegLossless: "1.2.840.10008.1.2.4.57",
+  jpegLosslessSv1: "1.2.840.10008.1.2.4.70",
+  jpegLsLossless: "1.2.840.10008.1.2.4.80",
+  jpegLsNearLossless: "1.2.840.10008.1.2.4.81",
+  jpeg2000Lossless: "1.2.840.10008.1.2.4.90",
+  jpeg2000: "1.2.840.10008.1.2.4.91",
+  rleLossless: "1.2.840.10008.1.2.5",
 });
+
+const DICOM_TRANSFER_SYNTAX_NAMES = Object.freeze({
+  [DICOM_UID.implicitLittle]: "Implicit VR Little Endian",
+  [DICOM_UID.explicitLittle]: "Explicit VR Little Endian",
+  [DICOM_UID.explicitBig]: "Explicit VR Big Endian",
+  [DICOM_UID.deflatedLittle]: "Deflated Explicit VR Little Endian",
+  [DICOM_UID.jpegBaseline]: "JPEG Baseline (Process 1)",
+  "1.2.840.10008.1.2.4.51": "JPEG Extended (Processes 2 and 4)",
+  [DICOM_UID.jpegLossless]: "JPEG Lossless (Process 14)",
+  [DICOM_UID.jpegLosslessSv1]: "JPEG Lossless (Process 14, Selection Value 1)",
+  [DICOM_UID.jpegLsLossless]: "JPEG-LS Lossless",
+  [DICOM_UID.jpegLsNearLossless]: "JPEG-LS Near-Lossless",
+  [DICOM_UID.jpeg2000Lossless]: "JPEG 2000 Lossless",
+  [DICOM_UID.jpeg2000]: "JPEG 2000",
+  "1.2.840.10008.1.2.4.92": "JPEG 2000 Part 2 Multicomponent Lossless",
+  "1.2.840.10008.1.2.4.93": "JPEG 2000 Part 2 Multicomponent",
+  "1.2.840.10008.1.2.4.100": "MPEG-2 Main Profile / Main Level",
+  "1.2.840.10008.1.2.4.102": "MPEG-4 AVC/H.264 High Profile / Level 4.1",
+  [DICOM_UID.rleLossless]: "RLE Lossless",
+});
+
+const COMPRESSED_DICOM_UIDS = new Set([
+  DICOM_UID.jpegBaseline,
+  DICOM_UID.jpegLossless,
+  DICOM_UID.jpegLosslessSv1,
+  DICOM_UID.jpegLsLossless,
+  DICOM_UID.jpegLsNearLossless,
+  DICOM_UID.jpeg2000Lossless,
+  DICOM_UID.jpeg2000,
+  DICOM_UID.rleLossless,
+]);
+
+export function dicomTransferSyntaxName(uid) {
+  return DICOM_TRANSFER_SYNTAX_NAMES[uid] || "Unknown Transfer Syntax";
+}
 
 const NIFTI_SCALAR_TYPES = Object.freeze({
   2: { name: "uint8", bytes: 1, read: "getUint8" },
@@ -147,18 +190,13 @@ function validateDicomPixelFormat(instance) {
   if (
     bitsAllocated === 8 &&
     samplesPerPixel === 3 &&
-    ["RGB", "YBR_FULL"].includes(photometric)
+    ["RGB", "YBR_FULL", "YBR_FULL_422", "YBR_PARTIAL_422", "YBR_ICT", "YBR_RCT"].includes(photometric)
   ) {
     return;
   }
   throw new Error(
     `${instance.name}: unsupported DICOM pixel format (${photometric}, ${samplesPerPixel} sample(s)).`,
   );
-}
-
-function pixelDataView(instance) {
-  const bytes = instance.dataSet.byteArray;
-  return new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
 }
 
 function frameByteRange(instance, frameIndex) {
@@ -172,11 +210,16 @@ function frameByteRange(instance, frameIndex) {
   return { start, end, frameBytes };
 }
 
-function storedPixelValue(instance, view, byteOffset) {
+function uncompressedFrameBytes(instance, frameIndex) {
+  const { start, end } = frameByteRange(instance, frameIndex);
+  return instance.dataSet.byteArray.subarray(start, end);
+}
+
+function storedPixelValue(instance, view, byteOffset, littleEndian) {
   let raw =
     instance.bitsAllocated === 8
       ? view.getUint8(byteOffset)
-      : view.getUint16(byteOffset, instance.littleEndian);
+      : view.getUint16(byteOffset, littleEndian);
   const shift = Math.max(0, instance.highBit - instance.bitsStored + 1);
   raw = Math.floor(raw / 2 ** shift) % 2 ** instance.bitsStored;
   if (instance.pixelRepresentation === 1) {
@@ -186,21 +229,18 @@ function storedPixelValue(instance, view, byteOffset) {
   return raw * instance.rescaleSlope + instance.rescaleIntercept;
 }
 
-function dicomSeriesRange(instances) {
+function dicomFramesRange(rawFrames) {
   let minimum = Infinity;
   let maximum = -Infinity;
-  for (const instance of instances) {
-    if (instance.samplesPerPixel !== 1 || instance.compressed) continue;
-    const view = pixelDataView(instance);
+  for (const { instance, bytes, littleEndian } of rawFrames) {
+    if (instance.samplesPerPixel !== 1) continue;
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     const bytesPerSample = instance.bitsAllocated / 8;
-    for (let frame = 0; frame < instance.frameCount; frame += 1) {
-      const { start } = frameByteRange(instance, frame);
-      const pixelCount = instance.rows * instance.columns;
-      for (let index = 0; index < pixelCount; index += 1) {
-        const value = storedPixelValue(instance, view, start + index * bytesPerSample);
-        if (value < minimum) minimum = value;
-        if (value > maximum) maximum = value;
-      }
+    const pixelCount = instance.rows * instance.columns;
+    for (let index = 0; index < pixelCount; index += 1) {
+      const value = storedPixelValue(instance, view, index * bytesPerSample, littleEndian);
+      if (value < minimum) minimum = value;
+      if (value > maximum) maximum = value;
     }
   }
   if (!Number.isFinite(minimum) || !Number.isFinite(maximum)) return { minimum: 0, maximum: 1 };
@@ -215,9 +255,8 @@ function windowedByte(value, windowCenter, windowWidth, range) {
   return clampByte(((value - range.minimum) / (range.maximum - range.minimum)) * 255);
 }
 
-function decodeMonochromeFrame(instance, frameIndex, range, sharedWindow) {
-  const view = pixelDataView(instance);
-  const { start } = frameByteRange(instance, frameIndex);
+function decodeMonochromeFrame(instance, bytes, littleEndian, range, sharedWindow) {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const pixelCount = instance.rows * instance.columns;
   const bytesPerSample = instance.bitsAllocated / 8;
   const pixels = new Uint8ClampedArray(pixelCount);
@@ -225,7 +264,7 @@ function decodeMonochromeFrame(instance, frameIndex, range, sharedWindow) {
   const center = sharedWindow?.center ?? instance.windowCenter;
   const width = sharedWindow?.width ?? instance.windowWidth;
   for (let index = 0; index < pixelCount; index += 1) {
-    const value = storedPixelValue(instance, view, start + index * bytesPerSample);
+    const value = storedPixelValue(instance, view, index * bytesPerSample, littleEndian);
     trainingPixels[index] = value;
     const output = windowedByte(value, center, width, range);
     pixels[index] = instance.photometric === "MONOCHROME1" ? 255 - output : output;
@@ -239,17 +278,15 @@ function decodeMonochromeFrame(instance, frameIndex, range, sharedWindow) {
   };
 }
 
-function decodeColorFrame(instance, frameIndex) {
-  const bytes = instance.dataSet.byteArray;
-  const { start } = frameByteRange(instance, frameIndex);
+function decodeColorFrame(instance, bytes) {
   const pixelCount = instance.rows * instance.columns;
   const output = new Uint8ClampedArray(pixelCount * 4);
   const planeSize = pixelCount;
   for (let index = 0; index < pixelCount; index += 1) {
     const source =
       instance.planarConfiguration === 1
-        ? [bytes[start + index], bytes[start + planeSize + index], bytes[start + planeSize * 2 + index]]
-        : [bytes[start + index * 3], bytes[start + index * 3 + 1], bytes[start + index * 3 + 2]];
+        ? [bytes[index], bytes[planeSize + index], bytes[planeSize * 2 + index]]
+        : [bytes[index * 3], bytes[index * 3 + 1], bytes[index * 3 + 2]];
     let [red, green, blue] = source;
     if (instance.photometric === "YBR_FULL") {
       const y = red;
@@ -555,11 +592,13 @@ export function parseDicomInstance(input, fileName, parser = globalThis.dicomPar
     DICOM_UID.explicitBig,
   ].includes(transferSyntax);
   if (transferSyntax === DICOM_UID.deflatedLittle) {
-    throw new Error(`${fileName}: Deflated Explicit VR DICOM is not supported in this build.`);
-  }
-  if (compressed && transferSyntax !== DICOM_UID.jpegBaseline) {
     throw new Error(
-      `${fileName}: compressed DICOM transfer syntax ${transferSyntax || "unknown"} is not supported.`,
+      `${fileName}: Unsupported DICOM compression: ${dicomTransferSyntaxName(transferSyntax)} (${transferSyntax}).`,
+    );
+  }
+  if (compressed && !COMPRESSED_DICOM_UIDS.has(transferSyntax)) {
+    throw new Error(
+      `${fileName}: Unsupported DICOM compression: ${dicomTransferSyntaxName(transferSyntax)} (${transferSyntax || "unknown"}).`,
     );
   }
 
@@ -599,7 +638,7 @@ export function parseDicomInstance(input, fileName, parser = globalThis.dicomPar
     ),
   };
   instance.sortCoordinate = dicomSortCoordinate(instance.imagePosition, instance.imageOrientation);
-  if (!instance.compressed) validateDicomPixelFormat(instance);
+  validateDicomPixelFormat(instance);
   return instance;
 }
 
@@ -636,40 +675,146 @@ export function sortDicomInstances(instances) {
   });
 }
 
-export function decodeDicomSeries(instances, parser = globalThis.dicomParser) {
-  const ordered = sortDicomInstances(instances);
-  if (ordered.length === 0) throw new Error("No readable DICOM images were found.");
-  const range = dicomSeriesRange(ordered);
-  const window = sharedDicomWindow(ordered);
-  const frames = [];
-  for (const instance of ordered) {
-    for (let frameIndex = 0; frameIndex < instance.frameCount; frameIndex += 1) {
-      const common = {
-        name: dicomFrameName(instance.name, frameIndex, instance.frameCount),
-        width: instance.columns,
-        height: instance.rows,
-      };
-      if (instance.compressed) {
-        if (!parser?.readEncapsulatedImageFrame) {
-          throw new Error(`${instance.name}: the JPEG DICOM decoder is unavailable.`);
-        }
-        frames.push({
-          ...common,
-          kind: "encoded",
-          mimeType: "image/jpeg",
-          bytes: parser.readEncapsulatedImageFrame(
-            instance.dataSet,
-            instance.pixelElement,
-            frameIndex,
-          ),
-        });
-      } else if (instance.samplesPerPixel === 1) {
-        frames.push({ ...common, ...decodeMonochromeFrame(instance, frameIndex, range, window) });
-      } else {
-        frames.push({ ...common, ...decodeColorFrame(instance, frameIndex) });
-      }
-    }
+function compressedDecoderName(transferSyntax) {
+  if (transferSyntax === DICOM_UID.rleLossless) return "decodeRle";
+  if ([DICOM_UID.jpegBaseline, DICOM_UID.jpegLossless, DICOM_UID.jpegLosslessSv1].includes(transferSyntax)) {
+    return "decodeJpeg";
   }
+  if ([DICOM_UID.jpegLsLossless, DICOM_UID.jpegLsNearLossless].includes(transferSyntax)) {
+    return "decodeJpegLs";
+  }
+  if ([DICOM_UID.jpeg2000Lossless, DICOM_UID.jpeg2000].includes(transferSyntax)) {
+    return "decodeJpeg2000";
+  }
+  return null;
+}
+
+function decodedFrameInstance(instance, decodedContext) {
+  const valueOr = (getter, fallback) => {
+    const value = decodedContext[getter]?.();
+    return value ?? fallback;
+  };
+  return {
+    ...instance,
+    bitsAllocated: valueOr("getBitsAllocated", instance.bitsAllocated),
+    bitsStored: valueOr("getBitsStored", instance.bitsStored),
+    samplesPerPixel: valueOr("getSamplesPerPixel", instance.samplesPerPixel),
+    pixelRepresentation: valueOr("getPixelRepresentation", instance.pixelRepresentation),
+    planarConfiguration: valueOr("getPlanarConfiguration", instance.planarConfiguration),
+    photometric: String(
+      valueOr("getPhotometricInterpretation", instance.photometric),
+    ).trim().toUpperCase(),
+  };
+}
+
+function readEncapsulatedFrame(instance, frameIndex, parser) {
+  const offsets = instance.pixelElement.basicOffsetTable || [];
+  if (offsets.length > 0) {
+    return parser.readEncapsulatedImageFrame(
+      instance.dataSet,
+      instance.pixelElement,
+      frameIndex,
+    );
+  }
+  const fragments = instance.pixelElement.fragments || [];
+  if (!parser.readEncapsulatedPixelDataFromFragments || fragments.length === 0) {
+    throw new Error(`${instance.name}: encapsulated Pixel Data contains no readable fragments.`);
+  }
+  if (instance.frameCount === 1) {
+    return parser.readEncapsulatedPixelDataFromFragments(
+      instance.dataSet,
+      instance.pixelElement,
+      0,
+      fragments.length,
+    );
+  }
+  if (fragments.length === instance.frameCount) {
+    return parser.readEncapsulatedPixelDataFromFragments(
+      instance.dataSet,
+      instance.pixelElement,
+      frameIndex,
+      1,
+    );
+  }
+  throw new Error(
+    `${instance.name}: multi-frame compressed Pixel Data has no Basic Offset Table and cannot be split safely.`,
+  );
+}
+
+async function decodeCompressedFrame(instance, frameIndex, parser, suppliedCodecs) {
+  if (!parser?.readEncapsulatedImageFrame) {
+    throw new Error(`${instance.name}: the bundled DICOM frame reader is unavailable.`);
+  }
+  const decoderName = compressedDecoderName(instance.transferSyntax);
+  if (!decoderName) {
+    throw new Error(
+      `${instance.name}: Unsupported DICOM compression: ${dicomTransferSyntaxName(instance.transferSyntax)} (${instance.transferSyntax}).`,
+    );
+  }
+  const codecs = suppliedCodecs || await getDicomCodecs();
+  const encodedBuffer = readEncapsulatedFrame(instance, frameIndex, parser);
+  const context = new codecs.Context({
+    width: instance.columns,
+    height: instance.rows,
+    bitsAllocated: instance.bitsAllocated,
+    bitsStored: instance.bitsStored,
+    samplesPerPixel: instance.samplesPerPixel,
+    pixelRepresentation: instance.pixelRepresentation,
+    planarConfiguration: instance.planarConfiguration,
+    photometricInterpretation: instance.photometric,
+    encodedBuffer,
+  });
+  let decodedContext;
+  try {
+    decodedContext = codecs.NativeCodecs[decoderName](context, {
+      convertColorspaceToRgb: instance.samplesPerPixel > 1,
+    });
+  } catch (error) {
+    throw new Error(
+      `${instance.name}: ${dicomTransferSyntaxName(instance.transferSyntax)} pixel decoding failed: ${error.message || error}`,
+    );
+  }
+  const decodedInstance = decodedFrameInstance(instance, decodedContext);
+  validateDicomPixelFormat(decodedInstance);
+  const bytes = decodedContext.getDecodedBuffer();
+  const expectedLength =
+    decodedInstance.rows *
+    decodedInstance.columns *
+    decodedInstance.samplesPerPixel *
+    (decodedInstance.bitsAllocated / 8);
+  if (!(bytes instanceof Uint8Array) || bytes.byteLength < expectedLength) {
+    throw new Error(
+      `${instance.name}: decoded pixel data is shorter than the declared frame size.`,
+    );
+  }
+  return {
+    instance: decodedInstance,
+    frameIndex,
+    bytes: bytes.byteLength === expectedLength ? bytes : bytes.subarray(0, expectedLength),
+    // WebAssembly linear memory and all supported native decoders emit little-endian samples.
+    littleEndian: true,
+  };
+}
+
+function decodedDicomVolume(ordered, rawFrames) {
+  const range = dicomFramesRange(rawFrames);
+  const window = sharedDicomWindow(ordered);
+  const frames = rawFrames.map(({ instance, frameIndex, bytes, littleEndian }) => {
+    const common = {
+      name: dicomFrameName(instance.name, frameIndex, instance.frameCount),
+      width: instance.columns,
+      height: instance.rows,
+      transferSyntax: instance.transferSyntax,
+      transferSyntaxName: dicomTransferSyntaxName(instance.transferSyntax),
+    };
+    if (instance.samplesPerPixel === 1) {
+      return {
+        ...common,
+        ...decodeMonochromeFrame(instance, bytes, littleEndian, range, window),
+      };
+    }
+    return { ...common, ...decodeColorFrame(instance, bytes) };
+  });
   const first = ordered[0];
   let geometry = null;
   const geometryWarnings = [];
@@ -692,6 +837,55 @@ export function decodeDicomSeries(instances, parser = globalThis.dicomParser) {
     affine: geometry?.affine || null,
     geometry,
     geometryWarnings,
+    pixelValueRange: [range.minimum, range.maximum],
     frames,
   };
+}
+
+export function decodeDicomSeries(instances) {
+  const ordered = sortDicomInstances(instances);
+  if (ordered.length === 0) throw new Error("No readable DICOM images were found.");
+  const rawFrames = [];
+  for (const instance of ordered) {
+    if (instance.compressed) {
+      throw new Error(
+        `${instance.name}: ${dicomTransferSyntaxName(instance.transferSyntax)} requires asynchronous codec decoding.`,
+      );
+    }
+    for (let frameIndex = 0; frameIndex < instance.frameCount; frameIndex += 1) {
+      rawFrames.push({
+        instance,
+        frameIndex,
+        bytes: uncompressedFrameBytes(instance, frameIndex),
+        littleEndian: instance.littleEndian,
+      });
+    }
+  }
+  return decodedDicomVolume(ordered, rawFrames);
+}
+
+export async function decodeDicomSeriesAsync(
+  instances,
+  { parser = globalThis.dicomParser, codecs = null, onProgress = null } = {},
+) {
+  const ordered = sortDicomInstances(instances);
+  if (ordered.length === 0) throw new Error("No readable DICOM images were found.");
+  const rawFrames = [];
+  const totalFrames = ordered.reduce((sum, instance) => sum + instance.frameCount, 0);
+  for (const instance of ordered) {
+    for (let frameIndex = 0; frameIndex < instance.frameCount; frameIndex += 1) {
+      const rawFrame = instance.compressed
+        ? await decodeCompressedFrame(instance, frameIndex, parser, codecs)
+        : {
+            instance,
+            frameIndex,
+            bytes: uncompressedFrameBytes(instance, frameIndex),
+            littleEndian: instance.littleEndian,
+          };
+      rawFrames.push(rawFrame);
+      onProgress?.(rawFrames.length, totalFrames, instance);
+      if (instance.compressed) await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+  }
+  return decodedDicomVolume(ordered, rawFrames);
 }
