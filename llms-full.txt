@@ -226,8 +226,16 @@ not a general arbitrary-structure segmenter and does not imply clinical validati
   or RGB /255, foreground-aware patches, seed-42 case-level split, and best validation checkpoint.
   One-case runs use resubstitution smoke-test Dice only. Model ZIP `trainref3d-model-1.0` includes
   state_dict, architecture/preprocessing/target/split metadata and per-case Dice. Internal validation
-  does not establish clinical validity or generalizability. Multiclass, inference, prediction import,
-  automatic retraining and clinical deployment are not implemented. See `train-web/README.md`.
+  does not establish clinical validity or generalizability. Multiclass, automatic retraining and
+  clinical deployment are not implemented. See `train-web/README.md`.
+- **InferRef3D / Custom Model**: Lite validates the exact Model ZIP contract without executing
+  `model.pt`, requires canonical channel/source-category compatibility, and creates
+  `trainref3d-inference-request-1.0` with deterministic NIfTI channel SHA-256 fingerprints. The user
+  explicitly uploads Model + Request to InferRef3D Colab. The backend loads weights-only state_dict,
+  reproduces manifest preprocessing, performs AMP sliding-window inference, maps class 1 to the saved
+  target Obj ID, and returns `trainref3d-inference-result-1.0` on the original shape/affine. Lite
+  verifies model/source/prediction hashes and geometry; Merge/Replace protects other Obj labels and
+  is one Undo transaction. Review/correct the ordinary mask, then export another Training Data ZIP.
 - **Label PNG**: per-slice integer label masks for image-based workflows.
 - **Overlay PNG**: visual review images combining visible labels with source images.
 - **NIfTI Labelmap**: preferred for voxel labels and patient/source geometry in tools such as 3D Slicer.

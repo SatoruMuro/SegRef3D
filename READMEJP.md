@@ -59,6 +59,9 @@ versioned manifestを1症例分としてbrowser内で保存できます。
 [TrainRef3D](train-web/README.md)では複数のTraining ZIPをbrowser内でまとめ、対象Objを1つ選び、
 自分のColab GPUでbinary custom modelを学習できます。Liteはmask作成、TrainRef3Dは症例集約と
 学習を担当します。研究用baselineであり、臨床性能を保証するものではありません。
+学習済みModel ZIPはLiteの**Custom Model**で検証し、元画像channelを含むInference Request ZIPを
+作成できます。InferRef3D Colabで推論後、source fingerprintとgeometryを検証したpredictionを元Obj IDへ
+戻して修正し、Training Data ZIPとして再利用できます。推論結果は独立した臨床診断ではありません。
 
 ### Local first
 

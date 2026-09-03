@@ -176,6 +176,29 @@ select one Obj and confirm annotation completeness, then explicitly upload the D
 your own Colab GPU runtime. The training engine is separate from SegRef3D Lite; internal Dice
 does not establish clinical validity.
 
+### Custom Model / InferRef3D
+
+After TrainRef3D creates `TrainRef3D_Model_TR3DM_<id>.zip`, load a new source and open
+**AI Segmentation > Custom Model**. Lite validates the safe archive layout and
+`trainref3d-model-1.0` manifest locally; it never executes `model.pt`. Channel count and source
+category must exactly match the canonical Training Data export contract. Choose **Create Inference
+Request ZIP**, then explicitly upload that Request ZIP and the original Model ZIP to your own
+[InferRef3D Colab](../ColabNotebooks/inferref3d.html) runtime.
+
+The request contains deterministic canonical NIfTI channel bytes and their SHA-256 hashes. It does
+not duplicate `model.pt`, but includes the model manifest and the whole Model ZIP hash. InferRef3D
+reconstructs the trusted state-dictionary model, reproduces manifest preprocessing, runs sliding-window
+inference, and nearest-neighbor resamples the prediction to the exact original shape and affine.
+Class 1 maps back to the model's original Obj ID. On import, Lite verifies model/source/prediction
+hashes, labels, shape, spacing, orientation and affine. **Replace** clears only that target; **Merge**
+keeps it. Both preserve all other objects on overlap, and the whole import is one Undo transaction.
+The imported mask remains editable and can be exported again as Training Data ZIP.
+
+Model/request/result validation is browser-local. Upload to Colab is always explicit. Images may
+remain identifiable. A prediction is an algorithmic segmentation intended for review and correction,
+not an independent clinical diagnosis. The versioned schemas are documented in
+[`TRAINREF3D_INFERENCE_FORMAT.md`](../docs/TRAINREF3D_INFERENCE_FORMAT.md).
+
 VolInfo CSV keeps the Windows-compatible `Width/Height/Depth`, `X/Y/Z Spacing`, and
 `X/Y/Z Origin` rows and now adds the complete 4 x 4 IJK-to-RAS affine. Older six-row VolInfo
 files remain supported and use an explicit axis-aligned fallback. DICOM and NIfTI inputs retain

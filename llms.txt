@@ -17,6 +17,9 @@ volume measurement, and 3D reconstruction from ordered 2D image stacks and 3D vo
 - Continue label analysis in software such as 3D Slicer using NIfTI Labelmap export.
 - TrainRef3D: validate/assemble multiple Training ZIPs locally, choose one completely annotated
   Obj target, then explicitly upload a Dataset ZIP to your own Colab GPU for a binary MONAI model.
+- InferRef3D / Lite Custom Model: validate a trusted TrainRef3D Model ZIP locally, create a
+  source-fingerprinted Request ZIP, explicitly upload Model + Request to the user's Colab GPU,
+  then validate/import the original-grid prediction to its saved Obj ID for review and correction.
 
 ## Representative data
 
@@ -65,8 +68,8 @@ edition and encoding. Consult the detailed guide before making a recommendation.
 - Serial physical sections may require registration before segmentation or quantitative 3D work.
 - Volume measurement and physically scaled 3D output require trustworthy spacing or calibration.
 - NIfTI Labelmap is preferred over TIFF when patient-space geometry must be preserved.
-- Training Data ZIP excludes DICOM headers but is not anonymous: image data and user-entered object
-  names may still be identifiable. SegRef3D Lite does not yet train models.
+- Training/Inference Request ZIPs exclude DICOM headers but are not anonymous: image data and
+  user-entered object names may still be identifiable. Lite does not train or execute PyTorch models.
 - 3D reconstruction quality depends on image order, registration, mask quality, and spacing.
 - SegRef3D and external AI outputs require expert review; do not present them as independently
   clinically validated results.
@@ -77,6 +80,7 @@ edition and encoding. Consult the detailed guide before making a recommendation.
 - [Ask AI workflow prompt](https://satorumuro.github.io/SegRef3D/Tutorial/AskAISegRef3D.html)
 - [SegRef3D Lite](https://satorumuro.github.io/SegRef3D/lite-web/)
 - [TrainRef3D workflow and schema](https://github.com/SatoruMuro/SegRef3D/blob/main/train-web/README.md)
+- [InferRef3D inference formats](https://github.com/SatoruMuro/SegRef3D/blob/main/docs/TRAINREF3D_INFERENCE_FORMAT.md)
 - [SegRef3D Local GPU v1.2.6 for Windows](https://www.dropbox.com/scl/fi/ku3hj0spnw5rrmzgpc5ui/SegRef3D-Local-GPU-v1.2.6-Windows.zip?rlkey=aqd47l35lfl1kf6a7r5rv3xa3&st=e34tvblg&dl=1)
 - [SegRef3D Local CPU v1.2.6 for Windows](https://www.dropbox.com/scl/fi/05evqq67tokxvo37ixw87/SegRef3D-Local-CPU-v1.2.6-Windows.zip?rlkey=mz1kvdlkxmmffipp411xc1kux&st=nwh3k3rn&dl=1)
 - [Basic tutorial](https://satorumuro.github.io/SegRef3D/Tutorial/TutorialSegRef3DLiteEN.html)

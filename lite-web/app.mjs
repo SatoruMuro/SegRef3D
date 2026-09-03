@@ -97,6 +97,14 @@ import {
   prepareTrainingSourceChannels,
 } from "./training-export.mjs?v=2";
 import {
+  applyCustomPrediction,
+  createInferenceRequestEntries,
+  loadModelZip,
+  prepareCanonicalInferenceChannels,
+  validateInferenceResultZip,
+  validateSourceCompatibility,
+} from "./custom-model.mjs?v=1";
+import {
   MASK_MANIFEST_FILENAME,
   MASK_SLICE_ORDER,
   createLabelPngEntries,
@@ -201,6 +209,24 @@ const elements = {
   instant3dConflictCancel: document.querySelector("#instant3d-conflict-cancel"),
   instant3dConflictMerge: document.querySelector("#instant3d-conflict-merge"),
   instant3dConflictReplace: document.querySelector("#instant3d-conflict-replace"),
+  customModelStatus: document.querySelector("#custom-model-status"),
+  customModelTarget: document.querySelector("#custom-model-target"),
+  customModelInput: document.querySelector("#custom-model-input"),
+  customModelId: document.querySelector("#custom-model-id"),
+  customModelSelect: document.querySelector("#custom-model-select"),
+  customModelFileInput: document.querySelector("#custom-model-file-input"),
+  customModelExport: document.querySelector("#custom-model-export"),
+  customModelOpen: document.querySelector("#custom-model-open"),
+  customModelImport: document.querySelector("#custom-model-import"),
+  customModelResultInput: document.querySelector("#custom-model-result-input"),
+  customModelWarningDialog: document.querySelector("#custom-model-warning-dialog"),
+  customModelWarningCancel: document.querySelector("#custom-model-warning-cancel"),
+  customModelWarningContinue: document.querySelector("#custom-model-warning-continue"),
+  customModelConflictDialog: document.querySelector("#custom-model-conflict-dialog"),
+  customModelConflictCopy: document.querySelector("#custom-model-conflict-copy"),
+  customModelConflictCancel: document.querySelector("#custom-model-conflict-cancel"),
+  customModelConflictMerge: document.querySelector("#custom-model-conflict-merge"),
+  customModelConflictReplace: document.querySelector("#custom-model-conflict-replace"),
   labelsPanel: document.querySelector("#labels-panel"),
   labelsToggle: document.querySelector("#labels-toggle"),
   labelsClose: document.querySelector("#labels-close"),
@@ -422,6 +448,9 @@ const state = {
   instant3dMappings: [],
   instant3dPendingAction: null,
   instant3dPendingImport: null,
+  customModel: null,
+  customModelCompatibility: null,
+  customModelPendingImport: null,
   trainingCaseId: null,
 };
 
@@ -454,6 +483,7 @@ function setLoading(active, title = "Loading images", detail = "") {
   elements.loadingTitle.textContent = title;
   elements.loadingDetail.textContent = detail;
   elements.importSegonweb.disabled = active;
+  updateCustomModelControls();
 }
 
 function setSaveState(text, className = "") {
@@ -669,6 +699,195 @@ async function importInstant3DResult(file) {
   } finally {
     setLoading(false);
     elements.instant3dResultInput.value = "";
+  }
+}
+
+function updateCustomModelControls() {
+  const model = state.customModel?.manifest;
+  const compatible = Boolean(model && state.customModelCompatibility?.compatible && state.images.length);
+  elements.customModelExport.disabled = !compatible || state.loading;
+  elements.customModelImport.disabled = !compatible || state.loading;
+  elements.customModelTarget.textContent = model
+    ? `Obj ${model.task.target_label_id} — ${model.task.target_name}` : "—";
+  elements.customModelInput.textContent = model
+    ? `${model.input.channel_count}-channel ${model.input.source_category}` : "—";
+  elements.customModelId.textContent = model?.model_id || "—";
+  elements.customModelStatus.classList.remove("success", "error", "warning");
+  if (!model) {
+    elements.customModelStatus.textContent = "Select a TrainRef3D Model ZIP.";
+  } else if (!state.images.length) {
+    elements.customModelStatus.textContent = "Model valid. Load a source image to check compatibility.";
+    elements.customModelStatus.classList.add("warning");
+  } else if (compatible) {
+    elements.customModelStatus.textContent = "Compatible — request creation and prediction import are enabled.";
+    elements.customModelStatus.classList.add("success");
+  } else {
+    elements.customModelStatus.textContent = `Incompatible — ${state.customModelCompatibility?.message || "source validation is required"}`;
+    elements.customModelStatus.classList.add("error");
+  }
+}
+
+async function prepareCurrentCustomModelSource(onProgress = () => {}) {
+  const { width, height, geometry } = labelVolumeGeometry();
+  const prepared = await prepareTrainingSourceChannels({
+    sourceVolume: state.sourceVolume,
+    images: state.images,
+    width,
+    height,
+    geometry,
+    onProgress,
+  });
+  return {
+    prepared,
+    width,
+    height,
+    depth: state.images.length,
+    geometry,
+    sourceFormat: state.images[0].sourceFormat,
+  };
+}
+
+async function selectCustomModel(file) {
+  if (!file) return;
+  try {
+    setLoading(true, "Validating Custom Model", "Checking safe Model ZIP structure…");
+    const loaded = await loadModelZip(file);
+    state.customModel = { manifest: loaded.manifest, sha256: loaded.sha256 };
+    state.customModelCompatibility = null;
+    state.customModelPendingImport = null;
+    if (state.images.length) {
+      elements.loadingDetail.textContent = "Checking canonical image compatibility…";
+      const source = await prepareCurrentCustomModelSource((message) => { elements.loadingDetail.textContent = message; });
+      try {
+        validateSourceCompatibility(loaded.manifest, {
+          sourceFormat: source.sourceFormat,
+          channelCount: source.prepared.channels.length,
+          intensityPolicy: source.prepared.intensityPolicy,
+        });
+        state.customModelCompatibility = { compatible: true };
+      } catch (error) {
+        state.customModelCompatibility = { compatible: false, message: error.message };
+      } finally {
+        source.prepared.channels.length = 0;
+      }
+    }
+    setStatus(`Custom Model validated locally: ${loaded.manifest.model_id}, Obj ${loaded.manifest.task.target_label_id}.`);
+  } catch (error) {
+    console.error(error);
+    state.customModel = null;
+    state.customModelCompatibility = null;
+    setStatus(`Custom Model validation failed: ${error.message}`);
+    window.alert(`Custom Model validation failed.\n\n${error.message}`);
+  } finally {
+    setLoading(false);
+    elements.customModelFileInput.value = "";
+    updateCustomModelControls();
+  }
+}
+
+async function exportCustomModelRequest() {
+  if (!state.customModel || !state.customModelCompatibility?.compatible || state.loading) return;
+  try {
+    setLoading(true, "Creating inference request", "Preparing canonical source channels…");
+    const source = await prepareCurrentCustomModelSource((message) => { elements.loadingDetail.textContent = message; });
+    elements.loadingDetail.textContent = "Hashing canonical input channels…";
+    const request = await createInferenceRequestEntries({
+      model: state.customModel,
+      sourceFormat: source.sourceFormat,
+      intensityPolicy: source.prepared.intensityPolicy,
+      channels: source.prepared.channels,
+      width: source.width,
+      height: source.height,
+      depth: source.depth,
+      geometry: source.geometry,
+    });
+    source.prepared.channels.length = 0;
+    elements.loadingDetail.textContent = "Creating browser-local Request ZIP…";
+    const archive = await createZip(request.entries);
+    const filename = `TrainRef3D_Inference_Request_${request.manifest.request_id}.zip`;
+    downloadBlob(archive, filename);
+    setStatus(`Inference Request ZIP created locally for Obj ${request.manifest.model.target_label_id}.`);
+    showToast(`Downloaded ${filename}`);
+  } catch (error) {
+    console.error(error);
+    setStatus(`Inference request failed: ${error.message}`);
+    window.alert(`Inference request failed.\n\n${error.message}`);
+  } finally {
+    setLoading(false);
+    updateCustomModelControls();
+  }
+}
+
+async function applyCustomModelImport(mode) {
+  const pending = state.customModelPendingImport;
+  if (!pending) return;
+  const targetId = pending.manifest.model.target_label_id;
+  const result = applyCustomPrediction(
+    state.images.map((image) => image.mask),
+    pending.volume.frames,
+    targetId,
+    mode,
+  );
+  await applyMaskVolumeTransaction(result.masks, `Imported Custom Model prediction to Obj ${targetId} (${mode})`);
+  if (state.objectNames[targetId] === `Object ${targetId}`) {
+    state.objectNames[targetId] = pending.manifest.model.target_name;
+    setSegmentationObjectNames();
+  }
+  selectTargetLabel(targetId);
+  enableLabelsUsedByMasks(result.masks.map((mask) => ({ mask })));
+  state.customModelPendingImport = null;
+  if (elements.customModelConflictDialog.open) elements.customModelConflictDialog.close();
+  const message = `Custom Model prediction imported to Obj ${targetId}: ${pending.manifest.model.target_name}. `
+    + `${result.applied.toLocaleString()} predicted voxels applied. `
+    + `${result.skippedOverlap.toLocaleString()} overlapping voxels were skipped to preserve other objects.`;
+  setStatus(message);
+  showToast(`Obj ${targetId} prediction imported · Undo available`, 4200);
+}
+
+async function importCustomModelResult(file) {
+  if (!file || !state.customModel || !state.customModelCompatibility?.compatible) return;
+  try {
+    setLoading(true, "Importing Custom Model prediction", "Rebuilding canonical source fingerprint…");
+    const source = await prepareCurrentCustomModelSource((message) => { elements.loadingDetail.textContent = message; });
+    const canonical = await prepareCanonicalInferenceChannels({
+      channels: source.prepared.channels,
+      width: source.width,
+      height: source.height,
+      depth: source.depth,
+      geometry: source.geometry,
+    });
+    source.prepared.channels.length = 0;
+    elements.loadingDetail.textContent = "Validating Result ZIP, prediction hash, labels, and geometry…";
+    const validated = await validateInferenceResultZip(file, {
+      model: state.customModel,
+      channelSha256: canonical.channels.map((channel) => channel.sha256),
+      geometry: canonical.geometry,
+    });
+    canonical.channels.length = 0;
+    const bytes = validated.predictionBytes;
+    const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+    const volume = parseNiftiLabelVolume(buffer, validated.manifest.prediction.file);
+    if (volume.width !== source.width || volume.height !== source.height || volume.depth !== source.depth) {
+      throw new Error("Prediction dimensions do not match the editable source grid.");
+    }
+    state.customModelPendingImport = { manifest: validated.manifest, volume };
+    const targetId = validated.manifest.model.target_label_id;
+    const conflict = state.images.some((image) => image.mask.includes(targetId));
+    if (conflict) {
+      elements.customModelConflictCopy.textContent = `Obj ${targetId} — ${validated.manifest.model.target_name} already contains mask data.`;
+      elements.customModelConflictDialog.showModal();
+    } else {
+      await applyCustomModelImport("replace");
+    }
+  } catch (error) {
+    console.error(error);
+    state.customModelPendingImport = null;
+    setStatus(`Custom Model prediction import failed: ${error.message}`);
+    window.alert(`Custom Model prediction import failed.\n\n${error.message}`);
+  } finally {
+    setLoading(false);
+    elements.customModelResultInput.value = "";
+    updateCustomModelControls();
   }
 }
 
@@ -4031,6 +4250,9 @@ async function prepareImageSequence(
   state.sourceVolume = null;
   state.instant3dMappings = [];
   state.instant3dPendingImport = null;
+  state.customModel = null;
+  state.customModelCompatibility = null;
+  state.customModelPendingImport = null;
   state.bulkUndo = [];
   state.bulkRedo = [];
   state.segmentationJobs = [];
@@ -4039,6 +4261,7 @@ async function prepareImageSequence(
   state.segmentationBoxMode = null;
   setSegmentationObjectNames();
   renderInstant3DMappings();
+  updateCustomModelControls();
   if (state.projectId !== projectId || !state.trainingCaseId) state.trainingCaseId = createTrainingCaseId();
   state.projectId = projectId;
   state.index = clamp(demoDataset?.initialFrameIndex ?? 0, 0, prepared.length - 1);
@@ -4851,6 +5074,8 @@ function handleKeyDown(event) {
     elements.segonwebWarningDialog.open ||
     elements.instant3dWarningDialog.open ||
     elements.instant3dConflictDialog.open ||
+    elements.customModelWarningDialog.open ||
+    elements.customModelConflictDialog.open ||
     editingJobField ||
     editingToolsField
   ) {
@@ -5278,6 +5503,34 @@ function bindEvents() {
   });
   elements.instant3dConflictMerge.addEventListener("click", () => applyInstant3DImport("merge"));
   elements.instant3dConflictReplace.addEventListener("click", () => applyInstant3DImport("replace"));
+  elements.customModelSelect.addEventListener("click", () => elements.customModelFileInput.click());
+  elements.customModelFileInput.addEventListener("change", () =>
+    selectCustomModel(elements.customModelFileInput.files[0]));
+  elements.customModelExport.addEventListener("click", exportCustomModelRequest);
+  elements.customModelOpen.addEventListener("click", (event) => {
+    event.preventDefault();
+    elements.customModelWarningDialog.showModal();
+  });
+  elements.customModelWarningCancel.addEventListener("click", () => elements.customModelWarningDialog.close());
+  elements.customModelWarningContinue.addEventListener("click", () => {
+    elements.customModelWarningDialog.close();
+    window.open(elements.customModelOpen.href, "_blank", "noopener,noreferrer");
+    setStatus("Opening InferRef3D. Upload Model and Request ZIPs only when you explicitly choose them in Colab.");
+  });
+  elements.customModelImport.addEventListener("click", () => elements.customModelResultInput.click());
+  elements.customModelResultInput.addEventListener("change", () =>
+    importCustomModelResult(elements.customModelResultInput.files[0]));
+  elements.customModelConflictCancel.addEventListener("click", () => {
+    state.customModelPendingImport = null;
+    elements.customModelConflictDialog.close();
+    setStatus("Custom Model prediction import canceled; masks were not changed.");
+  });
+  elements.customModelConflictDialog.addEventListener("cancel", () => {
+    state.customModelPendingImport = null;
+    setStatus("Custom Model prediction import canceled; masks were not changed.");
+  });
+  elements.customModelConflictMerge.addEventListener("click", () => applyCustomModelImport("merge"));
+  elements.customModelConflictReplace.addEventListener("click", () => applyCustomModelImport("replace"));
   elements.segonwebJobs.addEventListener("click", () => {
     openSegmentationJobs(state.targetLabel);
   });
@@ -5327,6 +5580,7 @@ for (let objectId = 1; objectId <= 20; objectId += 1) {
   elements.instant3dObjectId.append(option);
 }
 renderInstant3DMappings();
+updateCustomModelControls();
 loadInstant3DCatalog();
 elements.penColorSwatch.style.background = state.penColor;
 setAutoApplyMode("off", { announce: false });

@@ -3,7 +3,18 @@
 Release and development history moved from the main README. Dates and descriptions before this
 move are preserved in their original language.
 
-## 2026.8.31 — TrainRef3D MVP (local implementation / GPU validation pending)
+## 2026.9.1 — InferRef3D MVP (local implementation)
+
+- Added SegRef3D Lite **Custom Model** workflow for strict browser-local validation of
+  `trainref3d-model-1.0`, canonical source compatibility/fingerprints, and versioned inference requests.
+- Added InferRef3D Colab launcher/notebook/backend with weights-only MONAI UNet reconstruction,
+  manifest-driven preprocessing, AMP sliding-window inference, and nearest-neighbor restoration to
+  the exact original oblique/anisotropic grid and original target Obj ID.
+- Added source/model/prediction-bound Result ZIP import with protected Merge/Replace, overlap counts,
+  default-name policy, one-step Undo, and direct Training Data ZIP reuse. Added Node/Python units and
+  synthetic CPU E2E. GPU inference smoke remains a separate post-publication validation step.
+
+## 2026.8.31 — TrainRef3D MVP (Tesla T4 mechanical validation complete)
 
 - Separate `train-web/` app validates multiple Training ZIPs locally, selects one binary target,
   requires annotation-completeness confirmation and packages `trainref3d-dataset-1.0` nested ZIPs.
@@ -13,7 +24,8 @@ move are preserved in their original language.
   per-axis median spacing, patch sampling, AMP, early stopping, foreground Dice and
   `trainref3d-model-1.0` state-dictionary model ZIPs. One-case runs are explicitly smoke-only.
 - Added Node/Python units, cross-language fixtures, CPU forward/backward/checkpoint smoke test,
-  optional T4 GPU smoke procedure and CI. No clinical performance claims or automatic uploads.
+  T4 GPU training-pipeline smoke validation and CI. The browser Choose File upload boundary remained
+  manual; no clinical performance claims or automatic uploads.
 
 ## 2026.8.30
 

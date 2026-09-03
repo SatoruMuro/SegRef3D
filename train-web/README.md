@@ -111,7 +111,7 @@ test set or cross-validation in this MVP.
 **Performance on the internal validation split does not establish clinical validity
 or generalizability.**
 
-## Model contract / future inference
+## Model contract / InferRef3D
 
 `TrainRef3D_Model_TR3DM_<random>.zip` contains exactly:
 
@@ -129,12 +129,14 @@ interpolation policies, patch/inference settings, actual split IDs/mode, full tr
 config, best epoch/Dice, versions and backend source SHA256. `model.pt` holds
 `state_dict` and `architecture_config`, not a pickled full model.
 
-Future inference should load **trusted** weights using `torch.load(..., weights_only=True)`,
+InferRef3D loads **trusted** weights using `torch.load(..., weights_only=True)`,
 construct `monai.networks.nets.UNet(**architecture_config)`, load the state dictionary,
 reproduce the manifest preprocessing and channel order, then invert geometry back to
 the original source grid. Output class 1 maps to `task.target_label_id`, not arbitrary
-Obj 1. Reuse `build_model`, `preprocessing_config`, and the versioned schemas; geometry
-inversion and SegRef3D prediction import are **not implemented** in this MVP.
+Obj 1. SegRef3D Lite's Custom Model panel validates the Model ZIP without executing weights,
+creates a source-fingerprinted request, and imports the original-grid result with protected
+Merge/Replace semantics and one-step Undo. See the
+[versioned inference contract](../docs/TRAINREF3D_INFERENCE_FORMAT.md).
 
 ## Safety limits / known constraints
 
@@ -158,8 +160,8 @@ inversion and SegRef3D prediction import are **not implemented** in this MVP.
 - Fixed seed supports repeatable case splits; it does not guarantee bitwise equality
   across devices/library versions. Pin the notebook `BACKEND_REF` to a verified commit
   for future reproducibility. A model trained here is not evidence of optimal architecture.
-- No automatic Colab upload, inference, model import, multiclass, nnU-Net, automated
-  retraining, cloud server or clinical deployment.
+- No automatic Colab upload, browser-side PyTorch, multiclass, nnU-Net, automated retraining,
+  cloud inference server or clinical deployment.
 
 ## Tests
 

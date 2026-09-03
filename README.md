@@ -39,6 +39,9 @@ analysis. Reliable pixel/voxel and slice spacing are essential for physical meas
   manifest for custom segmentation-model training.
 - **[TrainRef3D](train-web/README.md)**: assemble Training ZIPs locally, select one target,
   and train a binary custom model in your own Colab GPU runtime. Research baseline, not clinical validation.
+- **InferRef3D / Custom Model**: validate that Model ZIP in SegRef3D Lite, create a source-bound
+  request, run GPU inference in your own Colab runtime, then import the prediction for review,
+  correction, and another Training Data ZIP. See the [inference contract](docs/TRAINREF3D_INFERENCE_FORMAT.md).
 
 ## Why SegRef3D?
 
@@ -49,7 +52,8 @@ supported 3D volumes: **segment → refine → quantify → 3D**.
 
 ### Human in the loop
 
-SegRef3D is designed around **AI segmentation → researcher refinement → quantitative output**.
+SegRef3D is designed around **Create → Train → Predict → Review & Correct** as well as
+**AI segmentation → researcher refinement → quantitative output**.
 Automatic results remain editable before measurement or reconstruction.
 
 ### Quantitative 3D

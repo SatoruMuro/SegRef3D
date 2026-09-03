@@ -2754,6 +2754,21 @@ svg {
 
 .instant3d-availability { margin: 0; }
 
+.custom-model-summary {
+  display: grid;
+  gap: 5px;
+  margin: 10px 0 0;
+}
+
+.custom-model-summary > div {
+  display: grid;
+  grid-template-columns: 62px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.custom-model-summary dt { color: #667; }
+.custom-model-summary dd { margin: 0; overflow-wrap: anywhere; }
+
 .labels-panel {
   grid-column: 1;
   border-right: 1px solid var(--line);

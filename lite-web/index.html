@@ -12,7 +12,7 @@
     <link rel="icon" href="./favicon.ico" sizes="any" />
     <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
     <link rel="manifest" href="./manifest.webmanifest" />
-    <link rel="stylesheet" href="./styles.css?v=32" />
+    <link rel="stylesheet" href="./styles.css?v=33" />
   </head>
   <body>
     <svg class="svg-defs" aria-hidden="true">
@@ -615,6 +615,28 @@
           <p class="instant3d-privacy"><code>&lt;source-folder&gt;_instant3d_request.zip</code> contains the source NIfTI volume and job settings. It stays in your browser until you explicitly upload it to your own Google Colab runtime.</p>
           <input id="instant3d-result-input" class="visually-hidden" type="file" accept="application/zip,.zip" />
         </section>
+        <section class="instant3d-workflow custom-model-workflow" aria-labelledby="custom-model-title">
+          <div class="tool-section-heading">
+            <strong id="custom-model-title">Custom Model</strong>
+            <span>Predict one target with a TrainRef3D model</span>
+          </div>
+          <div id="custom-model-status" class="workflow-summary">Select a TrainRef3D Model ZIP.</div>
+          <dl class="custom-model-summary">
+            <div><dt>Target</dt><dd id="custom-model-target">—</dd></div>
+            <div><dt>Input</dt><dd id="custom-model-input">—</dd></div>
+            <div><dt>Model ID</dt><dd id="custom-model-id">—</dd></div>
+          </dl>
+          <div class="instant3d-actions">
+            <button id="custom-model-select" class="command-button" type="button">Select Model ZIP</button>
+            <button id="custom-model-export" class="command-button accent" type="button" disabled>Create Inference Request ZIP</button>
+            <a id="custom-model-open" class="command-button" href="https://satorumuro.github.io/SegRef3D/ColabNotebooks/inferref3d.html" target="_blank" rel="noopener noreferrer">Open InferRef3D</a>
+            <button id="custom-model-import" class="command-button" type="button" disabled>Import Prediction ZIP</button>
+          </div>
+          <p class="instant3d-privacy">Model validation, request creation, and result import stay in this browser. The request contains source voxels that may be identifiable. Model and Request ZIPs leave the browser only when you explicitly upload both to your own Google Colab runtime.</p>
+          <p class="instant3d-privacy"><strong>Prediction is an algorithmic segmentation intended for review and correction. It is not an independent clinical diagnosis.</strong></p>
+          <input id="custom-model-file-input" class="visually-hidden" type="file" accept="application/zip,.zip" />
+          <input id="custom-model-result-input" class="visually-hidden" type="file" accept="application/zip,.zip" />
+        </section>
         <input id="segonweb-result-input" class="visually-hidden" type="file" accept="application/zip,.zip" />
       </div>
     </dialog>
@@ -636,6 +658,22 @@
         <div class="local-file-dialog-heading"><div><span class="dialog-kicker">EXISTING MASK DATA</span><h2 id="instant3d-conflict-title">Choose how to import</h2></div></div>
         <div class="local-file-dialog-copy"><p>One or more destination objects already contain mask data.</p><p><strong>Replace</strong> clears those destination objects first. <strong>Merge</strong> preserves existing labeled pixels and fills only background pixels.</p></div>
         <div class="local-file-dialog-actions"><button id="instant3d-conflict-cancel" class="command-button" type="button">Cancel</button><button id="instant3d-conflict-merge" class="command-button" type="button">Merge</button><button id="instant3d-conflict-replace" class="command-button accent" type="button">Replace</button></div>
+      </div>
+    </dialog>
+
+    <dialog id="custom-model-warning-dialog" class="local-file-dialog information-dialog" aria-labelledby="custom-model-warning-title">
+      <div class="local-file-dialog-content">
+        <div class="local-file-dialog-heading"><span class="local-file-dialog-icon cloud-dialog-icon"><svg><use href="#i-external"></use></svg></span><div><span class="dialog-kicker cloud-dialog-kicker">PROCESSING LOCATION CHANGES</span><h2 id="custom-model-warning-title">InferRef3D uses Google Colab</h2></div></div>
+        <div class="local-file-dialog-copy"><p>The Model ZIP contains weights. The Inference Request ZIP contains canonical source voxels and may remain identifiable even without DICOM headers.</p><p>You must explicitly upload both ZIPs to your own Google Colab runtime. Nothing is uploaded to a SegRef3D-operated server.</p><p>Confirm that Google Colab use is permitted by your institution.</p></div>
+        <div class="local-file-dialog-actions"><button id="custom-model-warning-cancel" class="command-button" type="button">Cancel</button><button id="custom-model-warning-continue" class="command-button accent" type="button">Continue</button></div>
+      </div>
+    </dialog>
+
+    <dialog id="custom-model-conflict-dialog" class="local-file-dialog information-dialog" aria-labelledby="custom-model-conflict-title">
+      <div class="local-file-dialog-content">
+        <div class="local-file-dialog-heading"><div><span class="dialog-kicker">EXISTING TARGET MASK</span><h2 id="custom-model-conflict-title">Choose how to import the prediction</h2></div></div>
+        <div class="local-file-dialog-copy"><p id="custom-model-conflict-copy">The target object already contains mask data.</p><p><strong>Replace</strong> clears only the target object, then applies the prediction. <strong>Merge</strong> keeps it and adds prediction only to background. Both modes protect every other object from overlap.</p></div>
+        <div class="local-file-dialog-actions"><button id="custom-model-conflict-cancel" class="command-button" type="button">Cancel</button><button id="custom-model-conflict-merge" class="command-button" type="button">Merge into target</button><button id="custom-model-conflict-replace" class="command-button accent" type="button">Replace target</button></div>
       </div>
     </dialog>
 
@@ -1098,6 +1136,6 @@
         if (status) status.textContent = `Application operation failed: ${message}`;
       });
     </script>
-    <script type="module" src="./app.mjs?v=44"></script>
+    <script type="module" src="./app.mjs?v=45"></script>
   </body>
 </html>
