@@ -3,6 +3,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest.mock import Mock, patch
 
 import numpy as np
 from PIL import Image
@@ -86,11 +87,122 @@ class DesktopWorkspaceUiTests(unittest.TestCase):
         self.assertIn("slice direction", self.window.btn_export_nifti_5x.toolTip())
         self.assertIn("physical geometry", self.window.btn_export_nifti_10x.toolTip())
 
+    def test_stl_ui_matches_lite_preview_export_controls(self):
+        self.assertEqual(
+            [self.window.combo_stl_factor.itemData(index) for index in range(3)],
+            [1, 5, 10],
+        )
+        self.assertEqual(self.window.combo_stl_factor.currentData(), 5)
+        self.assertEqual(
+            [self.window.combo_stl_objects.itemData(index) for index in range(2)],
+            ["target", "visible"],
+        )
+        self.assertEqual(self.window.combo_stl_objects.currentData(), "target")
+        self.assertEqual(self.window.btn_preview_stl.text(), "Preview 3D")
+        self.assertEqual(self.window.btn_export_stl_colorwise.text(), "Export STL")
+        self.assertIn("without saving", self.window.btn_preview_stl.toolTip())
+        self.assertIn("same mesh pipeline", self.window.btn_export_stl_colorwise.toolTip())
+
+    def test_stl_pipeline_uses_controls_without_mutating_editor_masks(self):
+        for index, key in enumerate(self.window.label_masks):
+            self.window.label_masks[key][6:13, 5 + index:12 + index] = 1
+        before = {
+            key: mask.copy() for key, mask in self.window.label_masks.items()
+        }
+        self.window.combo_stl_factor.setCurrentIndex(
+            self.window.combo_stl_factor.findData(5)
+        )
+        self.window.combo_stl_objects.setCurrentIndex(
+            self.window.combo_stl_objects.findData("target")
+        )
+        self.window.mm_per_px = 1.0
+        self.window.z_spacing_mm = 1.0
+
+        meshes = self.window._build_stl_meshes_from_controls()
+
+        self.assertEqual(len(meshes), 1)
+        self.assertEqual(meshes[0].label, 1)
+        self.assertEqual(meshes[0].factor, 5)
+        self.assertAlmostEqual(meshes[0].mesh_pitch_zyx[0], 0.2)
+        if app_module.vtk is not None:
+            preview_data = app_module.STLPreviewDialog._polydata_from_mesh(meshes[0].mesh)
+            self.assertEqual(preview_data.GetNumberOfPoints(), len(meshes[0].mesh.vertices))
+            self.assertEqual(preview_data.GetNumberOfPolys(), len(meshes[0].mesh.faces))
+        for key, expected in before.items():
+            np.testing.assert_array_equal(self.window.label_masks[key], expected)
+
+    def test_stl_pipeline_requires_physical_spacing_when_volinfo_is_canceled(self):
+        self.window.label_masks["0001"][6:13, 5:12] = 1
+        with patch.object(self.window, "load_volinf_csv") as load_volinfo:
+            with self.assertRaisesRegex(ValueError, "Voxel spacing is not set"):
+                self.window._build_stl_meshes_from_controls()
+        load_volinfo.assert_called_once_with()
+
     def test_gpu_panel_shows_local_execution_controls(self):
         self.window.sam2_enabled = True
         self.window._update_sam2_panel_visibility()
         self.assertFalse(self.window.local_sam2_widget.isHidden())
         self.assertTrue(self.window.lite_sam2_widget.isHidden())
+
+    def test_local_sam2_add_is_directly_below_run_tracking(self):
+        layout = self.window.local_sam2_widget.layout()
+        buttons = [layout.itemAt(index).widget() for index in range(layout.count())]
+
+        self.assertEqual(
+            buttons,
+            [
+                self.window.btn_run_sam2,
+                self.window.btn_prepare_tracking,
+                self.window.btn_run_tracking,
+                self.window.btn_local_sam2_add,
+                self.window.btn_manage_local_batch_jobs,
+            ],
+        )
+        self.assertFalse(hasattr(self.window, "btn_batch_tracking"))
+        self.assertEqual(self.window.btn_local_sam2_add.text(), "Add")
+        self.assertEqual(
+            self.window.btn_local_sam2_add.sizePolicy().horizontalPolicy(),
+            self.window.btn_run_tracking.sizePolicy().horizontalPolicy(),
+        )
+        self.assertEqual(
+            self.window.btn_local_sam2_add.styleSheet(),
+            self.window.btn_add_to_mask.styleSheet(),
+        )
+
+    def test_local_sam2_add_matches_draw_refine_add(self):
+        key = "0001"
+        self.window.drawn_paths_per_image[key] = [(self._rectangle(), "#808080")]
+        self.window.btn_local_sam2_add.click()
+        local_sam2_result = self.window.label_masks[key].copy()
+
+        self.window.smart_undo()
+        self.window.drawn_paths_per_image[key] = [(self._rectangle(), "#808080")]
+        self.window.btn_add_to_mask.click()
+
+        np.testing.assert_array_equal(self.window.label_masks[key], local_sam2_result)
+        self.assertTrue(np.any(local_sam2_result == 1))
+
+    def test_batch_jobs_dialog_remains_the_local_batch_run_entry_point(self):
+        jobs = [{
+            "id": 1,
+            "name": "Object 1",
+            "box": ((2, 3), (20, 18)),
+            "point": None,
+            "start": 0,
+            "end": 2,
+            "box_frame": 1,
+        }]
+        dialog = Mock()
+        dialog.exec.return_value = app_module.QDialog.DialogCode.Accepted
+        dialog.objects = jobs
+        dialog.run_local_requested = True
+
+        with patch.object(app_module, "BatchTrackingDialog", return_value=dialog):
+            with patch.object(self.window, "run_batch_tracking") as run_local:
+                self.window.show_batch_tracking_jobs()
+
+        run_local.assert_called_once_with()
+        self.assertEqual(self.window.batch_object_data, jobs)
 
     def test_current_scope_leaves_other_pending_slices_untouched(self):
         self.window.drawn_paths_per_image["0001"] = [(self._rectangle(), "#808080")]
@@ -152,12 +264,37 @@ class DesktopWorkspaceUiTests(unittest.TestCase):
         self.app.processEvents()
         self.assertAlmostEqual(self.window.graphicsView.transform().m11(), before)
 
-    def test_status_progress_is_only_visible_for_percent_messages(self):
-        self.window.label_status.setText("Tracking Object 2: 68%")
-        self.assertFalse(self.window.status_progress.isHidden())
-        self.assertEqual(self.window.status_progress.value(), 68)
-        self.window.label_status.setText("Ready")
-        self.assertTrue(self.window.status_progress.isHidden())
+    def test_status_progress_keeps_operation_text_separate_from_percentage(self):
+        cases = (
+            ("▶ Forward tracking", 68),
+            ("◀ Backward tracking", 10),
+            ("▶ Object 2: Forward", 42),
+            ("Exporting STL...", 100),
+        )
+
+        for status_text, percent in cases:
+            with self.subTest(status_text=status_text):
+                self.window._set_status_progress(status_text, percent)
+                self.assertEqual(self.window.label_status.text(), status_text)
+                self.assertNotIn("%", self.window.label_status.text())
+                self.assertNotIn("█", self.window.label_status.text())
+                self.assertFalse(self.window.status_progress.isHidden())
+                self.assertEqual(self.window.status_progress.value(), percent)
+                self.assertEqual(self.window.status_progress.text(), f"{percent}%")
+
+    def test_completion_error_and_plain_status_messages_hide_progress(self):
+        self.window._set_status_progress("◀ Backward tracking", 10)
+
+        for message in (
+            "✅ Tracking completed.",
+            "⚠ Tracking failed: test error",
+            "Coverage: 68%",
+            "Ready",
+        ):
+            with self.subTest(message=message):
+                self.window.label_status.setText(message)
+                self.assertEqual(self.window.label_status.text(), message)
+                self.assertTrue(self.window.status_progress.isHidden())
 
 
 if __name__ == "__main__":

@@ -126,6 +126,28 @@ dist\SegRef3D-Local-GPU-v<version>-Windows\SegRef3D.exe --startup-smoke-test
 dist\SegRef3D-Local-GPU-v<version>-Windows\SegRef3D.exe --gpu-check
 ```
 
+The build is rejected before ZIP creation unless the frozen `--gpu-check`
+can import PyTorch. On a machine with a visible CUDA GPU it also requires the
+CUDA tensor operation to succeed.
+
+## Microsoft Visual C++ runtime and DLL layout
+
+The onedir distribution is self-contained. PyInstaller collects the official
+Microsoft Visual C++ runtime beside `python312.dll` in `_internal`; users are
+not required to install a separate redistributable for this package.
+
+PyQt6-Qt6 6.9.1 also contains older MSVC runtime copies under
+`_internal\PyQt6\Qt6\bin`. Those copies must not ship because the Qt runtime
+hook adds that directory to the Windows DLL search path and can make PyTorch
+`c10.dll` initialize against the wrong `MSVCP140.dll`. The build therefore:
+
+1. removes only `MSVCP140.dll`, `VCRUNTIME140.dll`, and
+   `VCRUNTIME140_1.dll` from the Qt subdirectory;
+2. retains the authoritative Microsoft runtime at `_internal` root;
+3. registers `_internal` and `_internal\torch\lib` before application imports;
+4. preloads the authoritative root runtime; and
+5. runs the PE dependency audit and frozen `--gpu-check` before ZIP creation.
+
 ## Test matrix
 
 ### A. RTX 5080 Laptop GPU / RTX 50-series

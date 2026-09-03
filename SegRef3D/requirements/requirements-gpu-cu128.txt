@@ -1,4 +1,6 @@
-PyQt6
+PyQt6==6.9.1
+PyQt6-Qt6==6.9.1
+PyQt6-sip==13.10.2
 opencv-python
 pillow
 numpy

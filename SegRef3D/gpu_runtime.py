@@ -7,6 +7,7 @@ xformers, flash-attn, or any custom attention package.
 from __future__ import annotations
 
 import importlib.metadata
+import os
 import sys
 from typing import Any
 
@@ -27,13 +28,31 @@ def get_optional_attention_status() -> dict[str, str]:
     }
 
 
+def get_torch_build_archs(torch_module=None) -> list[str]:
+    """Return architectures compiled into the Torch wheel, even without a GPU."""
+    if torch_module is None:
+        import torch as torch_module
+
+    archs = list(torch_module.cuda.get_arch_list())
+    if archs:
+        return archs
+
+    get_arch_flags = getattr(torch_module._C, "_cuda_getArchFlags", None)
+    if get_arch_flags is None:
+        return []
+    return str(get_arch_flags()).split()
+
+
 def get_cuda_diagnostics() -> dict[str, Any]:
     import torch
 
     info: dict[str, Any] = {
+        "product_edition": os.environ.get("SEGREF3D_EDITION", "unknown"),
+        "frozen": bool(getattr(sys, "frozen", False)),
         "python_executable": sys.executable,
         "torch_version": torch.__version__,
         "torch_cuda": torch.version.cuda,
+        "torch_path": torch.__file__,
         "cuda_available": torch.cuda.is_available(),
         "device_name": None,
         "device_capability": None,
@@ -46,7 +65,7 @@ def get_cuda_diagnostics() -> dict[str, Any]:
     }
 
     try:
-        info["supported_archs"] = list(torch.cuda.get_arch_list())
+        info["supported_archs"] = get_torch_build_archs(torch)
         info["blackwell_sm120_supported"] = (
             "sm_120" in info["supported_archs"]
             or "compute_120" in info["supported_archs"]
@@ -127,9 +146,12 @@ def choose_sam2_mode(cuda_info: dict[str, Any], allow_cpu_fallback: bool = False
 
 def print_cuda_diagnostics(cuda_info: dict[str, Any], sam2_mode: str | None = None) -> None:
     print("=== SegRef3D Local GPU Diagnostic ===")
+    print(f"Product edition: {cuda_info.get('product_edition')}")
+    print(f"Frozen: {cuda_info.get('frozen')}")
     print(f"Python: {cuda_info.get('python_executable')}")
     print(f"Torch: {cuda_info.get('torch_version')}")
     print(f"Torch CUDA: {cuda_info.get('torch_cuda')}")
+    print(f"Torch path: {cuda_info.get('torch_path')}")
     print(f"CUDA available: {cuda_info.get('cuda_available')}")
     print(f"GPU: {cuda_info.get('device_name')}")
     capability = cuda_info.get("device_capability")

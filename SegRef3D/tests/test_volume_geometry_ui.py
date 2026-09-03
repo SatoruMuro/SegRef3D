@@ -69,6 +69,7 @@ class VolumeGeometryUiTests(unittest.TestCase):
         output = next(Path(self.temp.name).glob(
             "Study Folder.v1_nifti_output_*/Study Folder.v1_segref3d_labelmap.nii.gz"
         ))
+        self.assertNotIn(Path(self.window.session_root_dir), output.parents)
         image = nib.load(output)
         np.testing.assert_allclose(image.affine, self.affine, atol=1e-5)
         self.assertEqual(image.shape, (6, 5, 3))
@@ -81,9 +82,10 @@ class VolumeGeometryUiTests(unittest.TestCase):
             "bad_name_.folder",
         )
         self.window.reset_autosave_label_dir()
-        self.assertTrue(Path(self.window.output_label_dir).name.startswith(
-            "Study Folder.v1_label_png_[autosave]_"
-        ))
+        autosave = Path(self.window.output_label_dir)
+        self.assertEqual(autosave.name, "autosave_label_png")
+        self.assertEqual(autosave.parent.name, "Study Folder.v1")
+        self.assertIn(Path(self.window.session_root_dir), autosave.parents)
         self.assertEqual(Path(self.window.get_label_png_path("0001")).name, "mask0001.png")
 
         preview = type("Preview", (), {
@@ -104,7 +106,7 @@ class VolumeGeometryUiTests(unittest.TestCase):
             "getExistingDirectory",
             return_value=str(destination),
         ):
-            self.window.save_svg_as()
+            self.window.save_masks()
 
         label_folder = next(destination.glob("Study Folder.v1_label_png_*"))
         self.assertEqual(
@@ -138,7 +140,7 @@ class VolumeGeometryUiTests(unittest.TestCase):
             "getExistingDirectory",
             return_value=str(destination),
         ):
-            self.window.save_svg_as()
+            self.window.save_masks()
         return next(destination.glob("Study Folder.v1_label_png_*"))
 
     def test_save_masks_five_slice_png_content_is_canonical(self):
@@ -274,9 +276,6 @@ class VolumeGeometryUiTests(unittest.TestCase):
     def test_calibration_updates_spacing_without_losing_direction_or_origin(self):
         original_direction = self.window.volume_geometry.direction.copy()
         original_origin = self.window.volume_geometry.origin
-        output_mask_dir = Path(self.temp.name) / "masks"
-        output_mask_dir.mkdir()
-        self.window.output_mask_dir = str(output_mask_dir)
         self.window.mm_per_px = 0.5
         self.window.z_spacing_mm = 1.5
 
@@ -285,7 +284,9 @@ class VolumeGeometryUiTests(unittest.TestCase):
         np.testing.assert_allclose(self.window.volume_geometry.spacing, [0.5, 0.5, 1.5], atol=1e-10)
         np.testing.assert_allclose(self.window.volume_geometry.direction, original_direction, atol=1e-10)
         np.testing.assert_allclose(self.window.volume_geometry.origin, original_origin, atol=1e-10)
-        csv_path = next(Path(self.temp.name).glob("*_volinf.csv"))
+        csv_path = next(
+            (Path(self.window.output_label_dir).parent / "calibration").glob("*_volinf.csv")
+        )
         csv_text = csv_path.read_text(encoding="utf-8")
         self.assertIn("IJK to RAS Row 1", csv_text)
         self.assertIn("Geometry Source", csv_text)

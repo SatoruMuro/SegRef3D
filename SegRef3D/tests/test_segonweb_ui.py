@@ -169,7 +169,6 @@ class SegOnWebUiTests(unittest.TestCase):
             self.window.label_px2,
             self.window.btn_remove_small_parts,
             self.window.btn_add_object_prompt,
-            self.window.btn_batch_tracking,
             self.window.combo_threshold_preset,
             self.window.spin_threshold_min,
             self.window.spin_threshold_max,

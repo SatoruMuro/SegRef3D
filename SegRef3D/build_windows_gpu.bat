@@ -56,7 +56,7 @@ if errorlevel 2 (
     exit /b 2
 )
 
-python -c "import sys, torch; archs=list(torch.cuda.get_arch_list()); print('Build torch:', torch.__version__, 'CUDA', torch.version.cuda); print('Build torch arch list:', archs); sys.exit(0 if torch.version.cuda and ('sm_120' in archs or 'compute_120' in archs) else 3)"
+python -c "import sys, torch; from gpu_runtime import get_torch_build_archs; archs=get_torch_build_archs(torch); print('Build torch:', torch.__version__, 'CUDA', torch.version.cuda); print('Build torch arch list:', archs); sys.exit(0 if torch.version.cuda and ('sm_120' in archs or 'compute_120' in archs) else 3)"
 if errorlevel 3 (
     echo.
     echo This PyTorch build does not advertise sm_120 or compute_120 support. Do not ship it for RTX 50-series GPUs.
@@ -79,7 +79,7 @@ python -m PyInstaller SegRef3D.py ^
     --add-data "..\resources;resources" ^
     --add-data "configs;configs" ^
     --add-data "checkpoints;checkpoints" ^
-    --add-data "sam2pkg;sam2pkg" ^
+    --add-data "sam2pkg\sam2;sam2pkg\sam2" ^
     --add-data "sam2pkg\sam2;sam2" ^
     --add-data "sam2_interface.py;." ^
     --add-data "gpu_runtime.py;." ^
@@ -127,6 +127,23 @@ if errorlevel 1 exit /b 1
 if exist "dist\%APP_NAME%" rmdir /s /q "dist\%APP_NAME%"
 move "dist\%PYINSTALLER_NAME%" "dist\%APP_NAME%"
 if errorlevel 1 exit /b 1
+
+echo.
+echo === Normalizing and auditing Windows DLL layout ===
+python tools\prepare_windows_gpu_dist.py "dist\%APP_NAME%"
+if errorlevel 1 exit /b 1
+python tools\prepare_windows_gpu_dist.py "dist\%APP_NAME%" --check-only
+if errorlevel 1 exit /b 1
+python tools\audit_windows_gpu_dlls.py "dist\%APP_NAME%"
+if errorlevel 1 exit /b 1
+
+echo.
+echo === Required frozen GPU diagnostic ===
+"dist\%APP_NAME%\SegRef3D.exe" --gpu-check
+if errorlevel 1 (
+    echo Frozen SegRef3D.exe --gpu-check failed. The build will not be packaged.
+    exit /b 4
+)
 
 echo.
 echo === Creating zip ===

@@ -1,10 +1,11 @@
-__version__ = "1.2.6"
+__version__ = "1.3.0"
 
 
 import sys
 import os
 import re
 import io
+import json
 import zipfile
 from pathlib import Path
 
@@ -41,7 +42,6 @@ from PyQt6.QtWidgets import (
     QTextEdit,
 )
 
-from PyQt6.QtSvgWidgets import QGraphicsSvgItem
 from PyQt6.QtWidgets import QMessageBox
 
 from PyQt6.QtGui import (
@@ -56,8 +56,6 @@ from PyQt6.QtGui import (
 )
 
 from PyQt6.QtCore import Qt, QPointF, QSignalBlocker, QTimer
-from PyQt6.QtSvg import QSvgRenderer
-
 from PyQt6.QtWidgets import QFileDialog, QDialogButtonBox, QPushButton, QProgressDialog
 
 import nrrd  # pip install pynrrd
@@ -89,6 +87,10 @@ from mask_postprocessing import (
     interpolate_multilabel_volume,
     merge_label_binary,
 )
+from stl_mesh_pipeline import (
+    build_stl_meshes,
+    export_stl_meshes,
+)
 from volume_geometry import (
     VolumeGeometry,
     VolumeGeometryError,
@@ -109,8 +111,6 @@ from mask_sequence import (
     export_mapping_preview,
     write_mask_manifest,
 )
-
-from svgpathtools import parse_path
 
 from datetime import datetime
 import shutil
@@ -139,64 +139,8 @@ import subprocess
 
 import time
 
-from trimesh.smoothing import filter_laplacian  # ✅ 追加
-
 # ほかのimport群の近くに
 import nibabel as nib
-
-
-
-def _hex_from_rgb_text(s: str) -> str | None:
-    m = re.match(r'rgb\((\d+),\s*(\d+),\s*(\d+)\)', s.strip(), re.I)
-    if not m:
-        return None
-    r, g, b = map(int, m.groups())
-    return f'#{r:02x}{g:02x}{b:02x}'
-
-def _extract_fill_hex(elem: ET.Element) -> str | None:
-    """<path fill> でも style='fill:…' でも、rgb() でも #rrggbb に正規化して返す。"""
-    fill  = (elem.attrib.get("fill")  or "").strip().lower()
-    style = (elem.attrib.get("style") or "").strip().lower()
-    if "fill:" in style:
-        m = re.search(r'fill:([^;]+)', style)
-        if m:
-            fill = m.group(1).strip()
-    if not fill or fill == "none":
-        return None
-    if fill.startswith("rgb("):
-        fill = _hex_from_rgb_text(fill) or fill
-    if isinstance(fill, str) and fill.startswith("#") and len(fill) == 7:
-        return fill
-    return None
-
-def _tuple_from_hex(hx: str) -> tuple[int,int,int]:
-    return (int(hx[1:3],16), int(hx[3:5],16), int(hx[5:7],16))
-
-def _recolor_svg_inplace(svg_path: str, from_hex: str, to_hex: str) -> bool:
-    """その SVG の fill が from_hex の要素だけ to_hex に差し替え。変更があれば True"""
-    try:
-        tree = ET.parse(svg_path)
-        root = tree.getroot()
-        changed = False
-        for el in root.iter():
-            hx = _extract_fill_hex(el)
-            if hx == from_hex:
-                el.set("fill", to_hex)
-                # style に fill 指定があれば削除
-                style = el.attrib.get("style", "")
-                if "fill:" in style:
-                    style = re.sub(r'fill:[^;]+;?', '', style)
-                    el.set("style", style)
-                changed = True
-        if changed:
-            tree.write(svg_path, encoding="utf-8")
-        return changed
-    except Exception as e:
-        print(f"[WARN] recolor failed: {svg_path}: {e}")
-        return False
-
-    
-    
     
 
     
@@ -466,37 +410,6 @@ class CustomGraphicsView(QGraphicsView):
 
 
                 
-    # def mouseMoveEvent(self, event: QMouseEvent):
-    #     scene_pos = self.mapToScene(event.pos())
-    
-    #     # ✅ freeモード（従来の手描き）
-    #     if self.draw_mode == 'free' and self.drawing and self.current_path:
-    #         self.current_path.lineTo(scene_pos)
-    #         self.current_path_item.setPath(self.current_path)
-    
-    #     # ✅ clickモード（仮のスムーズ曲線プレビュー）
-    #     # elif self.draw_mode == 'click' and len(self.click_points) >= 1:
-    #     elif self.draw_mode in ('click', 'click_snap') and len(self.click_points) >= 1:
-
-    #         temp_points = self.click_points + [scene_pos]
-    #         smooth_path = self.create_smooth_path(temp_points)
-    
-    #         # 🔒 temp_preview_item の存在と有効性をチェック
-    #         if self.temp_preview_item:
-    #             if self.temp_preview_item.scene() is not None:
-    #                 self.temp_preview_item.setPath(smooth_path)
-    #             else:
-    #                 print("[WARN] temp_preview_item is deleted or invalid")
-    #                 self.temp_preview_item = None
-    
-    #         if not self.temp_preview_item:
-    #             self.temp_preview_item = QGraphicsPathItem()
-    #             self.temp_preview_item.setPen(QPen(Qt.GlobalColor.gray, 1, Qt.PenStyle.DashLine))  # 仮表示は点線で
-    #             self.temp_preview_item.setPath(smooth_path)
-    #             self.scene().addItem(self.temp_preview_item)
-    
-    #     event.accept()
-
     def mouseMoveEvent(self, event: QMouseEvent):
         if self.middle_mouse_panning and self.last_pan_pos is not None:
             delta = event.pos() - self.last_pan_pos
@@ -619,13 +532,20 @@ class CustomGraphicsView(QGraphicsView):
 
 # ===== STL プレビュー用ダイアログ =====
 from PyQt6.QtWidgets import QDialog, QVBoxLayout
-from vtkmodules.qt.QVTKRenderWindowInteractor import QVTKRenderWindowInteractor
-import vtk
+try:
+    from vtkmodules.qt.QVTKRenderWindowInteractor import QVTKRenderWindowInteractor
+    import vtk
+except (ImportError, OSError) as vtk_import_error:
+    QVTKRenderWindowInteractor = None
+    vtk = None
+    print(f"[WARN] VTK preview unavailable: {vtk_import_error}")
 import random
 
 class STLPreviewDialog(QDialog):
-    def __init__(self, parent=None, stl_paths=None, color_labels=None):
+    def __init__(self, parent=None, stl_paths=None, color_labels=None, mesh_items=None):
         super().__init__(parent)
+        if vtk is None or QVTKRenderWindowInteractor is None:
+            raise RuntimeError("VTK preview is unavailable in this environment.")
         self.setWindowTitle("STL Preview")
         self.resize(900, 700)
         
@@ -651,7 +571,9 @@ class STLPreviewDialog(QDialog):
 
         self.renderer.SetBackground(0.1, 0.1, 0.12)
 
-        if stl_paths:
+        if mesh_items:
+            self.load_meshes(mesh_items)
+        elif stl_paths:
             if isinstance(stl_paths, (list, tuple)):
                 self.load_multiple(stl_paths)
             else:
@@ -676,9 +598,12 @@ class STLPreviewDialog(QDialog):
         return (0.7, 0.7, 0.7)
 
 
-    def _actor_from_reader(self, reader, color=None):
+    def _actor_from_input(self, source, color=None):
         normals = vtk.vtkPolyDataNormals()
-        normals.SetInputConnection(reader.GetOutputPort())
+        if isinstance(source, vtk.vtkPolyData):
+            normals.SetInputData(source)
+        else:
+            normals.SetInputConnection(source.GetOutputPort())
         normals.ConsistencyOn()
         normals.SplittingOff()
         normals.AutoOrientNormalsOn()
@@ -700,12 +625,41 @@ class STLPreviewDialog(QDialog):
         prop.SetSpecularPower(20)
         return actor
 
+    def _color_for_label(self, label: int):
+        index = int(label) - 1
+        if 0 <= index < len(self.color_labels):
+            r, g, b = self.color_labels[index]
+            return (r / 255.0, g / 255.0, b / 255.0)
+        return (0.7, 0.7, 0.7)
+
+    @staticmethod
+    def _polydata_from_mesh(mesh):
+        """Convert one in-memory trimesh surface without creating a temporary STL."""
+        if vtk is None:
+            raise RuntimeError("VTK preview is unavailable in this environment.")
+        from vtk.util.numpy_support import numpy_to_vtk, numpy_to_vtkIdTypeArray
+
+        vertices = np.ascontiguousarray(np.asarray(mesh.vertices, dtype=np.float64))
+        faces = np.ascontiguousarray(np.asarray(mesh.faces, dtype=np.int64))
+        points = vtk.vtkPoints()
+        points.SetData(numpy_to_vtk(vertices, deep=True))
+        cells = vtk.vtkCellArray()
+        offsets = np.arange(0, (len(faces) + 1) * 3, 3, dtype=np.int64)
+        cells.SetData(
+            numpy_to_vtkIdTypeArray(offsets, deep=True),
+            numpy_to_vtkIdTypeArray(faces.ravel(), deep=True),
+        )
+        polydata = vtk.vtkPolyData()
+        polydata.SetPoints(points)
+        polydata.SetPolys(cells)
+        return polydata
+
     def load_one(self, stl_path: str):
         reader = vtk.vtkSTLReader()
         reader.SetFileName(stl_path)
         reader.Update()
         color = self._color_for_path(stl_path)   # ← 追加
-        actor = self._actor_from_reader(reader, color)
+        actor = self._actor_from_input(reader, color)
         self.renderer.AddActor(actor)
         self._finalize_scene()
 
@@ -715,7 +669,14 @@ class STLPreviewDialog(QDialog):
             reader.SetFileName(p)
             reader.Update()
             color = self._color_for_path(p)      # ← 追加
-            actor = self._actor_from_reader(reader, color)
+            actor = self._actor_from_input(reader, color)
+            self.renderer.AddActor(actor)
+        self._finalize_scene()
+
+    def load_meshes(self, mesh_items):
+        for item in mesh_items:
+            polydata = self._polydata_from_mesh(item.mesh)
+            actor = self._actor_from_input(polydata, self._color_for_label(item.label))
             self.renderer.AddActor(actor)
         self._finalize_scene()
 
@@ -755,6 +716,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         self.dicom_source_paths = {}
         self.dicom_slice_mapping = []
         self.source_dataset_name = None
+        self._source_dataset_identity = None
         self.source_nifti_path = None
         self.source_nifti_fingerprint = None
         self.volume_geometry = None
@@ -816,7 +778,8 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
         
         self.btn_load_masks.clicked.connect(self.load_mask_folder)
-        self.btn_save_svg_as.clicked.connect(self.save_svg_as)
+        self.btn_save_masks.clicked.connect(self.save_masks)
+        self.btn_export_svg_masks.clicked.connect(self.export_svg_masks)
 
 
 
@@ -864,17 +827,13 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
         
         self.btn_add_to_mask.clicked.connect(self.add_drawn_path_to_mask)
+        self.btn_local_sam2_add.clicked.connect(self.add_drawn_path_to_mask)
         self.btn_cut_from_mask.clicked.connect(self.cut_drawn_path_from_mask)
         self.btn_transfer_to_mask.clicked.connect(self.transfer_drawn_path_to_mask)
-        self.btn_convert_color.clicked.connect(self.convert_object_color_across_svgs)
+        self.btn_convert_color.clicked.connect(self.convert_object_labels)
         self.btn_undo_edit.clicked.connect(self.smart_undo)
         self.btn_redo_edit.clicked.connect(self.redo_edit)
         self.btn_rescan_used_colors.clicked.connect(self.update_checkboxes_based_on_used_colors)
-
-        self.btn_bring_to_front.clicked.connect(self.bring_selected_object_to_front)
-        self.btn_send_to_back.clicked.connect(self.send_selected_object_to_back)
-        
-        
         
         # self.btn_remove_small_parts.clicked.connect(self.delete_small_parts_in_selected_object)
         self.btn_remove_small_parts.clicked.connect(self.on_remove_small_parts)
@@ -900,8 +859,10 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             lambda checked=False: self.export_nifti_labelmap(10)
         )
         self.btn_export_nifti_reversed.clicked.connect(self.export_nifti_labelmap_reversed)
-        self.btn_export_tiff.clicked.connect(self.export_all_svgs_to_grayscale_tiff)
-        self.btn_export_tiff_reversed.clicked.connect(self.export_all_svgs_to_grayscale_tiff_reversed)
+        self.btn_export_tiff.clicked.connect(self.export_label_masks_to_grayscale_tiff)
+        self.btn_export_tiff_reversed.clicked.connect(
+            self.export_label_masks_to_grayscale_tiff_reversed
+        )
         self.btn_export_overlay_png.clicked.connect(self.export_overlay_png_sequence)
         
         self.btn_draw_calibration_line.clicked.connect(self.start_calibration)
@@ -910,6 +871,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         self.btn_draw_measurement_line.clicked.connect(self.start_measurement_mode)
 
         
+        self.btn_preview_stl.clicked.connect(self.preview_stl_with_scale)
         self.btn_export_stl_colorwise.clicked.connect(self.export_colorwise_stl_with_scale)
         self.btn_export_volume_csv.clicked.connect(self.export_colorwise_volumes_to_csv)
         
@@ -921,7 +883,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
 
         #Undo Redoのための変数
-        self.undo_stack = {}  # 例: {'0001': [svg_text_before_edit, ...]}
+        self.undo_stack = {}  # {'0001': [label_array, ...], '__global__': [{key: label_array}]}
         self.redo_stack = {}
         self._bulk_mask_undo_pending = False
         self.mask_postprocessing_dialog = None
@@ -934,7 +896,6 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
         # ✅ 状態保持
         self.image_paths = {}
-        self.mask_paths = {}
 
         # ✅ PNG単一ラベル正本（新規）
         self.label_masks = {}         # key -> np.ndarray(H, W), dtype=np.uint8
@@ -951,22 +912,12 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         
         self.color_labels = self.color_labels
         
-        self.modified_svg_trees = {}
-        self.path_elements_by_color = {}
-        
         self.pixmap_cache = {}        # 画像キャッシュ
-        self.svg_renderer_cache = {}  # SVGレンダリングキャッシュ
         
         self.drawn_paths_per_image = {}  # 画像キー → [(QPainterPath, モード)] の辞書
         
-        now = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.output_mask_dir = os.path.join(
-            os.getcwd(), self.timestamped_output_name("masks", now)
-        )
-        os.makedirs(self.output_mask_dir, exist_ok=True)
-
-        # ✅ PNG単一ラベル保存先（新規）
-        self.reset_autosave_label_dir()
+        # ✅ プロセス単位の自動生成物保存先
+        self._initialize_session_storage()
         
         self.redo_stack = defaultdict(list)  # 🔁 Redoline用のスタック（画像ごと）
         
@@ -1016,7 +967,6 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
                 self.btn_set_tracking_start,
                 self.btn_set_tracking_end,
                 self.btn_add_object_prompt,
-                self.btn_batch_tracking,
                 self.btn_run_tracking,
                 self.btn_prepare_tracking,
             ]
@@ -1054,7 +1004,6 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         self.btn_set_tracking_end.clicked.connect(self.set_tracking_end)
         self.btn_run_tracking.clicked.connect(self.run_tracking)
         self.btn_add_object_prompt.clicked.connect(self.add_object_prompt_for_batch)
-        self.btn_batch_tracking.clicked.connect(self.run_batch_tracking)
         self.btn_manage_batch_jobs.clicked.connect(self.show_batch_tracking_jobs)
         self.btn_manage_local_batch_jobs.clicked.connect(self.show_batch_tracking_jobs)
         self.btn_export_segonweb.clicked.connect(self.export_for_segonweb)
@@ -1064,36 +1013,6 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         self._sync_slice_navigation()
         self._show_empty_canvas_message()
         
-        #オーバーラップの検出
-        self.btn_extract_overlap.clicked.connect(self.on_extract_overlap_clicked)
-        self.btn_extract_overlap_all.clicked.connect(self.on_extract_overlap_clicked_all)  # ← 新関数に接続
-
-        
-
-        
-        # NOTE:
-        # Overlap extraction and front/back ordering are disabled
-        # in single-label PNG mode because per-pixel overlap/layer order
-        # is not preserved in the current raster label design.
-        reason_text = "Disabled in single-label PNG mode."
-        
-        disabled_buttons = [
-            self.btn_extract_overlap,
-            self.btn_extract_overlap_all,
-            self.btn_bring_to_front,
-            self.btn_send_to_back,
-        ]
-        
-        for btn in disabled_buttons:
-            btn.setEnabled(False)
-            btn.setStyleSheet("color: gray; background-color: lightgray;")
-            btn.setToolTip(reason_text)
-
-
-
-
-
-
 
 
 #ヘルパー関数
@@ -1113,7 +1032,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             self.checkboxes[obj_id - 1].setChecked(True)
     
             # current image だけ Undo 保存
-            self.save_svg_state_for_undo(key)
+            self.save_label_state_for_undo(key)
     
             # 最新パスだけ取得
             latest_path, _ = self.drawn_paths_per_image[key][-1]
@@ -1150,7 +1069,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             obj_id = self.combo_target_object.currentIndex() + 1
     
             # current image のみ Undo 保存
-            self.save_svg_state_for_undo(key)
+            self.save_label_state_for_undo(key)
     
             # 最新パスだけ取得
             latest_path, _ = self.drawn_paths_per_image[key][-1]
@@ -1200,7 +1119,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             self.checkboxes[dst_id - 1].setChecked(True)
     
             # current image のみ Undo 保存
-            self.save_svg_state_for_undo(key)
+            self.save_label_state_for_undo(key)
     
             # 最新パスだけ取得
             latest_path, _ = self.drawn_paths_per_image[key][-1]
@@ -1447,6 +1366,27 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
                 except Exception:
                     continue
     
+            elif tag in {"circle", "ellipse"}:
+                try:
+                    cx = parse_length(elem.attrib.get("cx")) or 0.0
+                    cy = parse_length(elem.attrib.get("cy")) or 0.0
+                    if tag == "circle":
+                        rx = ry = parse_length(elem.attrib.get("r")) or 0.0
+                    else:
+                        rx = parse_length(elem.attrib.get("rx")) or 0.0
+                        ry = parse_length(elem.attrib.get("ry")) or 0.0
+                    if rx <= 0 or ry <= 0:
+                        continue
+                    qpath = QPainterPath()
+                    qpath.addEllipse(
+                        (cx - rx) * scale_x,
+                        (cy - ry) * scale_y,
+                        2.0 * rx * scale_x,
+                        2.0 * ry * scale_y,
+                    )
+                except Exception:
+                    continue
+
             else:
                 continue
     
@@ -1474,70 +1414,6 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             f"labels={np.unique(label).tolist()}, "
             f"scale=({scale_x:.6g}, {scale_y:.6g})"
         )
-
-    
-    # def load_svg_as_label_mask(self, key: str, svg_path: str) -> None:
-    #     """
-    #     既存SVGを読み込み、単一ラベル画像 (uint8, 0..20) に変換して
-    #     self.label_masks[key] に格納する。
-    #     """
-    #     if key not in self.image_paths:
-    #         raise KeyError(f"No image found for key: {key}")
-    
-    #     img = cv2.imread(self.image_paths[key], cv2.IMREAD_GRAYSCALE)
-    #     if img is None:
-    #         raise ValueError(f"Failed to read base image for key {key}: {self.image_paths[key]}")
-    
-    #     h, w = img.shape
-    #     label = np.zeros((h, w), dtype=np.uint8)
-    
-    #     tree = ET.parse(svg_path)
-    #     root = tree.getroot()
-    
-    #     # SVG内の path を順に処理
-    #     for elem in root.iter():
-    #         if elem.tag.endswith("path"):
-    #             fill = elem.attrib.get("fill", "")
-    #             style = elem.attrib.get("style", "")
-    
-    #             # fill が style 側にある場合も拾う
-    #             if not fill and "fill:" in style:
-    #                 m = re.search(r'fill:([^;"]+)', style)
-    #                 if m:
-    #                     fill = m.group(1).strip()
-    
-    #             fill = fill.lower().strip() if fill else ""
-    #             if not fill or fill == "none":
-    #                 continue
-    
-    #             # 今の color_labels に対応する object id を決める
-    #             obj_id = None
-    #             for i, (r, g, b) in enumerate(self.color_labels, start=1):
-    #                 hex_color = f"#{r:02x}{g:02x}{b:02x}"
-    #                 if fill == hex_color:
-    #                     obj_id = i
-    #                     break
-    
-    #             if obj_id is None:
-    #                 continue
-    
-    #             d_attr = elem.attrib.get("d", "")
-    #             if not d_attr:
-    #                 continue
-    
-    #             qpath = self.svg_d_to_qpath(d_attr)
-    
-    #             # QPainterPath -> binary mask
-    #             binary = self.rasterize_path_to_binary(qpath, w, h)
-    
-    #             # 単一ラベルなので後から描かれたものが上書き
-    #             label[binary > 0] = obj_id
-    
-    #     self.label_masks[key] = label
-    #     self.label_mask_paths[key] = self.get_label_png_path(key)
-
-
-
 
 
 #ヘルパー関数
@@ -1617,12 +1493,80 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         timestamp = timestamp or datetime.now().strftime("%Y%m%d_%H%M%S")
         return f"{self.output_file_stem()}_{category}_{timestamp}"
 
-    def reset_autosave_label_dir(self) -> None:
-        now = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.output_label_dir = os.path.join(
-            os.getcwd(), self.timestamped_output_name("label_png_[autosave]", now)
+    @staticmethod
+    def _unique_session_child(parent: Path, base_name: str) -> Path:
+        candidate = parent / base_name
+        suffix = 2
+        while candidate.exists():
+            candidate = parent / f"{base_name}_{suffix:02d}"
+            suffix += 1
+        candidate.mkdir(parents=True)
+        return candidate
+
+    def _initialize_session_storage(self) -> None:
+        """Create the one persistent auto-storage root owned by this app process."""
+        started_at = datetime.now()
+        base_dir = Path.cwd()
+        session_name = f"SegRef3D-session_{started_at.strftime('%Y%m%d_%H%M%S')}"
+        session_root = self._unique_session_child(base_dir, session_name)
+
+        self.session_started_at = started_at
+        self.session_root_dir = str(session_root)
+        self._dataset_storage_by_identity = {}
+        self._active_dataset_identity = None
+        self._active_dataset_root = None
+        self._source_dataset_identity = None
+
+        # Keep the path attribute available before a dataset is loaded, but create
+        # no placeholder dataset/autosave directory that would clutter the session.
+        self.output_label_dir = str(
+            session_root / "datasets" / "SegRef3D" / "autosave_label_png"
         )
-        os.makedirs(self.output_label_dir, exist_ok=True)
+
+        session_info = {
+            "schemaVersion": 1,
+            "sessionName": session_root.name,
+            "startedAt": started_at.isoformat(timespec="seconds"),
+            "product": segref3d_product_name(),
+            "version": __version__,
+        }
+        (session_root / "session_info.json").write_text(
+            json.dumps(session_info, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        print(f"[INFO] Session folder: {session_root}")
+
+    @staticmethod
+    def _normalized_dataset_identity(dataset_identity: str) -> str:
+        value = str(dataset_identity or "").strip()
+        if not value:
+            return "name:SegRef3D"
+        if value.startswith("name:") or value.startswith("segonweb:"):
+            return value
+        return os.path.normcase(os.path.abspath(value))
+
+    def reset_autosave_label_dir(self, dataset_identity: str | None = None) -> None:
+        """Activate one reusable autosave directory for the current dataset."""
+        if dataset_identity is None:
+            dataset_identity = self._source_dataset_identity
+        if dataset_identity is None:
+            dataset_identity = f"name:{self.output_file_stem()}"
+        identity = self._normalized_dataset_identity(dataset_identity)
+
+        dataset_root = self._dataset_storage_by_identity.get(identity)
+        if dataset_root is None:
+            datasets_root = Path(self.session_root_dir) / "datasets"
+            datasets_root.mkdir(parents=True, exist_ok=True)
+            dataset_root = self._unique_session_child(
+                datasets_root, self.output_file_stem()
+            )
+            self._dataset_storage_by_identity[identity] = dataset_root
+
+        self._source_dataset_identity = identity
+        self._active_dataset_identity = identity
+        self._active_dataset_root = dataset_root
+        self.output_label_dir = str(dataset_root / "autosave_label_png")
+        Path(self.output_label_dir).mkdir(parents=True, exist_ok=True)
         self.label_mask_paths = {
             key: self.get_label_png_path(key)
             for key in getattr(self, "label_masks", {}).keys()
@@ -1631,8 +1575,36 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         print(f"[INFO] Autosave label PNG folder: {self.output_label_dir}")
         self._log_mask_export_mapping("Autosave")
 
+    def _ensure_active_dataset_storage(self) -> Path:
+        if self._active_dataset_root is None:
+            self.reset_autosave_label_dir()
+        return Path(self._active_dataset_root)
+
+    def _session_dataset_path(self, category: str, *parts: str) -> Path:
+        target = self._ensure_active_dataset_storage() / category
+        for part in parts:
+            target /= part
+        target.mkdir(parents=True, exist_ok=True)
+        return target
+
+    def _reset_session_temp_dir(self, *parts: str) -> Path:
+        temp_root = self._ensure_active_dataset_storage() / "temp"
+        target = temp_root.joinpath(*parts)
+        resolved_root = temp_root.resolve()
+        resolved_target = target.resolve()
+        if resolved_target != resolved_root and resolved_root not in resolved_target.parents:
+            raise ValueError(f"Invalid session temp path: {target}")
+        if target.exists():
+            shutil.rmtree(target)
+        target.mkdir(parents=True)
+        return target
+
+    def _session_calibration_path(self, filename: str) -> Path:
+        return self._session_dataset_path("calibration") / filename
+
 
     def get_label_png_path(self, key: str) -> str:
+        self._ensure_active_dataset_storage()
         keys = list(getattr(self, "image_paths", {}).keys())
         try:
             z_index = keys.index(key)
@@ -1738,6 +1710,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         if key not in self.label_masks:
             raise KeyError(f"No label mask in memory for key: {key}")
     
+        self._ensure_active_dataset_storage()
         os.makedirs(self.output_label_dir, exist_ok=True)
         manifest_path = os.path.join(self.output_label_dir, MASK_MANIFEST_FILENAME)
         if not os.path.exists(manifest_path):
@@ -1774,6 +1747,12 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
     
         if arr.dtype != np.uint8:
             arr = arr.astype(np.uint8)
+
+        expected = self.create_empty_label_mask(key).shape
+        if arr.shape != expected:
+            raise ValueError(
+                f"Label PNG shape {arr.shape} does not match image shape {expected}: {png_path}"
+            )
     
         self.label_masks[key] = arr
         self.label_mask_paths[key] = self.get_label_png_path(key)
@@ -1822,7 +1801,6 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
     def local_sam2_execution_buttons(self):
         return [
             self.btn_prepare_tracking,
-            self.btn_batch_tracking,
             self.btn_run_tracking,
             self.btn_run_sam2,
         ]
@@ -1879,9 +1857,14 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
 
     def initialize_sam2(self):
+        edition = os.environ.get("SEGREF3D_EDITION", "").strip().lower()
         lite_reason = (
             "Local SAM2 is not included in SegRef3D Local CPU. "
             "Use Seg Anything or SegRef3D Local GPU for SAM-based segmentation."
+        )
+        gpu_failure = (
+            "Local SAM2 initialization failed. "
+            "Run SegRef3D.exe --gpu-check and see the diagnostic/log for details."
         )
 
         disable_flag = os.environ.get("SEGREF3D_DISABLE_SAM2", "").strip().lower()
@@ -1892,7 +1875,10 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         try:
             from sam2_interface import SAM2Interface
         except Exception as exc:
-            self.disable_sam2_ui(f"{lite_reason} Import error: {exc}")
+            reason = gpu_failure if edition == "local-gpu" else lite_reason
+            self.disable_sam2_ui(
+                f"{reason} Import error ({type(exc).__name__}): {exc}"
+            )
             return
 
         allow_cpu_sam2 = os.environ.get("SEGREF3D_ALLOW_SAM2_CPU", "").strip().lower() in (
@@ -1903,7 +1889,10 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             self.sam2_interface = SAM2Interface(allow_cpu_fallback=allow_cpu_sam2)
             self.sam2_enabled = bool(getattr(self.sam2_interface, "enabled", False))
         except Exception as exc:
-            self.disable_sam2_ui(f"{lite_reason} Initialization error: {exc}")
+            reason = gpu_failure if edition == "local-gpu" else lite_reason
+            self.disable_sam2_ui(
+                f"{reason} Initialization error ({type(exc).__name__}): {exc}"
+            )
             return
 
         if self.sam2_enabled:
@@ -2245,9 +2234,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             self.label_status.setText("No thinning applied (factor = 1).")
             return
     
-        now = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_dir = os.path.join(os.getcwd(), f"thinned_images_{now}")
-        os.makedirs(output_dir, exist_ok=True)
+        output_dir = str(self._reset_session_temp_dir("thinned_images"))
     
         # 🔽 数値列をすべて抽出し、naturalな並び順にソート
         image_items = sorted(
@@ -2319,68 +2306,6 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
 
 
-    
-    
-    # def extract_object_mask_as_binary(self, key, object_index):
-    #     """
-    #     対象のSVGファイルから、指定されたオブジェクト番号のマスク領域をバイナリ画像として返す。
-    #     """
-    #     import cv2
-    #     import numpy as np
-    #     from PyQt6.QtGui import QImage, QPainter, QColor
-    #     from PyQt6.QtCore import Qt
-    #     from xml.etree import ElementTree as ET
-    
-    #     if key not in self.mask_paths:
-    #         print(f"[WARN] No mask found for {key}")
-    #         return None
-    
-    #     # ✅ 元画像サイズを使ってマスクサイズを決定
-    #     if key not in self.image_paths:
-    #         print(f"[WARN] No image path found for key: {key}")
-    #         return None
-    
-    #     image_path = self.image_paths[key]
-    #     img = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
-    #     if img is None:
-    #         print(f"[WARN] Failed to load image: {image_path}")
-    #         return None
-    
-    #     height, width = img.shape
-    
-    #     # ✅ SVG 読み込み
-    #     svg_path = self.mask_paths[key]
-    #     tree = ET.parse(svg_path)
-    #     root = tree.getroot()
-    
-    #     target_rgb = self.color_labels[object_index]
-    #     target_hex = f'#{target_rgb[0]:02x}{target_rgb[1]:02x}{target_rgb[2]:02x}'
-    
-    #     image = QImage(width, height, QImage.Format.Format_Grayscale8)
-    #     image.fill(0)
-    
-    #     painter = QPainter(image)
-    #     painter.setBrush(QColor(255, 255, 255))
-    #     painter.setPen(Qt.PenStyle.NoPen)
-    
-    #     for elem in root.iter("path"):
-    #         fill = elem.attrib.get("fill", "").lower()
-    #         if fill != target_hex:
-    #             continue
-    
-    #         d_attr = elem.attrib.get("d")
-    #         if not d_attr:
-    #             continue
-    
-    #         path = self.svg_d_to_qpath(d_attr)
-    #         painter.drawPath(path)
-    
-    #     painter.end()
-    
-    #     ptr = image.bits()
-    #     ptr.setsize(image.width() * image.height())
-    #     arr = np.array(ptr).reshape((image.height(), image.width()))
-    #     return arr
 
                     
     def extract_object_mask_as_binary(self, key, object_index):
@@ -2455,146 +2380,57 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
     
     def svg_d_to_qpath(self, d_string):
+        """Parse an SVG path only for legacy-mask import."""
         from PyQt6.QtGui import QPainterPath
-        import re
-    
-        path = QPainterPath()
-        tokens = re.findall(r"[-+]?\d*\.\d+|[-+]?\d+|[A-Za-z]", d_string)
-        i = 0
-        current_pos = None
-        while i < len(tokens):
-            cmd = tokens[i]
-            if cmd == "M":
-                x, y = float(tokens[i + 1]), float(tokens[i + 2])
-                path.moveTo(x, y)
-                current_pos = (x, y)
-                i += 3
-            elif cmd == "L":
-                x, y = float(tokens[i + 1]), float(tokens[i + 2])
-                path.lineTo(x, y)
-                current_pos = (x, y)
-                i += 3
-            elif cmd == "Z":
-                path.closeSubpath()
-                i += 1
+        from svgpathtools import Arc, CubicBezier, Line, QuadraticBezier, parse_path
+
+        parsed = parse_path(d_string)
+        qpath = QPainterPath()
+        previous_end = None
+        subpath_start = None
+        for segment in parsed:
+            start = segment.start
+            if previous_end is None or abs(start - previous_end) > 1e-7:
+                qpath.moveTo(start.real, start.imag)
+                subpath_start = start
+
+            if isinstance(segment, Line):
+                qpath.lineTo(segment.end.real, segment.end.imag)
+            elif isinstance(segment, CubicBezier):
+                qpath.cubicTo(
+                    segment.control1.real,
+                    segment.control1.imag,
+                    segment.control2.real,
+                    segment.control2.imag,
+                    segment.end.real,
+                    segment.end.imag,
+                )
+            elif isinstance(segment, QuadraticBezier):
+                qpath.quadTo(
+                    segment.control.real,
+                    segment.control.imag,
+                    segment.end.real,
+                    segment.end.imag,
+                )
+            elif isinstance(segment, Arc):
+                samples = max(4, min(256, int(max(segment.length(), 1.0) / 2.0)))
+                for sample_index in range(1, samples + 1):
+                    point = segment.point(sample_index / samples)
+                    qpath.lineTo(point.real, point.imag)
             else:
-                i += 1
-        return path
+                qpath.lineTo(segment.end.real, segment.end.imag)
+
+            previous_end = segment.end
+            if subpath_start is not None and abs(previous_end - subpath_start) <= 1e-7:
+                qpath.closeSubpath()
+                previous_end = None
+                subpath_start = None
+
+        return qpath
 
 
 
 
-    
-    def on_extract_overlap_clicked(self):
-        key = self.get_current_image_key()
-        if not key:
-            self.label_status.setText("⚠ No image selected.")
-            return
-    
-        idx1 = self.combo_overlap1.currentIndex()
-        idx2 = self.combo_overlap2.currentIndex()
-    
-        if idx1 == idx2:
-            self.label_status.setText("⚠ Please select two different objects.")
-            return
-    
-        color1 = self.color_labels[idx1]
-        color2 = self.color_labels[idx2]
-    
-        self.extract_overlap_between_objects(key, color1, color2)
-
-
-    
-    def extract_overlap_between_objects(self, key, color1_rgb, color2_rgb):
-        if key not in self.mask_paths:
-            print(f"[WARN] No SVG found for key {key}")
-            return
-    
-        svg_path = self.mask_paths[key]
-        tree = ET.parse(svg_path)
-        root = tree.getroot()
-    
-        def rgb_to_hex(rgb):
-            return f"#{rgb[0]:02x}{rgb[1]:02x}{rgb[2]:02x}"
-    
-        color1_hex = rgb_to_hex(color1_rgb)
-        color2_hex = rgb_to_hex(color2_rgb)
-    
-        path1 = QPainterPath()
-        path2 = QPainterPath()
-    
-        for elem in root.iter("path"):
-            fill = elem.attrib.get("fill", "").lower()
-            if fill not in {color1_hex, color2_hex}:
-                continue
-    
-            d = elem.attrib.get("d")
-            if not d:
-                continue
-    
-            qpath = self.svg_d_to_qpath(d)
-            path_union = QPainterPath()
-            for subpath in qpath.toSubpathPolygons():
-                if subpath.size() >= 3:
-                    sp = QPainterPath()
-                    sp.moveTo(subpath[0])
-                    for pt in subpath[1:]:
-                        sp.lineTo(pt)
-                    sp.closeSubpath()
-                    path_union = path_union.united(sp)
-    
-            if fill == color1_hex:
-                path1 = path1.united(path_union)
-            elif fill == color2_hex:
-                path2 = path2.united(path_union)
-    
-        intersection = path1.intersected(path2)
-    
-        if intersection.isEmpty():
-            self.label_status.setText("⚠ No overlapping area found.")
-            return
-    
-        item = QGraphicsPathItem(intersection)
-        # item.setPen(QPen(Qt.GlobalColor.magenta, 2))
-        item.setPen(QPen(self.graphicsView.pen_color, 2))  # ← ユーザー設定のペン色に統一
-        item.setZValue(5)
-        self.scene.addItem(item)
-    
-        # 保存（描画履歴）
-        self.save_drawn_path_for_image(key, intersection)
-        self.label_status.setText("✅ Overlap extracted and added to current image.")
-
-
-
-
-
-    def on_extract_overlap_clicked_all(self):
-        idx1 = self.combo_overlap1.currentIndex()
-        idx2 = self.combo_overlap2.currentIndex()
-    
-        if idx1 == idx2:
-            self.label_status.setText("⚠ Please select two different objects.")
-            return
-    
-        color1 = self.color_labels[idx1]
-        color2 = self.color_labels[idx2]
-    
-        self.save_svg_state_for_undo("__global__")  # Undoのために一括保存
-    
-        processed = 0
-        for key in self.mask_paths.keys():
-            self.extract_overlap_between_objects(key, color1, color2)
-            processed += 1
-    
-        self.display_current_image()
-        self.label_status.setText(f"✅ Overlap extraction completed for {processed} images.")
-
- 
-
-    
-    # def change_draw_mode(self, mode):
-    #     self.graphicsView.draw_mode = mode.lower()  # 'free' or 'click'
-    #     self.label_status.setText(f"Draw mode: {mode}")
             
     def change_draw_mode(self, mode):
         if mode == "Click (Snap)":
@@ -2721,15 +2557,18 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
              
                     
         def update_progress(percent):
-            bar_length = 20  # バーの長さ（文字数）
-            filled_length = int(bar_length * percent // 100)
-            bar = '█' * filled_length + '-' * (bar_length - filled_length)
-            self.label_status.setText(f"SAM2 segmentation... |{bar}| {percent}%")
+            self._set_status_progress("SAM2 segmentation...", percent)
             QApplication.processEvents()
 
         
         try:
-            result_mask = self.sam2_interface.run_segmentation(image_np, box, progress_callback=update_progress)
+            sam2_temp_root = self._session_dataset_path("temp", "sam2")
+            result_mask = self.sam2_interface.run_segmentation(
+                image_np,
+                box,
+                progress_callback=update_progress,
+                temp_root=str(sam2_temp_root),
+            )
         except Exception as e:
             self.label_status.setText(f"⚠ SAM2 segmentation failed: {e}")
             print(f"[ERROR] SAM2 segmentation failed: {e}")
@@ -2804,10 +2643,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         self.label_status.setText("📦 Preparing tracking frames...")
         QApplication.processEvents()
     
-        video_dir = "./video_frames"
-        if os.path.exists(video_dir):
-            shutil.rmtree(video_dir)
-        os.makedirs(video_dir)
+        video_dir = str(self._reset_session_temp_dir("tracking", "video_frames"))
     
         image_items = sorted(self.image_paths.items())  # ファイル名でソート
         total = len(image_items)
@@ -2819,8 +2655,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
     
             # 🔁 進捗バー
             percent = int(i / total * 100)
-            bar = "[" + "█" * (percent // 10) + " " * (10 - percent // 10) + "]"
-            self.label_status.setText(f"📷 Preparing frames: {bar} {percent}%")
+            self._set_status_progress("📷 Preparing frames", percent)
             QApplication.processEvents()
             time.sleep(0.01)
     
@@ -2859,261 +2694,6 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
 
 
-    # def run_tracking(self):
-    #     # 🔎 チェック：開始・終了フレーム
-    #     if not hasattr(self, 'tracking_start_index') or not hasattr(self, 'tracking_end_index'):
-    #         self.label_status.setText("Please set both start and end frames for tracking.")
-    #         return
-    
-    #     if self.tracking_start_index > self.tracking_end_index:
-    #         self.label_status.setText("Tracking start frame must be before end frame.")
-    #         return
-    
-    #     self.label_status.setText(f"Tracking will run from frame {self.tracking_start_index + 1} to {self.tracking_end_index + 1}.")
-    
-    
-    
-    #     # ✅ ボックスプロンプト（px単位）を使用
-    #     if not hasattr(self, 'last_used_box_px'):
-    #         self.label_status.setText("⚠ Box prompt not set. Please run SAM2 segmentation first.")
-    #         return
-    #     box = self.last_used_box_px
-    
-    #     # 🟡 ポイントプロンプト（任意）
-    #     point = self.last_used_point if hasattr(self, 'last_used_point') else None
-
-
-
-
-        
-    #     video_dir = "./video_frames"
-    #     if not os.path.exists(video_dir):
-    #         self.label_status.setText("⚠ Please run 'Prepare Tracking Frames' first.")
-    #         return
-            
-    
-    #     # 🔄 推論状態初期化（順方向）
-    #     self.label_status.setText("📷 Loading frames into SAM2... Please wait.")
-    #     QApplication.processEvents()
-        
-    #     predictor = self.sam2_interface.predictor
-    #     inference_state = predictor.init_state(video_path=video_dir)
-    #     predictor.reset_state(inference_state)
-    
-    #     # 🧠 初期画像の読み込み（順方向）
-    #     box_frame_index = self.last_used_box_index  # ✅ ボックスを置いたフレーム
-    #     frame_idx = box_frame_index
-    #     sample_image = np.array(Image.open(os.path.join(video_dir, f"{frame_idx + 1:04d}.jpg")))
-    #     h, w = sample_image.shape[:2]
-    
-    #     # ボックスとポイントの変換
-    #     x1, y1 = int(box[0][0]), int(box[0][1])
-    #     x2, y2 = int(box[1][0]), int(box[1][1])
-    #     box_arr = np.array([x1, y1, x2, y2], dtype=np.float32)
-    
-    #     if point:
-    #         x_p, y_p = int(point[0]), int(point[1])
-    #         points = np.array([[x_p, y_p]], dtype=np.float32)
-    #         labels = np.array([1], dtype=np.int32)
-    #     else:
-    #         points = None
-    #         labels = None
-    
-    #     # ▶ 順方向の初期マスク設定
-    #     predictor.add_new_points_or_box(
-    #         inference_state=inference_state,
-    #         frame_idx=frame_idx,
-    #         obj_id=1,
-    #         points=points,
-    #         labels=labels,
-    #         box=box_arr
-    #     )
-    
-    #     print("[DEBUG] Forward inference_state object_ids:", inference_state.get("obj_ids", "N/A"))
-    #     print(f"[DEBUG] Using box: {box}")
-    #     print(f"[DEBUG] Converted to array: {box_arr}")
-    
-    #     # # ▶ 伝播上限
-    #     # frame_limit = self.tracking_end_index
-    #     # video_segments = {}
-        
-    #     # # ▶ 進捗バー準備（順方向）
-    #     # total_forward = frame_limit - self.tracking_start_index + 1
-                
-    #     # ▶ 伝播上限
-    #     frame_limit = self.tracking_end_index
-    #     video_segments = {}
-        
-    #     # ▶ 進捗バー準備（順方向）
-    #     total_forward = frame_limit - box_frame_index + 1
-        
-        
-        
-    #     current_forward = 0
-        
-        
-        
-        
-    
-    #     # ▶ 順方向の伝播
-    #     for out_frame_idx, out_obj_ids, out_mask_logits in predictor.propagate_in_video(inference_state):
-    #         if out_frame_idx > frame_limit:
-    #             break
-    #         video_segments[out_frame_idx] = {
-    #             out_obj_id: (out_mask_logits[i] > 0.0).squeeze().cpu().numpy()
-    #             for i, out_obj_id in enumerate(out_obj_ids)
-    #         }
-    
-    #         # 🌟 進捗バー表示（順方向）
-    #         current_forward += 1
-    #         percent = int(current_forward / total_forward * 100)
-    #         bar = "[" + "█" * (percent // 10) + "-" * (10 - percent // 10) + "]"
-    #         self.label_status.setText(f"▶ Forward tracking {bar} {percent}%")
-    #         QApplication.processEvents()
-        
-
-
-    
-    #     # reversed_frame_indices = list(range(self.tracking_end_index, self.tracking_start_index - 1, -1))
-    #     reversed_frame_indices = list(range(box_frame_index, self.tracking_start_index - 1, -1))
-
-
-
-
-    #     reversed_video_dir = "./video_frames_reversed"
-    #     if os.path.exists(reversed_video_dir):
-    #         shutil.rmtree(reversed_video_dir)
-    #     os.makedirs(reversed_video_dir)
-    
-    #     # for i, idx in enumerate(reversed_frame_indices):
-    #     #     src = os.path.join(video_dir, f"{idx + 1:04d}.jpg")  # ffmpeg -start_number 1 に対応
-    #     #     # dst = os.path.join(reversed_video_dir, f"{i:04d}.jpg")
-    #     #     # ✅ 修正：ffmpeg で読み込めるよう 0001.jpg からスタート
-    #     #     dst = os.path.join(reversed_video_dir, f"{i + 1:04d}.jpg")
-    #     #     shutil.copyfile(src, dst)
-        
-    #     #存在確認追加            
-    #     for i, idx in enumerate(reversed_frame_indices):
-    #         src = os.path.join(video_dir, f"{idx + 1:04d}.jpg")  # ffmpeg -start_number 1 に対応
-    #         dst = os.path.join(reversed_video_dir, f"{i + 1:04d}.jpg")
-            
-    #         if os.path.exists(src):
-    #             shutil.copyfile(src, dst)
-    #         else:
-    #             print(f"[WARN] Skipping missing frame: {src}")            
-    
-    #     # 🔧 修正箇所: reversed ディレクトリで推論初期化
-    #     reversed_inference_state = predictor.init_state(video_path=reversed_video_dir)
-    #     predictor.reset_state(reversed_inference_state)
-    
-    #     # 🔧 修正箇所: reversed 側の frame_idx=0 に初期マスク設定
-    #     predictor.add_new_points_or_box(
-    #         inference_state=reversed_inference_state,
-    #         frame_idx=0,
-    #         obj_id=1,
-    #         points=points,
-    #         labels=labels,
-    #         box=box_arr
-    #     )
-    
-    #     # 🔧 修正箇所: reversed 側の順方向伝播
-    #     reversed_video_segments = {}
-                
-    #     # ▶ 進捗バー準備（逆方向）
-    #     total_backward = len(reversed_frame_indices)
-    #     current_backward = 0        
-        
-    #     for out_frame_idx, out_obj_ids, out_mask_logits in predictor.propagate_in_video(reversed_inference_state):
-    #         reversed_video_segments[out_frame_idx] = {
-    #             out_obj_id: (out_mask_logits[i] > 0.0).squeeze().cpu().numpy()
-    #             for i, out_obj_id in enumerate(out_obj_ids)
-    #         }    
-         
-    #         # 🌟 進捗バー表示（逆方向）
-    #         current_backward += 1
-    #         percent = int(current_backward / total_backward * 100)
-    #         bar = "[" + "█" * (percent // 10) + "-" * (10 - percent // 10) + "]"
-    #         self.label_status.setText(f"◀ Backward tracking {bar} {percent}%")
-    #         QApplication.processEvents()
-                
-    #     # 🔧 修正箇所: reversed の結果を本来のフレームインデックスにマッピング（正確）
-    #     # for i, orig_frame_idx in enumerate(reversed_frame_indices[::-1]):  # 順番を元に戻す
-    #     #     if orig_frame_idx not in video_segments:
-    #     #         video_segments[orig_frame_idx] = reversed_video_segments.get(i, {})
-        
-    #     # 🔧 正しいマッピング：reversed_frame_indices[i] → reversed_video_segments[i]
-    #     for i, orig_frame_idx in enumerate(reversed_frame_indices[::-1]):
-    #         # reversed_video_segments の中身は i = 0 が reversed_frame_indices[0] に対応しているので
-    #         reversed_index = total_backward - 1 - i
-    #         if orig_frame_idx not in video_segments:
-    #             video_segments[orig_frame_idx] = reversed_video_segments.get(reversed_index, {})
-
-
-
-    #     # ▶ マスク適用・保存
-    #     frame_names = list(self.image_paths.keys())
-    
-    #     for frame_idx, frame_name in enumerate(frame_names):
-    #         if frame_idx > frame_limit:
-    #             break
-    
-    #         if frame_idx in video_segments:
-    #             segment_masks = video_segments[frame_idx]
-    #             for obj_id, mask in segment_masks.items():
-    #                 print(f"[DEBUG] Frame {frame_idx}, Obj {obj_id}, mask type: {type(mask)}")
-    
-    #                 if mask is None or not isinstance(mask, np.ndarray) or mask.ndim != 2 or not np.any(mask):
-    #                     print(f"[WARN] Skipping frame {frame_idx}, obj_id {obj_id}: invalid mask")
-    #                     continue
-    
-    #                 qpath = self.sam2_interface.mask_to_qpath(mask)
-    #                 # ✅ パスの簡略化（曲線が多すぎる問題を軽減）
-    #                 qpath = qpath.simplified()
-                    
-    #                 key = f"{frame_idx + 1:04d}"  # ffmpeg に合わせたファイル名対応
-    
-    #                 # 既存の描画があれば削除
-    #                 if key in self.drawn_paths_per_image:
-    #                     del self.drawn_paths_per_image[key]
-    #                     print(f"[INFO] Previous path for frame {key} deleted.")
-    
-    #                 self.save_drawn_path_for_image(key, qpath)
-    
-    #     # ▶ 状態更新
-        
-    #     self.label_status.setText("✅ Tracking completed and masks applied to selected frames.")
-
-        
-
-        
-    #     # 🔸 表示されている確定ボックス（赤線）を削除
-    #     if hasattr(self, "confirmed_box_item"):
-    #         try:
-    #             if self.confirmed_box_item is not None and self.confirmed_box_item.scene() is not None:
-    #                 self.scene.removeItem(self.confirmed_box_item)
-    #         except RuntimeError:
-    #             print("[WARN] confirmed_box_item has been already deleted.")
-    #         self.confirmed_box_item = None
-        
-    #     # 🔸 ボックスの情報をすべてリセット
-    #     self.last_box_prompt = None
-    #     self.last_used_box_px = None
-        
-    #     # 🔸 フレームごとのボックス情報も削除
-    #     if hasattr(self, "last_used_box_index") and self.last_used_box_index in self.box_per_frame:
-    #         del self.box_per_frame[self.last_used_box_index]
-
-            
-            
-            
-
-
-    #     self.last_used_box_px = None
-        
-        
-    #     self.display_current_image()
-        
-    
     def run_tracking(self):
         if not self.ensure_local_sam2_available():
             return
@@ -3140,7 +2720,9 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         # 🟡 ポイントプロンプト（任意）
         point = self.last_used_point if hasattr(self, 'last_used_point') else None
     
-        video_dir = "./video_frames"
+        video_dir = str(
+            self._ensure_active_dataset_storage() / "temp" / "tracking" / "video_frames"
+        )
         if not os.path.exists(video_dir):
             self.label_status.setText("⚠ Please run 'Prepare Tracking Frames' first.")
             return
@@ -3206,17 +2788,15 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
     
             current_forward += 1
             percent = int(current_forward / total_forward * 100)
-            bar = "[" + "█" * (percent // 10) + "-" * (10 - percent // 10) + "]"
-            self.label_status.setText(f"▶ Forward tracking {bar} {percent}%")
+            self._set_status_progress("▶ Forward tracking", percent)
             QApplication.processEvents()
     
         # ▶ 逆方向
         reversed_frame_indices = list(range(box_frame_index, self.tracking_start_index - 1, -1))
     
-        reversed_video_dir = "./video_frames_reversed"
-        if os.path.exists(reversed_video_dir):
-            shutil.rmtree(reversed_video_dir)
-        os.makedirs(reversed_video_dir)
+        reversed_video_dir = str(
+            self._reset_session_temp_dir("tracking", "video_frames_reversed")
+        )
     
         for i, idx in enumerate(reversed_frame_indices):
             src = os.path.join(video_dir, f"{idx + 1:04d}.jpg")
@@ -3252,8 +2832,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
     
             current_backward += 1
             percent = int(current_backward / total_backward * 100)
-            bar = "[" + "█" * (percent // 10) + "-" * (10 - percent // 10) + "]"
-            self.label_status.setText(f"◀ Backward tracking {bar} {percent}%")
+            self._set_status_progress("◀ Backward tracking", percent)
             QApplication.processEvents()
     
         # reversed 結果を統合
@@ -3654,17 +3233,10 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             self.source_dataset_name = self._safe_output_dataset_name(project_name)
         elif not self.source_dataset_name:
             self.source_dataset_name = "SegRef3D"
-        now = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_dir = Path(os.getcwd()) / self.timestamped_output_name(
-            "segonweb_result_images", now
+        self.reset_autosave_label_dir(
+            f"segonweb:{project_name or self.source_dataset_name}"
         )
-        suffix = 1
-        while output_dir.exists():
-            output_dir = Path(os.getcwd()) / (
-                f"{self.timestamped_output_name('segonweb_result_images', now)}_{suffix}"
-            )
-            suffix += 1
-        output_dir.mkdir(parents=True)
+        output_dir = self._reset_session_temp_dir("segonweb_result_images")
 
         restored_paths = {}
         restored_sizes = {}
@@ -3686,16 +3258,6 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         self.image_sizes = restored_sizes
         self.original_image_filenames = restored_names
         self.current_index = 0
-        self.mask_paths.clear()
-        now = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.output_mask_dir = os.path.join(
-            os.getcwd(), self.timestamped_output_name("masks", now)
-        )
-        os.makedirs(self.output_mask_dir, exist_ok=True)
-        for key, image_path in self.image_paths.items():
-            svg_path = os.path.join(self.output_mask_dir, f"mask{key}.svg")
-            self._create_empty_svg(svg_path, image_path)
-            self.mask_paths[key] = svg_path
 
 
     def import_segonweb_result(self):
@@ -3779,218 +3341,6 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
 
     
-    # def run_tracking_for_object(self, obj_id, box, point, start_frame, end_frame, box_frame):
-    #     self.label_status.setText(f"📦 Tracking Object {obj_id}: Frame {start_frame+1}–{end_frame+1}")
-    #     QApplication.processEvents()
-    
-    #     video_dir = "./video_frames"
-    #     if not os.path.exists(video_dir):
-    #         self.label_status.setText("⚠ Please run 'Prepare Tracking Frames' first.")
-    #         return
-    
-    #     # 🔄 推論状態初期化（順方向）
-    #     self.label_status.setText("📷 Loading frames into SAM2... Please wait.")
-    #     QApplication.processEvents()
-    
-    #     predictor = self.sam2_interface.predictor
-    #     inference_state = predictor.init_state(video_path=video_dir)
-    #     predictor.reset_state(inference_state)
-    
-    #     # 初期画像の読み込み
-    #     # frame_idx = start_frame
-    #     frame_idx = box_frame
-
-    #     sample_image = np.array(Image.open(os.path.join(video_dir, f"{frame_idx + 1:04d}.jpg")))
-    #     h, w = sample_image.shape[:2]
-    
-    #     # ボックスとポイントの変換
-    #     x1, y1 = int(box[0][0]), int(box[0][1])
-    #     x2, y2 = int(box[1][0]), int(box[1][1])
-    #     box_arr = np.array([x1, y1, x2, y2], dtype=np.float32)
-    
-    #     if point:
-    #         x_p, y_p = int(point[0]), int(point[1])
-    #         points = np.array([[x_p, y_p]], dtype=np.float32)
-    #         labels = np.array([1], dtype=np.int32)
-    #     else:
-    #         points = None
-    #         labels = None
-    
-    #     # 初期マスク指定
-    #     predictor.add_new_points_or_box(
-    #         inference_state=inference_state,
-    #         frame_idx=frame_idx,
-    #         obj_id=obj_id,
-    #         points=points,
-    #         labels=labels,
-    #         box=box_arr
-    #     )
-    
-    #     # frame_limit = end_frame
-    #     # video_segments = {}
-    #     # # total_forward = frame_limit - start_frame + 1
-    #     # total_forward = end_frame - box_frame + 1
-
-    #     # current_forward = 0
-        
-    #     # ▶ 伝播上限
-    #     # frame_limit = self.tracking_end_index
-    #     frame_limit = end_frame
-    #     video_segments = {}
-        
-    #     # ▶ 進捗バー準備（順方向）
-    #     total_forward = frame_limit - box_frame + 1
-    #     current_forward = 0        
-        
-        
-    
-    #     for out_frame_idx, out_obj_ids, out_mask_logits in predictor.propagate_in_video(inference_state):
-    #         if out_frame_idx > frame_limit:
-    #             break
-    #         video_segments[out_frame_idx] = {
-    #             out_obj_id: (out_mask_logits[i] > 0.0).squeeze().cpu().numpy()
-    #             for i, out_obj_id in enumerate(out_obj_ids)
-    #         }
-    
-    #         current_forward += 1
-    #         percent = int(current_forward / total_forward * 100)
-    #         bar = "[" + "█" * (percent // 10) + "-" * (10 - percent // 10) + "]"
-    #         self.label_status.setText(f"▶ Object {obj_id}: Forward {bar} {percent}%")
-    #         QApplication.processEvents()
-    
-    #     # 逆方向
-    #     # reversed_frame_indices = list(range(end_frame, start_frame - 1, -1))
-    #     reversed_frame_indices = list(range(box_frame, start_frame - 1, -1))
-
-    #     reversed_video_dir = "./video_frames_reversed"
-    #     if os.path.exists(reversed_video_dir):
-    #         shutil.rmtree(reversed_video_dir)
-    #     os.makedirs(reversed_video_dir)
-    
-    #     for i, idx in enumerate(reversed_frame_indices):
-    #         src = os.path.join(video_dir, f"{idx + 1:04d}.jpg")
-    #         dst = os.path.join(reversed_video_dir, f"{i + 1:04d}.jpg")
-    #         if os.path.exists(src):
-    #             shutil.copyfile(src, dst)
-    #         else:
-    #             print(f"[WARN] Skipping missing frame: {src}")
-    
-    #     reversed_inference_state = predictor.init_state(video_path=reversed_video_dir)
-    #     predictor.reset_state(reversed_inference_state)
-    
-    #     predictor.add_new_points_or_box(
-    #         inference_state=reversed_inference_state,
-    #         frame_idx=0,
-    #         obj_id=obj_id,
-    #         points=points,
-    #         labels=labels,
-    #         box=box_arr
-    #     )
-    
-    #     reversed_video_segments = {}
-    #     total_backward = len(reversed_frame_indices)
-    #     current_backward = 0
-    
-    #     for out_frame_idx, out_obj_ids, out_mask_logits in predictor.propagate_in_video(reversed_inference_state):
-    #         reversed_video_segments[out_frame_idx] = {
-    #             out_obj_id: (out_mask_logits[i] > 0.0).squeeze().cpu().numpy()
-    #             for i, out_obj_id in enumerate(out_obj_ids)
-    #         }
-    
-    #         current_backward += 1
-    #         percent = int(current_backward / total_backward * 100)
-    #         bar = "[" + "█" * (percent // 10) + "-" * (10 - percent // 10) + "]"
-    #         self.label_status.setText(f"◀ Object {obj_id}: Backward {bar} {percent}%")
-    #         QApplication.processEvents()
-    
-    #     # # reversed → 正規順に戻す
-    #     # for i, orig_frame_idx in enumerate(reversed_frame_indices[::-1]):
-    #     #     reversed_index = total_backward - 1 - i  # ✅ 正しい順に戻す
-    #     #     if orig_frame_idx not in video_segments:
-    #     #         video_segments[orig_frame_idx] = reversed_video_segments.get(i, {})
-            
-    #     # ⬇ reversed_video_segments を正しい位置に統合する
-    #     for out_frame_idx, masks in reversed_video_segments.items():
-    #         # 対応する元のフレームインデックスを取得
-    #         if out_frame_idx < len(reversed_frame_indices):
-    #             orig_frame_idx = reversed_frame_indices[out_frame_idx]
-    #             if orig_frame_idx not in video_segments:
-    #                 video_segments[orig_frame_idx] = masks
-    
-    
-    #     # マスク保存
-    #     frame_names = list(self.image_paths.keys())
-    #     for frame_idx, frame_name in enumerate(frame_names):
-    #         if frame_idx > frame_limit:
-    #             break
-    #         if frame_idx in video_segments:
-    #             segment_masks = video_segments[frame_idx]
-    #             for seg_obj_id, mask in segment_masks.items():
-    #                 if mask is None or not isinstance(mask, np.ndarray) or mask.ndim != 2 or not np.any(mask):
-    #                     print(f"[WARN] Skipping frame {frame_idx}, obj_id {seg_obj_id}: invalid mask")
-    #                     continue
-    #                 qpath = self.sam2_interface.mask_to_qpath(mask)
-    #                 # ✅ パスの簡略化（曲線が多すぎる問題を軽減）
-    #                 qpath = qpath.simplified()
-    #                 key = f"{frame_idx + 1:04d}"
-    
-    #                 if key in self.drawn_paths_per_image:
-    #                     del self.drawn_paths_per_image[key]
-    #                     print(f"[INFO] Previous path for frame {key} deleted.")
-                    
-    #                 # RGB → hex変換
-    #                 def rgb_to_hex(rgb):
-    #                     return f"#{rgb[0]:02x}{rgb[1]:02x}{rgb[2]:02x}"
-                    
-    #                 # SVGファイルが存在するか確認
-    #                 svg_path = self.mask_paths.get(key)
-    #                 if svg_path and os.path.exists(svg_path):
-    #                     try:
-    #                         tree = ET.parse(svg_path)
-    #                         root = tree.getroot()
-                    
-    #                         # QPainterPath → path d 文字列
-    #                         polygons = qpath.toSubpathPolygons()
-    #                         path_data = ""
-    #                         for polygon in polygons:
-    #                             if polygon.size() < 3:
-    #                                 continue
-    #                             path_data += "M " + " L ".join(f"{pt.x()},{pt.y()}" for pt in polygon) + " Z "
-                    
-    #                         # オブジェクトの色（obj_id）で fill 指定
-    #                         obj_color_rgb = self.color_labels[obj_id - 1]  # 1-indexed
-    #                         fill_color = rgb_to_hex(obj_color_rgb)
-                    
-    #                         new_elem = ET.Element("path")
-    #                         new_elem.set("d", path_data.strip())
-    #                         new_elem.set("fill", fill_color)
-    #                         new_elem.set("stroke", "none")
-    #                         new_elem.set("fill-rule", "evenodd")
-    #                         root.append(new_elem)
-                    
-    #                         # 保存先を output_mask_dir に変更
-    #                         save_path = os.path.join(self.output_mask_dir, os.path.basename(svg_path))
-    #                         tree.write(save_path, encoding="utf-8")
-                    
-    #                         print(f"[INFO] Object {obj_id}: SVG path added to {save_path}")
-                    
-    #                         # UI再描画のため、drawn_paths にも qpath を保存
-    #                         # self.drawn_paths_per_image[key] = [(qpath, fill_color)]
-    #                         self.checkboxes[obj_id - 1].setChecked(True)
-                    
-    #                     except Exception as e:
-    #                         print(f"[ERROR] Failed to write SVG path for {key}: {e}")
-
-
-    
-    #                 self.save_drawn_path_for_image(key, qpath)
-    
-    #     self.label_status.setText(f"✅ Object {obj_id}: Tracking complete.")
-    #     self.clear_all_paths()
-
-
-
-    
     def run_tracking_for_object(self, obj_id, box, point, start_frame, end_frame, box_frame):
         if not self.ensure_local_sam2_available():
             return
@@ -3998,7 +3348,9 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         self.label_status.setText(f"📦 Tracking Object {obj_id}: Frame {start_frame+1}–{end_frame+1}")
         QApplication.processEvents()
     
-        video_dir = "./video_frames"
+        video_dir = str(
+            self._ensure_active_dataset_storage() / "temp" / "tracking" / "video_frames"
+        )
         if not os.path.exists(video_dir):
             self.label_status.setText("⚠ Please run 'Prepare Tracking Frames' first.")
             return
@@ -4055,17 +3407,15 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
     
             current_forward += 1
             percent = int(current_forward / total_forward * 100)
-            bar = "[" + "█" * (percent // 10) + "-" * (10 - percent // 10) + "]"
-            self.label_status.setText(f"▶ Object {obj_id}: Forward {bar} {percent}%")
+            self._set_status_progress(f"▶ Object {obj_id}: Forward", percent)
             QApplication.processEvents()
     
         # 逆方向
         reversed_frame_indices = list(range(box_frame, start_frame - 1, -1))
     
-        reversed_video_dir = "./video_frames_reversed"
-        if os.path.exists(reversed_video_dir):
-            shutil.rmtree(reversed_video_dir)
-        os.makedirs(reversed_video_dir)
+        reversed_video_dir = str(
+            self._reset_session_temp_dir("tracking", "video_frames_reversed")
+        )
     
         for i, idx in enumerate(reversed_frame_indices):
             src = os.path.join(video_dir, f"{idx + 1:04d}.jpg")
@@ -4099,8 +3449,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
     
             current_backward += 1
             percent = int(current_backward / total_backward * 100)
-            bar = "[" + "█" * (percent // 10) + "-" * (10 - percent // 10) + "]"
-            self.label_status.setText(f"◀ Object {obj_id}: Backward {bar} {percent}%")
+            self._set_status_progress(f"◀ Object {obj_id}: Backward", percent)
             QApplication.processEvents()
     
         # ⬇ reversed_video_segments を正しい位置に統合
@@ -4162,52 +3511,6 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
 
 
-    # def run_batch_tracking(self):
-    #     if not self.batch_object_data:
-    #         self.label_status.setText("⚠ No objects registered for batch tracking.")
-    #         return
-    
-    #     for obj_idx, obj_info in enumerate(self.batch_object_data, 1):
-    #         self.label_status.setText(f"🚀 Tracking object {obj_idx} (Frame {obj_info['start']+1}–{obj_info['end']+1})...")
-    #         QApplication.processEvents()
-    
-    #         self.run_tracking_for_object(
-    #             obj_id=obj_idx,
-    #             box=obj_info["box"],
-    #             point=obj_info["point"],
-    #             start_frame=obj_info["start"],
-    #             end_frame=obj_info["end"],
-    #             box_frame=obj_info["box_frame"]  # ✅ これを追加
-    #         )
-    
-    #     self.label_status.setText("✅ All batch tracking completed.")
-                
-        
-                        
-    #     # 🔸 表示されている確定ボックス（赤線）を削除
-    #     if hasattr(self, "confirmed_box_item"):
-    #         try:
-    #             if self.confirmed_box_item is not None and self.confirmed_box_item.scene() is not None:
-    #                 self.scene.removeItem(self.confirmed_box_item)
-    #         except RuntimeError:
-    #             print("[WARN] confirmed_box_item has been already deleted.")
-    #         self.confirmed_box_item = None
-        
-    #     # 🔸 ボックスの情報をすべてリセット
-    #     self.last_box_prompt = None
-    #     self.last_used_box_px = None
-        
-    #     # 🔸 フレームごとのボックス情報をすべて削除（これが必要！）
-    #     self.box_per_frame.clear()
-
-
-            
-            
-        
-    #     self.display_current_image()
-
-
-    
     def run_batch_tracking(self):
         if not self.ensure_local_sam2_available():
             return
@@ -4215,7 +3518,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         if not self.batch_object_data:
             self.label_status.setText("⚠ No objects registered for batch tracking.")
             return
-    
+
         for obj_idx, obj_info in enumerate(self.batch_object_data, 1):
             object_id = int(obj_info.get("id", obj_idx))
             self.label_status.setText(
@@ -4253,31 +3556,6 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
 
 
-        
-    # def smart_undo(self):
-    #     key = self.get_current_image_key()
-    
-    #     # ① 手描きパスのUndo（最優先）
-    #     if key in self.drawn_paths_per_image and self.drawn_paths_per_image[key]:
-    #         self.undo_last_path()
-    #         print("[INFO] Ctrl+Z → undo_last_drawn_path done")
-    #         return
-    
-    #     # ② 通常の1画像Undo（先にチェック）
-    #     if key in self.undo_stack and self.undo_stack[key]:
-    #         self.undo_edit(key)
-    #         print("[INFO] Ctrl+Z → undo_svg_edit done")
-    #         return
-    
-    #     # ③ 全画像対象のUndo（key="__global__" を渡す！）
-    #     if "__global__" in self.undo_stack and self.undo_stack["__global__"]:
-    #         self.undo_edit("__global__")
-    #         print("[INFO] Ctrl+Z → undo_global_svg_edit done")
-    #         return
-    
-    #     # ④ それでも何もなければ
-    #     self.label_status.setText("Nothing to undo.")
-    #     print("[INFO] Ctrl+Z → nothing to undo")
     
     def smart_undo(self):
         key = self.get_current_image_key()
@@ -4424,15 +3702,19 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         )
 
 
-    def _on_status_text_changed(self, text):
+    def _set_status_progress(self, text, percent):
+        """Show a text-only operation status beside the visual progress bar."""
+        self.label_status.setText(text)
         if not hasattr(self, "status_progress"):
             return
-        match = re.search(r"(?<!\d)(\d{1,3})%", text or "")
-        if match:
-            self.status_progress.setValue(max(0, min(100, int(match.group(1)))))
-            self.status_progress.show()
-        else:
-            self.status_progress.hide()
+        self.status_progress.setValue(max(0, min(100, int(percent))))
+        self.status_progress.show()
+
+
+    def _on_status_text_changed(self, _text):
+        if not hasattr(self, "status_progress"):
+            return
+        self.status_progress.hide()
 
 
     def _show_empty_canvas_message(self):
@@ -4797,7 +4079,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
                     path_item.setPath(qpath)
                     self.scene.addItem(path_item)
     
-                # 💾 Undo/Redo & SVG対応
+                # 💾 Undo/Redo対応
                 # self.save_drawn_path(qpath, key_override=key)
                 self.save_drawn_path_for_image(key, qpath)
 
@@ -4818,7 +4100,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             return
     
         try:
-            self.save_svg_state_for_undo(key)
+            self.save_label_state_for_undo(key)
             self._extract_threshold_inside_object_for_key(key)
             self.display_current_image()
             self.scene.update()
@@ -4838,7 +4120,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         processed = 0
     
         # 全画像Undo
-        self.save_svg_state_for_undo("__global__")
+        self.save_label_state_for_undo("__global__")
     
         for key in sorted(self.image_paths.keys()):
             try:
@@ -4992,34 +4274,6 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             self.drawn_paths_per_image[key] = []
         self.display_current_image()
 
-    # def clear_all_paths(self):
-    #     key = f"{self.current_index + 1:04}"
-    #     if key in self.drawn_paths_per_image:
-    #         self.drawn_paths_per_image[key] = []
-    #         self.display_current_image()
-
-
-
-
-    
-    def _create_empty_svg(self, svg_path, reference_image_path):
-        from xml.etree.ElementTree import Element, SubElement, ElementTree
-    
-        # 画像サイズを取得
-        with Image.open(reference_image_path) as img:
-            width, height = img.size
-    
-        # SVGの基本構造を構築
-        svg = Element("svg", xmlns="http://www.w3.org/2000/svg",
-                      width=str(width), height=str(height),
-                      viewBox=f"0 0 {width} {height}")
-        tree = ElementTree(svg)
-        tree.write(svg_path, encoding="utf-8", xml_declaration=True)
-            
-                
-            
-            
-                    
     def _normalize_grayscale(self, array):
         arr = array.astype(np.float32)
         arr -= arr.min()
@@ -5030,6 +4284,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
     def _load_nifti_volume(self, source_path):
         """Load a 3D NIfTI as editable axial slices while retaining its exact source geometry."""
         source_path = os.path.abspath(source_path)
+        self._source_dataset_identity = self._normalized_dataset_identity(source_path)
         if not self.source_dataset_name:
             self.source_dataset_name = (
                 Path(source_path).parent.name
@@ -5054,10 +4309,10 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             self.label_status.setText(f"NIfTI loading failed: {exc}")
             return False
 
+        self.reset_autosave_label_dir(self._source_dataset_identity)
         name = Path(source_path).name
         base = name[:-7] if name.lower().endswith(".nii.gz") else Path(name).stem
-        jpg_folder = Path(os.getcwd()) / f"{base}jpg"
-        jpg_folder.mkdir(exist_ok=True)
+        jpg_folder = self._reset_session_temp_dir("source_images")
         self.image_paths = {}
         self.image_sizes = {}
         self.original_image_filenames = {}
@@ -5072,8 +4327,6 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             self.image_sizes[key] = (width, height)
             self.original_image_filenames[key] = f"{name}#slice={slice_index + 1}"
 
-        self.reset_autosave_label_dir()
-
         spacing = fingerprint["voxel_spacing_mm"]
         affine = np.asarray(fingerprint["affine"], dtype=float)
         self.source_nifti_path = source_path
@@ -5081,7 +4334,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         self._set_volume_geometry(VolumeGeometry((width, height, depth), affine, "nifti"))
         self.volinf["source"] = source_path
         self._write_volinfo_csv(
-            os.path.join(os.getcwd(), f"{base}_volinf.csv"),
+            self._session_calibration_path(f"{base}_volinf.csv"),
             self.volume_geometry,
         )
         self.current_index = 0
@@ -5106,16 +4359,12 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
                 
         # ✅ 既存の画像／マスク／描画パス／Undo情報などをすべてリセット
         self.image_paths.clear()
-        self.mask_paths.clear()
         self.label_masks.clear()
         self.label_mask_paths.clear()
         self.drawn_paths_per_image.clear()
         self.undo_stack.clear()
         self.redo_stack.clear()
-        self.modified_svg_trees.clear()
-        self.path_elements_by_color.clear()
         self.pixmap_cache.clear()
-        self.svg_renderer_cache.clear()
         self.batch_object_data.clear()
         self.object_label_names.clear()
         self.original_image_filenames.clear()
@@ -5280,20 +4529,10 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             self._load_nifti_volume(nifti_paths[0])
             return
 
+        self._source_dataset_identity = self._normalized_dataset_identity(folder)
+        self.reset_autosave_label_dir(self._source_dataset_identity)
         
-        input_folder = pathlib.Path(folder)
-        
-        # どの名前で出力フォルダを作るか決める
-        if 'files' in locals() and files:        # ファイル選択の経路
-            if len(files) == 1:
-                out_name = pathlib.Path(files[0]).stem   # 例: Panoramix-cropped → Panoramix-croppedjpg
-            else:
-                out_name = input_folder.name             # 複数選択 → フォルダ名jpg
-        else:
-            out_name = input_folder.name                 # フォルダ選択 → フォルダ名jpg
-        
-        jpg_folder = pathlib.Path(os.getcwd()) / f"{out_name}jpg"
-        jpg_folder.mkdir(exist_ok=True)   # ★必ず先に作っておく（ここが肝）
+        jpg_folder = self._reset_session_temp_dir("source_images")
         
         print(f"[INFO] JPG output dir: {jpg_folder}")    # デバッグ表示（任意）
         
@@ -5590,7 +4829,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
                     self.z_spacing_mm = float(sz) if sz is not None else None
                 
                     csv_filename = f"{self.output_file_stem()}_volinf.csv"
-                    csv_path = os.path.join(os.getcwd(), csv_filename)
+                    csv_path = self._session_calibration_path(csv_filename)
                     with open(csv_path, "w", newline="", encoding="utf-8") as f:
                         writer = csv.writer(f)
                         writer.writerows(volume_table)
@@ -5746,25 +4985,10 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         
         self.current_index = 0
  
-        # 🔽 output_mask_dir を初期化
-        now = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.output_mask_dir = os.path.join(
-            os.getcwd(), self.timestamped_output_name("masks", now)
-        )
-        os.makedirs(self.output_mask_dir, exist_ok=True)
-    
-        # 🔽 空のSVGを生成して mask_paths に登録
-        for key, img_path in self.image_paths.items():
-            svg_filename = f"mask{key}.svg"
-            svg_path = os.path.join(self.output_mask_dir, svg_filename)
-            self._create_empty_svg(svg_path, img_path)
-            self.mask_paths[key] = svg_path
-            
-        
         # === INSERT (ループの外) ===
         # 🔽 代表DICOMからボリューム情報をCSVに（可能なら）…を 1 回だけ書く
         csv_filename = f"{self.output_file_stem()}_volinf.csv"
-        csv_path = os.path.join(os.getcwd(), csv_filename)
+        csv_path = self._session_calibration_path(csv_filename)
         
         
         
@@ -5914,144 +5138,57 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
     
     
-    # def load_mask_folder(self):
-    #     import os, shutil
-    #     from datetime import datetime
-    #     from xml.etree import ElementTree as ET
-    #     from PyQt6.QtWidgets import QFileDialog, QMessageBox
-    
-    #     folder = QFileDialog.getExistingDirectory(self, "Select Mask Folder")
-    #     if not folder:
-    #         return
-    
-    #     incoming = self.load_files_from_folder(folder, [".svg"])
-    #     if not incoming:
-    #         self.label_status.setText("No SVGs in the selected folder.")
-    #         return
-    
-    #     # --- Replace or Merge? ---
-    #     box = QMessageBox(self)
-    #     box.setWindowTitle("Import SVGs")
-    #     box.setText("How do you want to import the SVG masks?")
-    #     btn_replace = box.addButton("Replace all", QMessageBox.ButtonRole.AcceptRole)
-    #     btn_merge   = box.addButton("Merge / Append", QMessageBox.ButtonRole.ActionRole)
-    #     box.addButton(QMessageBox.StandardButton.Cancel)
-    #     box.exec()
-    #     if box.clickedButton() is None:
-    #         return
-    #     mode = "replace" if box.clickedButton() is btn_replace else \
-    #            ("merge" if box.clickedButton() is btn_merge else None)
-    #     if mode is None:
-    #         self.label_status.setText("Import canceled.")
-    #         return
-    
-    #     # --- Ensure output folder ---
-    #     if not hasattr(self, "output_mask_dir") or not os.path.exists(self.output_mask_dir):
-    #         now = datetime.now().strftime("%Y%m%d_%H%M%S")
-    #         self.output_mask_dir = os.path.join(os.getcwd(), f"masks_{now}")
-    #         os.makedirs(self.output_mask_dir, exist_ok=True)
-    
-    #     # Replace = clear only our bookkeeping (実ファイルは残っていてもOK)
-    #     if mode == "replace":
-    #         self.mask_paths.clear()
-    
-    #     # Palette (allowed colors) lowercased hex for cleaning
-    #     allowed_colors = {f"#{r:02x}{g:02x}{b:02x}".lower() for r, g, b in self.color_labels}
-    
-    #     # --- helper: append paths from add_svg into base_svg (no recolor) ---
-    #     def _append_svg_paths(base_svg: str, add_svg: str) -> bool:
-    #         try:
-    #             base_tree = ET.parse(base_svg); base_root = base_tree.getroot()
-    #             add_root  = ET.parse(add_svg).getroot()
-    
-    #             for el in add_root.iter():
-    #                 tag = el.tag.lower()
-    #                 if not tag.endswith("path"):
-    #                     continue
-    #                 d = el.attrib.get("d")
-    #                 if not d:
-    #                     continue
-    #                 # keep only allowed fills
-    #                 fill = self._normalize_color(el.attrib.get("fill", ""),
-    #                                              el.attrib.get("style", "")).lower()
-    #                 if not fill or fill not in allowed_colors:
-    #                     continue
-    
-    #                 new_el = ET.Element("path")
-    #                 new_el.set("d", d)
-    #                 new_el.set("fill", fill)
-    #                 if "fill-rule" in el.attrib:
-    #                     new_el.set("fill-rule", el.attrib.get("fill-rule"))
-    #                 # drop stroke/style to avoid outlines
-    #                 # (SegRef 側で塗りのみ扱うため)
-    #                 # ※ new_el には stroke/style を付けない
-    #                 base_root.append(new_el)
-    
-    #             base_tree.write(base_svg, encoding="utf-8")
-    #             return True
-    #         except Exception as e:
-    #             print(f"[WARN] merge failed {base_svg} <- {add_svg}: {e}")
-    #             return False
-    
-    #     # --- import loop ---
-    #     for key, src_path in incoming.items():
-    #         dst_path = os.path.join(self.output_mask_dir, f"mask{key}.svg")
-    
-    #         if mode == "replace" or not os.path.exists(dst_path):
-    #             # copy and clean to allowed palette
-    #             shutil.copy2(src_path, dst_path)
-    #             self._clean_svg_colors(dst_path, allowed_colors)
-    #         else:
-    #             # merge (append) into existing file; if failed, fall back to replace
-    #             if not _append_svg_paths(dst_path, src_path):
-    #                 shutil.copy2(src_path, dst_path)
-    #                 self._clean_svg_colors(dst_path, allowed_colors)
-    
-    #         self.mask_paths[key] = dst_path
-    
-    #     # refresh
-    #     if hasattr(self, "svg_renderer_cache"):
-    #         self.svg_renderer_cache.clear()
-    #     self.display_current_image()
-    #     self.update_checkboxes_based_on_used_colors()
-    #     self.label_status.setText(
-    #         f"Imported {len(incoming)} SVGs ({'replaced' if mode=='replace' else 'merged'})."
-    #     )
-    
     def load_mask_folder(self):
-        folder = QFileDialog.getExistingDirectory(self, "Select Mask Folder")
+        folder = QFileDialog.getExistingDirectory(
+            self, "Select Label PNG or Legacy SVG Mask Folder"
+        )
         if not folder:
             return
     
-        # いったんクリア
-        self.label_masks.clear()
-        self.label_mask_paths.clear()
+        if not self.image_paths:
+            self.label_status.setText("⚠ Load images before loading masks.")
+            return
     
-        # 移行期間なので SVG と PNG の両方を許可
-        mask_files = sorted([
+        mask_files = sorted(
             f for f in os.listdir(folder)
             if f.lower().endswith(".png") or f.lower().endswith(".svg")
-        ])
-    
+        )
         if not mask_files:
             self.label_status.setText("⚠ No PNG or SVG mask files found.")
             return
+
+        # If both formats contain the same slice, the label PNG is authoritative.
+        # SVG is accepted only as an import boundary and is rasterized immediately.
+        selected_by_key = {}
+        unnamed_index = 0
+        for filename in mask_files:
+            nums = re.findall(r'\d+', filename)
+            if nums:
+                key = f"{int(nums[-1]):04d}"
+            else:
+                unnamed_index += 1
+                key = f"{unnamed_index:04d}"
+            if key not in self.image_paths:
+                print(f"[WARN] Ignoring mask without a matching image: {filename}")
+                continue
+            previous = selected_by_key.get(key)
+            if previous is None or filename.lower().endswith(".png"):
+                selected_by_key[key] = filename
+
+        if not selected_by_key:
+            self.label_status.setText("⚠ No mask files matched the loaded image sequence.")
+            return
+
+        self.label_masks.clear()
+        self.label_mask_paths.clear()
     
         loaded_count = 0
         canonical_keys = list(self.image_paths.keys()) if SLICE_MAPPING_DEBUG else []
         observed_display_slices = {1, 2, 50, 100, 400, len(canonical_keys)}
     
-        for filename in mask_files:
+        for key, filename in sorted(selected_by_key.items()):
             src_path = os.path.join(folder, filename)
-    
-            nums = re.findall(r'\d+', filename)
-            if nums:
-                display_slice = int(nums[-1])
-                key = f"{display_slice:04d}"
-            else:
-                loaded_count += 1
-                key = f"{loaded_count:04d}"
-                display_slice = loaded_count
+            display_slice = int(key)
 
             if SLICE_MAPPING_DEBUG and display_slice in observed_display_slices:
                 expected_z = display_slice - 1
@@ -6071,12 +5208,9 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             try:
                 if filename.lower().endswith(".png"):
                     self.load_label_mask_png(key, src_path)
-    
-                elif filename.lower().endswith(".svg"):
+                else:
                     self.load_svg_as_label_mask(key, src_path)
-    
                 loaded_count += 1
-    
             except Exception as e:
                 print(f"[WARN] Failed to load mask {filename}: {e}")
     
@@ -6084,234 +5218,12 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             self.label_status.setText("⚠ Failed to load any masks.")
             return
     
-        # self.label_status.setText(f"✅ Loaded {loaded_count} mask(s) into label map.")
-        # self.display_current_image()    
         self.update_checkboxes_based_on_used_colors()
         self.display_current_image()
-        self.label_status.setText(f"✅ Loaded {loaded_count} mask(s). Autosaved label PNGs to: {self.output_label_dir}")    
-    
-    
-    
-    
-    def _clean_svg_colors(self, svg_path: str, allowed_colors: set[str]) -> None:
-        """許可色以外の要素を削除（従来処理を関数化）。"""
-        from xml.etree import ElementTree as ET
-        try:
-            tree = ET.parse(svg_path)
-            root = tree.getroot()
-            to_remove = []
-            for elem in root.iter():
-                fill = elem.attrib.get("fill", "")
-                style = elem.attrib.get("style", "")
-                color = self._normalize_color(fill, style)  # 既存関数
-                if color and color not in allowed_colors:
-                    to_remove.append(elem)
-            for e in to_remove:
-                parent = self._find_parent(root, e)
-                if parent is not None:
-                    parent.remove(e)
-            tree.write(svg_path, encoding="utf-8")
-        except Exception as e:
-            print(f"[WARN] Failed to clean {svg_path}: {e}")
-
-    
-    # 追加: パレットを #rrggbb の小文字で返す
-    def _palette_hex(self) -> list[str]:
-        return [f"#{r:02x}{g:02x}{b:02x}" for (r, g, b) in self.color_labels]
-
-        
-    def _get_used_colors_hex(self) -> set[str]:
-        used: set[str] = set()
-        for p in self.mask_paths.values():
-            try:
-                root = ET.parse(p).getroot()
-                for el in root.iter():
-                    hx = _extract_fill_hex(el)  # style="fill:..", rgb(..), #rrggbb に対応
-                    if hx:
-                        used.add(hx.lower())
-            except Exception as e:
-                print(f"[WARN] parse failed: {p}: {e}")
-        return used
-
-    
-    def _merge_svg_files(
-        self,
-        base_svg: str,
-        add_svg: str,
-        allowed_colors: set[str],
-        used_colors_hex: set[str],
-        collision_mode: str | None = None,  # "overlay" or "recolor"
-    ) -> tuple[set[str], str | None]:
-        """
-        base_svg に add_svg の path を追記してマージ。
-        色衝突があればユーザーに「重ねる/再配色」を一度だけ尋ねる。
-        戻り値: (更新後の使用中カラー集合, 決定した collision_mode)
-        """
-        from xml.etree import ElementTree as ET
-    
-        base_tree = ET.parse(base_svg); base_root = base_tree.getroot()
-        add_tree  = ET.parse(add_svg);  add_root  = add_tree.getroot()
-        
-        allowed_colors = {c.lower() for c in allowed_colors}
-        used_colors_hex = {c.lower() for c in used_colors_hex}    
-    
-        # Obj1=赤のHEX
-        obj1_rgb = self.color_labels[0]
-        obj1_hex = f"#{obj1_rgb[0]:02x}{obj1_rgb[1]:02x}{obj1_rgb[2]:02x}"
-    
-        # 追加側の有効色を収集（TS赤をObj1へ正規化）
-        incoming_elems: list[ET.Element] = []
-        incoming_colors: list[str] = []
-    
-        for el in list(add_root.iter()):
-            if not el.tag.lower().endswith("path"):
-                continue
-            # 色を正規化
-            fill = self._normalize_color(el.attrib.get("fill", ""), el.attrib.get("style", ""))
-            if not fill:
-                continue
-            if fill in ("#ff0000", "rgb(255,0,0)"):
-                fill = obj1_hex
-            fill = fill.lower()
-            if fill not in allowed_colors:
-                continue
-    
-            # path 複製（d は必須）
-            if "d" not in el.attrib:
-                continue
-            new_el = ET.Element(el.tag)
-            new_el.set("d", el.attrib["d"])
-            new_el.set("fill", fill)
-            new_el.set("fill-rule", el.attrib.get("fill-rule", "evenodd"))
-            # stroke等は消す
-            for k in ("stroke", "stroke-width", "style"):
-                if k in new_el.attrib:
-                    new_el.attrib.pop(k, None)
-    
-            incoming_elems.append(new_el)
-            incoming_colors.append(fill)
-    
-        if not incoming_elems:
-            return used_colors_hex, collision_mode
-    
-        # 衝突検出
-        distinct_incoming = list(dict.fromkeys(incoming_colors))  # 順序保持のユニーク
-        collisions = [c for c in distinct_incoming if c in used_colors_hex]
-    
-        # 必要なら、1回だけユーザーに方針を聞く
-        if collisions and collision_mode is None:
-            box = QMessageBox(self)
-            box.setWindowTitle("Color collision")
-            cols = ", ".join(collisions[:5]) + ("..." if len(collisions) > 5 else "")
-            box.setText(f"Some incoming object colors are already used ({cols}).")
-            btn_overlay = box.addButton("Overlay as-is", QMessageBox.ButtonRole.AcceptRole)
-            btn_recolor = box.addButton("Recolor incoming", QMessageBox.ButtonRole.ActionRole)
-            box.addButton(QMessageBox.StandardButton.Cancel)
-            box.exec()
-            if box.clickedButton() is None:
-                return used_colors_hex, collision_mode
-            collision_mode = "overlay" if box.clickedButton() is btn_overlay else \
-                             ("recolor" if box.clickedButton() is btn_recolor else None)
-            if collision_mode is None:
-                return used_colors_hex, None  # cancel
-    
-        # 再配色が選ばれたら、空いている色へ順次割り当て
-        color_map: dict[str, str] = {}
-        if collisions and collision_mode == "recolor":
-            palette = [f"#{r:02x}{g:02x}{b:02x}" for (r, g, b) in self.color_labels]
-            free_pool = [hx.lower() for hx in palette if hx.lower() not in used_colors_hex]
-            if not free_pool:
-                QMessageBox.information(self, "Info", "No free object colors left. Overlaying as-is.")
-                collision_mode = "overlay"
-            else:
-                it = iter(free_pool)
-                for c in collisions:
-                    try:
-                        color_map[c] = next(it)
-                    except StopIteration:
-                        color_map[c] = free_pool[-1]            
-            
-            
-            # free_pool = [
-            #     f"#{r:02x}{g:02x}{b:02x}".lower()
-            #     for (r, g, b) in self.color_labels
-            #     if f"#{r:02x}{g:02x}{b:02x}".lower() not in used_colors_hex
-            # ]
-            # if not free_pool:
-            #     QMessageBox.information(self, "Info",
-            #                             "No free object colors left. Overlaying as-is.")
-            #     collision_mode = "overlay"
-            # else:
-            #     it = iter(free_pool)
-            #     for c in collisions:
-            #         try:
-            #             color_map[c] = next(it)
-            #         except StopIteration:
-            #             # 空きが尽きたら最後の色を使い回し
-            #             color_map[c] = free_pool[-1]
-                        
-                        
-                        
-                        
-    
-        # 追記（必要に応じて色を置換）
-        added_colors = set()
-        for new_el in incoming_elems:
-            fill = new_el.attrib.get("fill", "").lower()
-            if collision_mode == "recolor" and fill in color_map:
-                new_el.set("fill", color_map[fill])
-                fill = color_map[fill]
-            base_root.append(new_el)
-            added_colors.add(fill)
-    
-        base_tree.write(base_svg, encoding="utf-8")
-    
-        # 使用中カラー集合を更新
-        used_colors_hex = set(used_colors_hex) | set(added_colors)
-        return used_colors_hex, collision_mode
-
-
-
-    #黒背景を消すための
-    def _normalize_color(self, fill, style):
-        def rgb_to_hex(rgb_str):
-            match = re.match(r'rgb\((\d+),\s*(\d+),\s*(\d+)\)', rgb_str)
-            if match:
-                r, g, b = map(int, match.groups())
-                return f'#{r:02x}{g:02x}{b:02x}'
-            return rgb_str.strip().lower()
-    
-        color = ""
-        if style and "fill:" in style:
-            match = re.search(r'fill:([^;"]+)', style)
-            if match:
-                color = match.group(1).strip().lower()
-        elif fill:
-            color = fill.strip().lower()
-    
-        if color.startswith("rgb"):
-            return rgb_to_hex(color)
-        return color
-    
-    def _find_parent(self, root, target):
-        for parent in root.iter():
-            if target in list(parent):
-                return parent
-        return None
-
-
-
-
-
-            
-
-    def load_files_from_folder(self, folder, extensions):
-        files = {}
-        for file in sorted(os.listdir(folder)):
-            if any(file.lower().endswith(ext) for ext in extensions):
-                key = os.path.splitext(file)[0][-4:]  # 末尾4桁（例：0001）
-                files[key] = os.path.join(folder, file)
-        return files
+        self.label_status.setText(
+            f"✅ Loaded {loaded_count} mask(s) as label maps. "
+            f"Autosaved label PNGs to: {self.output_label_dir}"
+        )
 
 
 
@@ -6320,64 +5232,9 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
     
 
-
-
-
-    
-    
-    def _collect_used_color_hexes(self) -> set[str]:
-        """現在 self.mask_paths にある全SVGから使用中の #rrggbb を集める"""
-        used: set[str] = set()
-        for svg_path in self.mask_paths.values():
-            try:
-                root = ET.parse(svg_path).getroot()
-                for el in root.iter():
-                    hx = _extract_fill_hex(el)   # ← モジュール関数を呼ぶ
-                    if hx:
-                        used.add(hx)
-            except Exception as e:
-                print(f"[WARN] parse failed: {svg_path}: {e}")
-        return used    
-    
-    
-    
-        
-    # def update_checkboxes_based_on_used_colors(self):
-    #     # いったん全OFF
-    #     for cb in self.checkboxes:
-    #         cb.setChecked(False)
-    
-    #     # 既存SVGから使われている色(hex)を厳密に収集
-    #     used_hex = set()
-    #     for svg_path in self.mask_paths.values():
-    #         try:
-    #             root = ET.parse(svg_path).getroot()
-    #             for el in root.iter():
-    #                 hx = _extract_fill_hex(el)  # style="fill:..." / rgb(...) / #rrggbb 全対応
-    #                 if hx:
-    #                     used_hex.add(hx.lower())
-    #         except Exception:
-    #             continue
-    
-    #     # 定義色に対応するチェックをON
-    #     for i, (r, g, b) in enumerate(self.color_labels):
-    #         hx = f"#{r:02x}{g:02x}{b:02x}"
-    #         self.checkboxes[i].setChecked(hx in used_hex)
-    
-    # def update_checkboxes_based_on_used_colors(self):
-    #     # いったん全OFF
-    #     for cb in self.checkboxes:
-    #         cb.setChecked(False)
-    
-    #     used_hex = self._get_used_colors_hex()  # ← SVGから厳密取得
-    #     for i, (r, g, b) in enumerate(self.color_labels):
-    #         hx = f"#{r:02x}{g:02x}{b:02x}"
-    #         self.checkboxes[i].setChecked(hx in used_hex)
-                
     def update_checkboxes_based_on_used_colors(self):
         """
-        現在使用中のオブジェクトを検出してチェックボックスをONにする。
-        新方式の label_masks を優先し、必要に応じて旧SVG方式にも対応する。
+        label_masks から現在使用中のオブジェクトを検出する。
         """
     
         # いったん全OFF
@@ -6386,8 +5243,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
     
         used_ids = set()
     
-        # ✅ 新方式：label_masks から使用中 object id を取得
-        if hasattr(self, "label_masks") and self.label_masks:
+        if self.label_masks:
             for key, label_mask in self.label_masks.items():
                 try:
                     if label_mask is None:
@@ -6403,17 +5259,6 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
                 except Exception as e:
                     print(f"[WARN] Failed to inspect label mask for {key}: {e}")
     
-        # ✅ 旧方式：SVGしかない場合の fallback
-        if not used_ids and hasattr(self, "_get_used_colors_hex"):
-            try:
-                used_hex = self._get_used_colors_hex()
-                for i, (r, g, b) in enumerate(self.color_labels, start=1):
-                    hx = f"#{r:02x}{g:02x}{b:02x}"
-                    if hx in used_hex:
-                        used_ids.add(i)
-            except Exception as e:
-                print(f"[WARN] Failed to inspect SVG colors: {e}")
-    
         # 使用中objectだけON
         for obj_id in used_ids:
             self.checkboxes[obj_id - 1].setChecked(True)
@@ -6424,144 +5269,165 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
 
         
-    # def save_svg_as(self):
-    #     folder_path = QFileDialog.getExistingDirectory(
-    #         self, "Select Folder to Save SVGs"
-    #     )
-    
-    #     if not folder_path:
-    #         self.label_status.setText("Save canceled.")
-    #         return
-    
-    #     count = 0
-    #     for key, svg_path in self.mask_paths.items():
-    #         if os.path.exists(svg_path):
-    #             dst_path = os.path.join(folder_path, f"mask{key}.svg")
-    #             shutil.copyfile(svg_path, dst_path)
-    #             count += 1
-    
-    #     self.label_status.setText(f"{count} SVGs saved to: {folder_path}")
+    def _create_unique_output_directory(
+        self, root_folder: str, category: str, timestamp: str | None = None
+    ) -> str:
+        timestamp = timestamp or datetime.now().strftime("%Y%m%d_%H%M%S")
+        base_name = self.timestamped_output_name(category, timestamp)
+        candidate = Path(root_folder) / base_name
+        suffix = 1
+        while candidate.exists():
+            candidate = Path(root_folder) / f"{base_name}_{suffix}"
+            suffix += 1
+        candidate.mkdir(parents=True)
+        return str(candidate)
 
     
-    # def save_svg_as(self):
-    #     folder_path = QFileDialog.getExistingDirectory(
-    #         self, "Select Folder to Save Label PNGs"
-    #     )
-    
-    #     if not folder_path:
-    #         self.label_status.setText("Save canceled.")
-    #         return
-    
-    #     count = 0
-    
-    #     # 画像順で保存
-    #     for key in sorted(self.image_paths.keys()):
-    #         try:
-    #             label_mask = self.ensure_label_mask_exists(key)
-    #             dst_path = os.path.join(folder_path, f"mask{key}.png")
-    
-    #             ok = cv2.imwrite(dst_path, label_mask)
-    #             if ok:
-    #                 self.label_mask_paths[key] = dst_path
-    #                 count += 1
-    #             else:
-    #                 print(f"[WARN] Failed to save: {dst_path}")
-    
-    #         except Exception as e:
-    #             print(f"[WARN] Failed to save mask for {key}: {e}")
-    
-    #     self.label_status.setText(f"✅ {count} label PNGs saved to: {folder_path}")
-
-    
-    # def save_svg_as(self):
-    #     folder_path = QFileDialog.getExistingDirectory(
-    #         self, "Select Folder to Save Label PNGs"
-    #     )
-    
-    #     if not folder_path:
-    #         self.label_status.setText("Save canceled.")
-    #         return
-    
-    #     count_label = 0
-    #     count_preview = 0
-    
-    #     for key in sorted(self.image_paths.keys()):
-    #         try:
-    #             label_mask = self.ensure_label_mask_exists(key)
-    
-    #             # 1) 正本の label PNG を保存
-    #             label_dst_path = os.path.join(folder_path, f"mask{key}.png")
-    #             ok_label = cv2.imwrite(label_dst_path, label_mask)
-    #             if ok_label:
-    #                 count_label += 1
-    #             else:
-    #                 print(f"[WARN] Failed to save label PNG: {label_dst_path}")
-    
-    #             # 2) 閲覧用の color preview PNG を保存
-    #             h, w = label_mask.shape
-    #             preview = np.zeros((h, w, 3), dtype=np.uint8)  # BGR
-    
-    #             for obj_id, (r, g, b) in enumerate(self.color_labels, start=1):
-    #                 mask = (label_mask == obj_id)
-    #                 if np.any(mask):
-    #                     preview[mask] = (b, g, r)  # OpenCVはBGR
-    
-    #             preview_dst_path = os.path.join(folder_path, f"preview_mask{key}.png")
-    #             ok_preview = cv2.imwrite(preview_dst_path, preview)
-    #             if ok_preview:
-    #                 count_preview += 1
-    #             else:
-    #                 print(f"[WARN] Failed to save preview PNG: {preview_dst_path}")
-    
-    #         except Exception as e:
-    #             print(f"[WARN] Failed to save mask for {key}: {e}")
-    
-    #     self.label_status.setText(
-    #         f"✅ Saved {count_label} label PNGs and {count_preview} preview PNGs to: {folder_path}"
-    #     )        
-                    
-    def save_svg_as(self):
-        root_folder = QFileDialog.getExistingDirectory(
-            self, "Select Folder to Save Masks"
+    def save_masks_to_folder(
+        self, root_folder: str, timestamp: str | None = None
+    ) -> tuple[str, int]:
+        label_folder = self._create_unique_output_directory(
+            root_folder, "label_png", timestamp
         )
-    
-        if not root_folder:
-            self.label_status.setText("Save canceled.")
-            return
-
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        label_folder = os.path.join(
-            root_folder, self.timestamped_output_name("label_png", timestamp)
-        )
-        os.makedirs(label_folder, exist_ok=True)
-
         count_label = 0
-
         records = self._canonical_mask_records()
         self._log_mask_export_mapping("Save Masks")
         for record in records:
             key = record["key"]
-            try:
-                label_mask = self.ensure_label_mask_exists(key)
-
-                label_dst_path = os.path.join(label_folder, record["filename"])
-                ok_label = cv2.imwrite(label_dst_path, label_mask)
-                if ok_label:
-                    count_label += 1
-                else:
-                    print(f"[WARN] Failed to save label PNG: {label_dst_path}")
-
-            except Exception as e:
-                print(f"[WARN] Failed to save mask for {key}: {e}")
-
+            label_mask = self.ensure_label_mask_exists(key)
+            label_dst_path = os.path.join(label_folder, record["filename"])
+            if not cv2.imwrite(label_dst_path, label_mask):
+                raise IOError(f"Failed to save label PNG: {label_dst_path}")
+            count_label += 1
+    
         self._write_mask_sequence_manifest(label_folder)
+        return label_folder, count_label
+
+    
+    def save_masks(self):
+        root_folder = QFileDialog.getExistingDirectory(
+            self, "Select Folder to Save Label PNG Masks"
+        )
+        if not root_folder:
+            self.label_status.setText("Save canceled.")
+            return
+
+        try:
+            label_folder, count_label = self.save_masks_to_folder(root_folder)
+        except Exception as exc:
+            self.label_status.setText(f"⚠ Label PNG save failed: {exc}")
+            return
 
         self.label_status.setText(
             f"✅ Saved {count_label} label PNGs to: {label_folder}"
         )
 
+    @staticmethod
+    def _contour_to_svg_subpath(contour: np.ndarray, scale: float = 1.0) -> str:
+        points = contour.reshape(-1, 2)
+        if len(points) < 3:
+            return ""
+        coords = [(float(x) / scale, float(y) / scale) for x, y in points]
+        commands = [f"M {coords[0][0]:g} {coords[0][1]:g}"]
+        commands.extend(f"L {x:g} {y:g}" for x, y in coords[1:])
+        commands.append("Z")
+        return " ".join(commands)
 
-                    
+
+    def write_label_mask_svg(self, label_mask: np.ndarray, svg_path: str) -> int:
+        """Vectorize one label map into palette-colored SVG paths."""
+        if label_mask.ndim != 2:
+            raise ValueError("Label mask must be a 2D array.")
+
+        height, width = label_mask.shape
+        namespace = "http://www.w3.org/2000/svg"
+        ET.register_namespace("", namespace)
+        root = ET.Element(
+            f"{{{namespace}}}svg",
+            {
+                "width": str(width),
+                "height": str(height),
+                "viewBox": f"0 0 {width} {height}",
+            },
+        )
+
+        path_count = 0
+        contour_scale = 2.0
+        for obj_id, (red, green, blue) in enumerate(self.color_labels, start=1):
+            binary = (label_mask == obj_id).astype(np.uint8) * 255
+            if not np.any(binary):
+                continue
+
+            # Doubling before contour extraction preserves one-pixel-wide regions.
+            expanded = cv2.resize(
+                binary,
+                (width * int(contour_scale), height * int(contour_scale)),
+                interpolation=cv2.INTER_NEAREST,
+            )
+            contours, _ = cv2.findContours(
+                expanded, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE
+            )
+            subpaths = [
+                self._contour_to_svg_subpath(contour, contour_scale)
+                for contour in contours
+            ]
+            path_data = " ".join(part for part in subpaths if part)
+            if not path_data:
+                continue
+
+            ET.SubElement(
+                root,
+                f"{{{namespace}}}path",
+                {
+                    "d": path_data,
+                    "fill": f"#{red:02x}{green:02x}{blue:02x}",
+                    "fill-rule": "evenodd",
+                    "data-label-id": str(obj_id),
+                },
+            )
+            path_count += 1
+
+        ET.ElementTree(root).write(
+            svg_path, encoding="utf-8", xml_declaration=True
+        )
+        return path_count
+
+
+    def export_svg_masks_to_folder(
+        self, root_folder: str, timestamp: str | None = None
+    ) -> tuple[str, int]:
+        svg_folder = self._create_unique_output_directory(
+            root_folder, "svg_masks", timestamp
+        )
+        count = 0
+        for record in self._canonical_mask_records():
+            key = record["key"]
+            filename = f"mask{record['zIndex'] + 1:04d}.svg"
+            self.write_label_mask_svg(
+                self.ensure_label_mask_exists(key),
+                os.path.join(svg_folder, filename),
+            )
+            count += 1
+        return svg_folder, count
+
+
+    def export_svg_masks(self):
+        root_folder = QFileDialog.getExistingDirectory(
+            self, "Select Folder to Export SVG Masks"
+        )
+        if not root_folder:
+            self.label_status.setText("SVG export canceled.")
+            return
+
+        try:
+            svg_folder, count = self.export_svg_masks_to_folder(root_folder)
+        except Exception as exc:
+            self.label_status.setText(f"⚠ SVG export failed: {exc}")
+            return
+
+        self.label_status.setText(
+            f"✅ Exported {count} SVG masks from label maps to: {svg_folder}"
+        )
                     
     def export_overlay_png_sequence(self):
         if not self.image_paths:
@@ -7157,51 +6023,6 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
     
             
-    # def save_calibration_to_csv(self):
-    #     import csv
-    #     from pathlib import Path
-    
-    #     if self.mm_per_px is None or self.z_spacing_mm is None:
-    #         print("[WARN] Calibration values not set")
-    #         return
-    
-    #     try:
-    #         first_img_path = self.image_paths.get("0001") or list(self.image_paths.values())[0]
-    #         img = Image.open(first_img_path)
-    #         width, height = img.width, img.height
-    #     except Exception as e:
-    #         print(f"[WARN] Failed to get image size: {e}")
-    #         width, height = 0, 0
-    
-    #     depth = len(self.image_paths)
-    
-    #     volume_table = [
-    #         ["Width", "Height", "Depth"],
-    #         [str(width), str(height), str(depth)],
-    #         ["X Spacing", "Y Spacing", "Z Spacing"],
-    #         [str(self.mm_per_px), str(self.mm_per_px), str(self.z_spacing_mm)],
-    #         ["X Origin", "Y Origin", "Z Origin"],
-    #         ["0", "0", "0"]
-    #     ]
-    
-    #     # from datetime import datetime
-    #     # folder_name = Path(self.output_mask_dir).name.replace("masks_", "")
-    #     # csv_path = Path(self.output_mask_dir).parent / f"{folder_name}_volinf.csv"
-        
-    #     input_folder_name = Path(self.image_paths.get("0001") or list(self.image_paths.values())[0]).parent.name
-    #     csv_filename = f"{input_folder_name}_volinf.csv"
-    #     csv_path = Path(self.output_mask_dir).parent / csv_filename
-
-    
-    #     with open(csv_path, "w", newline="", encoding="utf-8") as f:
-    #         writer = csv.writer(f)
-    #         writer.writerows(volume_table)
-    
-    
-    
-    
-    #     print(f"[INFO] Calibration info saved to: {csv_path}")
-    
     def save_calibration_to_csv(self):
         from pathlib import Path
         from datetime import datetime
@@ -7245,14 +6066,14 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
     
         output_stem = self.output_file_stem()
         csv_filename = f"{output_stem}_volinf.csv"
-        csv_path = Path(self.output_mask_dir).parent / csv_filename
+        csv_path = self._session_calibration_path(csv_filename)
 
         try:
             self._write_volinfo_csv(csv_path, geometry)
         except PermissionError:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             fallback_filename = f"{output_stem}_volinf_{timestamp}.csv"
-            fallback_path = Path(self.output_mask_dir).parent / fallback_filename
+            fallback_path = csv_path.parent / fallback_filename
             self._write_volinfo_csv(fallback_path, geometry)
             csv_path = fallback_path
             print(f"[WARN] Original volinf CSV was locked. Saved as: {csv_path}")
@@ -7261,34 +6082,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
 
             
-    # def save_svg_state_for_undo(self, key=None):
-    #     """
-    #     SVGの状態をUndo用に保存。
-    #     - key を指定：そのキーのみ保存
-    #     - key を None：全mask_paths分のsnapshotを保存
-    #     """
-    #     if key is None:
-    #         # 一括保存（全画像）
-    #         snapshot = {}
-    #         for k, path in self.mask_paths.items():
-    #             if os.path.exists(path):
-    #                 with open(path, "r", encoding="utf-8") as f:
-    #                     snapshot[k] = f.read()
-    #         if snapshot:
-    #             self.undo_stack.setdefault("__global__", []).append(snapshot)
-    #             self.redo_stack["__global__"] = []
-    #     else:
-    #         # 単一キーの保存（従来の動作）
-    #         if key not in self.mask_paths:
-    #             return
-    #         path = self.mask_paths[key]
-    #         with open(path, "r", encoding="utf-8") as f:
-    #             svg_text = f.read()
-    #         self.undo_stack.setdefault(key, []).append(svg_text)
-    #         self.redo_stack[key] = []
-        
-            
-    def save_svg_state_for_undo(self, key=None):
+    def save_label_state_for_undo(self, key=None):
         """
         label mask の状態を Undo 用に保存。
         - key を指定: そのキーのみ保存
@@ -7319,54 +6113,6 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
     
             self.undo_stack.setdefault(key, []).append(label_mask.copy())
             self.redo_stack[key] = []        
-        
-                
-                
-    # def undo_edit(self, key=None):
-    #     if key is None:
-    #         key = self.get_current_image_key()
-    
-    #     # 🔁 グローバルUndo（全画像対象の操作があれば優先）
-    #     if key == "__global__" and self.undo_stack.get("__global__"):
-    #         snapshot = self.undo_stack["__global__"].pop()
-    
-    #         # Redo用に現在の全状態を保存
-    #         current_state = {}
-    #         for k in snapshot:
-    #             if k in self.mask_paths and os.path.exists(self.mask_paths[k]):
-    #                 with open(self.mask_paths[k], "r", encoding="utf-8") as f:
-    #                     current_state[k] = f.read()
-    #         self.redo_stack.setdefault("__global__", []).append(current_state)
-    
-    #         # 復元
-    #         for k, svg_text in snapshot.items():
-    #             if k in self.mask_paths:
-    #                 with open(self.mask_paths[k], "w", encoding="utf-8") as f:
-    #                     f.write(svg_text)
-    
-    #         self.display_current_image()
-    #         self.label_status.setText("Undo (all images) completed.")
-    #         return
-    
-    #     # 🟨 通常Undo（1画像のみ）
-    #     if key in self.undo_stack and self.undo_stack[key]:
-    #         current_svg_path = self.mask_paths.get(key)
-    #         if current_svg_path and os.path.exists(current_svg_path):
-    #             # Redo用に現在状態を保存
-    #             with open(current_svg_path, "r", encoding="utf-8") as f:
-    #                 self.redo_stack.setdefault(key, []).append(f.read())
-    
-    #             # Undo復元
-    #             previous_svg = self.undo_stack[key].pop()
-    #             with open(current_svg_path, "w", encoding="utf-8") as f:
-    #                 f.write(previous_svg)
-    
-    #             self.display_current_image()
-    #             self.label_status.setText(f"Undo (image {key}) completed.")
-    #         else:
-    #             self.label_status.setText(f"SVG path not found for image {key}")
-    #     else:
-    #         self.label_status.setText("Nothing to undo.")
                 
     
     
@@ -7422,44 +6168,6 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
     
     
     
-    # def redo_edit(self):
-    #     key = self.get_current_image_key()
-    
-    #     # 🔁 グローバルRedo（全画像対象の操作）
-    #     if "__global__" in self.redo_stack and self.redo_stack["__global__"]:
-    #         snapshot = self.redo_stack["__global__"].pop()
-    
-    #         # Undo用に現在の全状態を保存
-    #         current_state = {}
-    #         for k in snapshot:
-    #             if k in self.mask_paths and os.path.exists(self.mask_paths[k]):
-    #                 with open(self.mask_paths[k], "r", encoding="utf-8") as f:
-    #                     current_state[k] = f.read()
-    #         self.undo_stack.setdefault("__global__", []).append(current_state)
-    
-    #         # 復元
-    #         for k, svg_text in snapshot.items():
-    #             if k in self.mask_paths:
-    #                 with open(self.mask_paths[k], "w", encoding="utf-8") as f:
-    #                     f.write(svg_text)
-    
-    #         self.display_current_image()
-    #         self.label_status.setText("Redo (all images) completed.")
-    #         return
-    
-    #     # 🟨 通常Redo（1画像のみ）
-    #     if key in self.redo_stack and self.redo_stack[key]:
-    #         current_svg_path = self.mask_paths[key]
-    #         with open(current_svg_path, "r", encoding="utf-8") as f:
-    #             self.undo_stack.setdefault(key, []).append(f.read())
-    #         next_svg = self.redo_stack[key].pop()
-    #         with open(current_svg_path, "w", encoding="utf-8") as f:
-    #             f.write(next_svg)
-    #         self.display_current_image()
-    #         self.label_status.setText(f"Redo (image {key}) completed.")
-    #     else:
-    #         self.label_status.setText("Nothing to redo.")
-    
     def redo_edit(self):
         key = self.get_current_image_key()
     
@@ -7506,52 +6214,6 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
                 self.label_status.setText(f"Redo failed for image {key}: {e}")
         else:
             self.label_status.setText("Nothing to redo.")
-
-
-    
-    # def save_drawn_path(self, path):
-    #     key = self.get_current_image_key()
-
-    #     # 🔒 パスを確実に閉じる
-    #     if not path.isEmpty():
-    #         path.closeSubpath()
-    
-    #     # パスの初期化（なければ）
-    #     if key not in self.drawn_paths_per_image:
-    #         self.drawn_paths_per_image[key] = []
-    
-    #     # 🔁 Redoスタックも初期化（Undo後の新規描画で履歴を消す）
-    #     if key not in self.redo_stack:
-    #         self.redo_stack[key] = []
-    #     self.redo_stack[key].clear()
-    
-    #     # ペンの色付きでパスを保存
-    #     self.drawn_paths_per_image[key].append((path, self.graphicsView.pen_color))
-    
-    # def save_drawn_path(self, path):
-    #     key = self.get_current_image_key()
-    #     if not key:
-    #         return
-    
-    #     # 🔒 パスを確実に閉じる
-    #     if not path.isEmpty():
-    #         path.closeSubpath()
-    
-    #     # パスの初期化（なければ）
-    #     if key not in self.drawn_paths_per_image:
-    #         self.drawn_paths_per_image[key] = []
-    
-    #     # 🔁 Redoスタックも初期化（Undo後の新規描画で履歴を消す）
-    #     if key not in self.redo_stack:
-    #         self.redo_stack[key] = []
-    #     self.redo_stack[key].clear()
-    
-    #     # ペンの色付きでパスを保存
-    #     self.drawn_paths_per_image[key].append((path, self.graphicsView.pen_color))
-    
-    #     # ✅ Auto Add: current image のみ即反映
-    #     if hasattr(self, "chk_auto_add") and self.chk_auto_add.isChecked():
-    #         self.auto_add_latest_path_current_image()
     
     
     
@@ -7610,186 +6272,6 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
 
     # #ベクターのみで簡潔するver    
-    # def add_drawn_path_to_mask(self):
-    #     # self.save_svg_state_for_undo(self.get_current_image_key())
-    #     # ✅ ループ前に一度だけ全画像の Undo 保存
-    #     self.save_svg_state_for_undo()        
-    
-    #     from PyQt6.QtGui import QPainterPath
-    #     from xml.etree import ElementTree as ET
-    
-    #     def parse_svg_path_to_qpath(d_attr):
-    #         path = QPainterPath()
-    #         tokens = re.findall(r"[-+]?\d*\.\d+|[-+]?\d+|[A-Za-z]", d_attr)
-    #         i = 0
-    #         while i < len(tokens):
-    #             cmd = tokens[i]
-    #             if cmd == "M":
-    #                 x, y = float(tokens[i + 1]), float(tokens[i + 2])
-    #                 path.moveTo(x, y)
-    #                 i += 3
-    #             elif cmd == "L":
-    #                 x, y = float(tokens[i + 1]), float(tokens[i + 2])
-    #                 path.lineTo(x, y)
-    #                 i += 3
-    #             elif cmd == "Z":
-    #                 path.closeSubpath()
-    #                 i += 1
-    #             else:
-    #                 i += 1
-    #         return path
-    
-    #     def normalize_color(fill, style):
-    #         def rgb_to_hex(rgb_str):
-    #             match = re.match(r'rgb\((\d+),\s*(\d+),\s*(\d+)\)', rgb_str)
-    #             if match:
-    #                 r, g, b = map(int, match.groups())
-    #                 return f'#{r:02x}{g:02x}{b:02x}'
-    #             return rgb_str.strip().lower()
-    
-    #         color = ""
-    #         if style and "fill:" in style:
-    #             match = re.search(r'fill:([^;"]+)', style)
-    #             if match:
-    #                 color = match.group(1).strip().lower()
-    #         elif fill:
-    #             color = fill.strip().lower()
-    
-    #         if color.startswith("rgb"):
-    #             return rgb_to_hex(color)
-    #         return color
-    
-    #     def safe_remove(root, target_elem):
-    #         for parent in root.iter():
-    #             if target_elem in list(parent):
-    #                 parent.remove(target_elem)
-    #                 return True
-    #         return False
-    
-    #     # 対象色を取得
-    #     idx = self.combo_target_object.currentIndex()
-    #     target_rgb = self.color_labels[idx]
-    #     fill_color = f'#{target_rgb[0]:02x}{target_rgb[1]:02x}{target_rgb[2]:02x}'
-    
-    #     # 各画像についてループ
-    #     for key, paths in self.drawn_paths_per_image.items():
-    #         if not paths or key not in self.mask_paths:
-    #             continue
-
-    #         # self.save_svg_state_for_undo("__global__", key)  # ✅ keyごとに保存（__global__スタックに）
-    
-    #         svg_path = self.mask_paths.get(key)
-    #         if not svg_path:
-    #             print(f"[DEBUG] No SVG path found for key: {key}")
-    #             continue
-    #         print(f"[DEBUG] Processing SVG path: {svg_path}")
-    
-    #         tree = ET.parse(svg_path)
-    #         root = tree.getroot()
-    
-    #         print(f"[DEBUG] SVG: {svg_path}")
-    #         all_tags = [elem.tag for elem in root.iter()]
-    #         print(f"[DEBUG] Found tags: {set(all_tags)}")
-    
-    #         # 既存パスと描画パスの統合
-    #         combined_path = QPainterPath()
-    #         for path, _ in paths:
-    #             path.closeSubpath()
-    #             combined_path.addPath(path)
-            
-    #         combined_path.setFillRule(Qt.FillRule.OddEvenFill)  # ✅ ここを追加！
-    
-    #         color_map = {}
-    #         for elem in root.findall(".//path"):
-    #             fill = normalize_color(elem.attrib.get("fill", ""), elem.attrib.get("style", ""))
-    #             color_map.setdefault(fill, []).append(elem)
-
-
-
-
-
-            
-    #         from PyQt6.QtGui import QPainterPath
-            
-    #         # ✅ 描画されたパスを1つにまとめる
-    #         combined_path = QPainterPath()
-    #         for path, _ in paths:
-    #             path.closeSubpath()
-    #             combined_path.addPath(path)
-    #         combined_path.setFillRule(Qt.FillRule.OddEvenFill)
-            
-    #         # ✅ SVGパスデータを生成
-    #         polygons = combined_path.toSubpathPolygons()
-    #         svg_path_data = ""
-    #         for polygon in polygons:
-    #             if polygon.size() < 3:
-    #                 continue
-    #             svg_path_data += "M " + " L ".join(f"{pt.x()},{pt.y()}" for pt in polygon) + " Z "
-            
-    #         # ✅ 現在選択中の色で追加（既存 path は削除しない）
-    #         idx = self.combo_target_object.currentIndex()
-    #         target_rgb = self.color_labels[idx]
-    #         fill_color = f'#{target_rgb[0]:02x}{target_rgb[1]:02x}{target_rgb[2]:02x}'
-            
-    #         new_elem = ET.Element("path")
-    #         new_elem.set("d", svg_path_data.strip())
-    #         new_elem.set("fill", fill_color)
-    #         new_elem.set("stroke", "none")
-    #         new_elem.set("fill-rule", "evenodd")
-    #         root.append(new_elem)
-            
-            
-                
-                
-    
-    #         # 保存
-    #         original_name = os.path.basename(svg_path)
-    #         save_path = os.path.join(self.output_mask_dir, original_name)
-    #         tree.write(save_path, encoding="utf-8")
-    
-    #         # この画像の描画をクリア
-    #         self.drawn_paths_per_image[key] = []
-    
-    #     self.display_current_image()
-    #     # ✅ 対象オブジェクトを明示的に表示ONにする
-    #     self.checkboxes[idx].setChecked(True)
-    
-    
-    # def add_drawn_path_to_mask(self):
-    #     key = self.get_current_image_key()
-    #     if key is None:
-    #         return
-    
-    #     label_mask = self.ensure_label_mask_exists(key)
-    
-    #     if key not in self.drawn_paths_per_image:
-    #         return
-    
-    #     # 現在選択中のオブジェクトID
-    #     # obj_id = self.get_selected_object_id()  # ← 既存関数に合わせる
-    #     obj_id = self.combo_target_object.currentIndex() + 1
-    
-    #     if obj_id is None:
-    #         return
-    
-    #     h, w = label_mask.shape
-    
-    #     for path, _ in self.drawn_paths_per_image[key]:
-    #         binary = self.rasterize_path_to_binary(path, w, h)
-    
-    #         # 🔥 ここが本質
-    #         label_mask[binary] = obj_id
-    
-    #     # 保存（任意）
-    #     self.save_label_mask_png(key)
-    
-    #     # 表示更新
-    #     self.display_current_image()
-    
-    #     # 描画クリア
-    #     self.drawn_paths_per_image[key] = []
-
-    
     def _pending_paths_for_manual_apply(self):
         if self.radio_apply_all_pending.isChecked():
             return [
@@ -7863,15 +6345,6 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         self._apply_pending_paths_to_masks("add")
 
 
-    def qpath_to_svg_path(self, path: QPainterPath) -> str:
-        """QPainterPath を SVG パス文字列に変換"""
-        svg_parts = []
-        for i in range(path.elementCount()):
-            e = path.elementAt(i)
-            cmd = "M" if i == 0 else "L"
-            svg_parts.append(f"{cmd} {e.x:.2f} {e.y:.2f}")
-        svg_parts.append("Z")
-        return " ".join(svg_parts)
 
 
 
@@ -7886,23 +6359,6 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             simplified.addPolygon(QPolygonF(polygon))
         return simplified
 
-    def parse_svg_path_to_qpath(self, d_attr, step_size=5.0):
-        from svgpathtools import parse_path
-        import numpy as np
-        from PyQt6.QtGui import QPainterPath
-
-        path_obj = parse_path(d_attr)
-        qpath = QPainterPath()
-        for segment in path_obj:
-            num = max(2, int(segment.length() // step_size))
-            points = [segment.point(t) for t in np.linspace(0, 1, num)]
-            for i, pt in enumerate(points):
-                x, y = pt.real, pt.imag
-                if i == 0 and qpath.isEmpty():
-                    qpath.moveTo(x, y)
-                else:
-                    qpath.lineTo(x, y)
-        return qpath
 
 
 
@@ -7910,209 +6366,14 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
 
     
-    def export_target_object_as_mask(self, target_index: int = 0):
-        from PyQt6.QtGui import QImage, QPainter, QPixmap
-        from PyQt6.QtSvg import QSvgRenderer
-        from PyQt6.QtCore import Qt, QRectF
-        from xml.etree import ElementTree as ET
-        from io import BytesIO
-        from datetime import datetime
-        import os
-        from copy import deepcopy  # ← 追加
-    
-        if not self.image_paths:
-            print("[ERROR] No images loaded.")
-            return
-    
-        key = list(self.image_paths.keys())[0]
-        image_path = self.image_paths[key]
-        svg_path = self.mask_paths[key]
-    
-        pixmap = QPixmap(image_path)
-        width = pixmap.width()
-        height = pixmap.height()
-        if width == 0 or height == 0:
-            print(f"[ERROR] Failed to get valid size from: {image_path}")
-            return
-    
-        # 🎯 ターゲット色
-        target_rgb = self.color_labels[target_index]
-        target_hex = f'#{target_rgb[0]:02x}{target_rgb[1]:02x}{target_rgb[2]:02x}'.lower()
-    
-    
-    
-        
-        # 🛠 SVG 読み込みとフィルター処理
-        tree = ET.parse(svg_path)
-        root = tree.getroot()
-        
-        match_count = 0
-        target_elements = []
-        
-        for elem in list(root.iter()):
-            fill = elem.attrib.get("fill", "")
-            style = elem.attrib.get("style", "")
-            color = self._normalize_color(fill, style)
-        
-            elem.attrib.pop("style", None)  # styleの影響を除去
-        
-            if color == target_hex:
-                target_copy = deepcopy(elem)
-                target_copy.set("fill", "#ffffff")  # 白に塗って最後に描画
-                target_elements.append(target_copy)
-                elem.set("fill", "#000000")  # 元の場所にも一応黒で残す
-                match_count += 1
-            else:
-                elem.set("fill", "#000000")  # その他は黒塗り
-        
-        # ✅ 白いターゲット要素を最後に追加（前面に来る）
-        for target_elem in target_elements:
-            root.append(target_elem)
-        
-        print(f"[DEBUG] Matched {match_count} elements for target color {target_hex}")
-
-    
-    
-    
-        # 🔁 SVGラスタライズ処理
-        svg_bytes = BytesIO()
-        tree.write(svg_bytes, encoding='utf-8')
-        svg_data = svg_bytes.getvalue()
-    
-        renderer = QSvgRenderer(svg_data)
-        image = QImage(width, height, QImage.Format.Format_RGB32)
-        image.fill(Qt.GlobalColor.black)
-        image.fill(0)  # ✅ これが抜けていた！
-    
-        painter = QPainter()
-        if painter.begin(image):
-            painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
-            painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, False)
-            renderer.render(painter, QRectF(0, 0, width, height))  # ✅ 描画範囲明示
-            painter.end()
-        else:
-            print("[ERROR] QPainter failed")
-            return
-    
-        # 💾 保存
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        save_dir = os.path.join(os.getcwd(), f"target_mask_output_{timestamp}")
-        os.makedirs(save_dir, exist_ok=True)
-        save_path = os.path.join(save_dir, f"{key}_mask.tiff")
-        image.save(save_path, "TIFF")
-        print(f"[SAVED] Target mask saved to: {save_path}")
-
-
-
-    
-    def svg_object_to_binary_mask(self, key: str, target_index: int) -> np.ndarray:
-        from PyQt6.QtGui import QImage, QPainter, QPixmap
-        from PyQt6.QtSvg import QSvgRenderer
-        from PyQt6.QtCore import Qt, QRectF
-        from xml.etree import ElementTree as ET
-        from io import BytesIO
-        import numpy as np
-        from copy import deepcopy
-    
-        if key not in self.image_paths or key not in self.mask_paths:
-            print(f"[ERROR] Invalid key: {key}")
-            return None
-    
-        image_path = self.image_paths[key]
-        svg_path = self.mask_paths[key]
-    
-        pixmap = QPixmap(image_path)
-        width = pixmap.width()
-        height = pixmap.height()
-        if width == 0 or height == 0:
-            print(f"[ERROR] Failed to get valid size from: {image_path}")
-            return None
-    
-        # 🎯 ターゲット色
-        target_rgb = self.color_labels[target_index]
-        target_hex = f'#{target_rgb[0]:02x}{target_rgb[1]:02x}{target_rgb[2]:02x}'.lower()
-    
-        # 🛠 SVG 読み込みと描画調整
-        tree = ET.parse(svg_path)
-        root = tree.getroot()
-    
-        target_elements = []
-        match_count = 0
-    
-        for elem in list(root.iter()):
-            fill = elem.attrib.get("fill", "")
-            style = elem.attrib.get("style", "")
-            color = self._normalize_color(fill, style)
-    
-            elem.attrib.pop("style", None)  # 副作用を除去
-    
-            if color == target_hex:
-                target_copy = deepcopy(elem)
-                target_copy.set("fill", "#ffffff")
-                target_elements.append(target_copy)
-                elem.set("fill", "#000000")
-                match_count += 1
-            else:
-                elem.set("fill", "#000000")
-    
-        for target_elem in target_elements:
-            root.append(target_elem)
-    
-        if match_count == 0:
-            print(f"[WARN] No matching elements found for {target_hex}")
-    
-        # 🔁 SVG → QImage
-        svg_bytes = BytesIO()
-        tree.write(svg_bytes, encoding='utf-8')
-        svg_data = svg_bytes.getvalue()
-    
-        renderer = QSvgRenderer(svg_data)
-        image = QImage(width, height, QImage.Format.Format_RGB32)
-        image.fill(Qt.GlobalColor.black)
-        image.fill(0)
-    
-        painter = QPainter()
-        if painter.begin(image):
-            painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
-            painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, False)
-            renderer.render(painter, QRectF(0, 0, width, height))
-            painter.end()
-        else:
-            print("[ERROR] QPainter failed")
-            return None
-    
-        # 🔁 QImage → NumPy配列
-        ptr = image.bits().asstring(image.width() * image.height() * 4)
-        arr = np.frombuffer(ptr, dtype=np.uint8).reshape((height, width, 4))
-        binary_mask = (arr[:, :, 0] + arr[:, :, 1] + arr[:, :, 2]) > 0  # 白部分だけTrue
-    
-        return binary_mask
     
 
 
 
         
-    # def rasterize_path_to_binary(self, path: QPainterPath, width: int, height: int) -> np.ndarray:
-    #     from PyQt6.QtGui import QImage, QPainter, QColor
-    #     from PyQt6.QtCore import Qt
-    #     import numpy as np
     
-    #     image = QImage(width, height, QImage.Format.Format_Grayscale8)
-    #     image.fill(0)
     
-    #     painter = QPainter(image)
-    #     painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
-    #     painter.setBrush(QColor(255, 255, 255))
-    #     painter.setPen(Qt.PenStyle.NoPen)
-    #     painter.drawPath(path)
-    #     painter.end()
     
-    #     ptr = image.bits()
-    #     ptr.setsize(width * height)
-    #     arr = np.frombuffer(ptr, dtype=np.uint8).reshape((height, width)).copy()
-    
-    #     binary = arr > 0
-    #     return binary
         
     def rasterize_path_to_binary(self, path: QPainterPath, width: int, height: int) -> np.ndarray:
         from PyQt6.QtGui import QImage, QPainter, QColor, QPainterPath
@@ -8232,171 +6493,6 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
                 
             
-    # def cut_drawn_path_from_mask(self):
-    #     from PIL import Image
-    #     from PyQt6.QtGui import QPainterPath, QPainterPathStroker
-    #     from PyQt6.QtCore import QPointF, Qt
-    
-    #     def normalize_color(fill, style):
-    #         def rgb_to_hex(rgb_str):
-    #             match = re.match(r'rgb\((\d+),\s*(\d+),\s*(\d+)\)', rgb_str)
-    #             if match:
-    #                 r, g, b = map(int, match.groups())
-    #                 return f'#{r:02x}{g:02x}{b:02x}'
-    #             return rgb_str.strip().lower()
-    
-    #         color = ""
-    #         if style and "fill:" in style:
-    #             match = re.search(r'fill:([^;"]+)', style)
-    #             if match:
-    #                 color = match.group(1).strip().lower()
-    #         elif fill:
-    #             color = fill.strip().lower()
-    
-    #         if color.startswith("rgb"):
-    #             return rgb_to_hex(color)
-    #         return color
-    
-    #     def safe_remove(root, target_elem):
-    #         for parent in root.iter():
-    #             if target_elem in list(parent):
-    #                 parent.remove(target_elem)
-    #                 return True
-    #         return False
-    
-    #     key_current = self.get_current_image_key()
-    #     if not key_current or key_current not in self.drawn_paths_per_image:
-    #         return
-    
-    #     self.save_svg_state_for_undo()
-    
-    #     idx = self.combo_target_object.currentIndex()
-    #     target_rgb = self.color_labels[idx]
-    #     fill_color = f'#{target_rgb[0]:02x}{target_rgb[1]:02x}{target_rgb[2]:02x}'
-    
-    #     for key, paths in self.drawn_paths_per_image.items():
-    #         if not paths or key not in self.mask_paths:
-    #             continue
-    
-    #         svg_path = self.mask_paths[key]
-    #         tree = ET.parse(svg_path)
-    #         root = tree.getroot()
-    
-    #         drawn_union = QPainterPath()
-    #         for path, _ in paths:
-    #             path.closeSubpath()
-    #             simplified = self.simplify_path(path)
-    #             drawn_union.addPath(simplified)
-    
-    #         drawn_union.setFillRule(Qt.FillRule.OddEvenFill)
-    
-    #         # 描画領域を画像化 → 輪郭再抽出（subtractedによる穴潰れ回避）
-    #         width, height = self.image_sizes.get(key, (512, 512))
-    #         # binary_mask = self.path_to_binary_image(drawn_union, width, height)
-    #         binary_mask = self.rasterize_path_to_binary(drawn_union, width, height)
-
-    #         # contour_paths = self.extract_paths_from_binary(binary_mask)
-    #         contour_paths = self.extract_paths_from_binary(binary_mask, min_area=100.0)
-
-    
-    #         elements_to_process = list(root.iter())
-    
-    #         for elem in elements_to_process:
-    #             tag = elem.tag.lower()
-    #             fill = normalize_color(elem.attrib.get("fill", ""), elem.attrib.get("style", ""))
-    #             if fill != fill_color:
-    #                 continue
-    
-    #             if tag.endswith("path"):
-    #                 d_attr = elem.attrib.get("d", "")
-    #                 if not d_attr:
-    #                     continue
-    #                 try:
-    #                     original_path = self.parse_svg_path_to_qpath(d_attr, step_size=5.0)
-    #                     original_path.setFillRule(Qt.FillRule.OddEvenFill)
-    #                 except Exception as e:
-    #                     print(f"[DEBUG] Failed to parse path: {e}")
-    #                     continue
-  
-    
-  
-                    
-    #                 # 🔸 ターゲットインデックス取得
-    #                 target_index = self.combo_target_object.currentIndex()
-                    
-    #                 # 🔸 SVGから特定オブジェクトのみレンダリングしてバイナリ化
-    #                 original_binary = self.svg_object_to_binary_mask(key, target_index)
-    #                 if original_binary is None:
-    #                     print("[ERROR] Failed to generate binary mask.")
-    #                     return
-                    
-
-                    
-    #                 # 🔸 描画領域のバイナリマスク（これは path → image でOK）
-    #                 # drawn_binary = self.path_to_binary_image(drawn_union, width, height)
-    #                 drawn_binary = self.rasterize_path_to_binary(drawn_union, width, height)
-
-                    
-                    
-                    
-    #                 # # ✅ デバッグ出力
-    #                 # cv2.imwrite("debug_original_binary.png", original_binary * 255)
-    #                 # cv2.imwrite("debug_drawn_binary.png", drawn_binary * 255)
-
-                    
-    #                 # ✅ ラスター subtract
-    #                 cut_result = original_binary & (~drawn_binary)
-    #                 # cv2.imwrite("debug_cut_result.png", cut_result.astype(np.uint8) * 255)
-                                        
-    #                 # # 🔍 デバッグ用にラスター subtract 結果を保存（白＝残る部分）
-    #                 # debug_cut_path = os.path.join(self.output_mask_dir, f"debug_cut_{os.path.basename(svg_path).replace('.svg', '.png')}")
-    #                 # cv2.imwrite(debug_cut_path, cut_result * 255)  # 白黒で保存（uint8）
-    #                 # print(f"[DEBUG] Saved cut_result image to: {debug_cut_path}")                    
-                    
-    #                 # 輪郭を再抽出
-    #                 # cut_paths = self.extract_paths_from_binary(cut_result)
-    #                 cut_paths = self.extract_paths_from_binary(cut_result, min_area=100.0)
-
-                    
-    #                 # 元の path 要素を削除
-    #                 safe_remove(root, elem)
-                    
-    #                 # 抽出した path を SVG として追加
-    #                 for path in cut_paths:
-    #                     svg_path_data = ""
-    #                     for polygon in path.toSubpathPolygons():
-    #                         if polygon.size() < 3:
-    #                             continue
-    #                         svg_path_data += "M " + " L ".join(f"{pt.x()},{pt.y()}" for pt in polygon) + " Z "
-                    
-    #                     new_elem = ET.Element("path")
-    #                     new_elem.set("d", svg_path_data.strip())
-    #                     new_elem.set("fill", fill_color)
-    #                     new_elem.set("stroke", "none")
-    #                     new_elem.set("fill-rule", "evenodd")
-    #                     root.append(new_elem)
-    
-    
-    
-    
-    
-    
-    #         save_path = os.path.join(self.output_mask_dir, os.path.basename(svg_path))
-    #         tree.write(save_path, encoding="utf-8", xml_declaration=True)
-    #         self.mask_paths[key] = save_path
-    #         self.drawn_paths_per_image[key] = []
-    
-    #         if key == key_current:
-    #             self.display_current_image()
-    #             self.scene.update()
-    
-    #     self.display_current_image()
-    #     self.scene.update()        
-        
-        
-        
-        
-            
     def cut_drawn_path_from_mask(self):
         self._apply_pending_paths_to_masks("erase")
         
@@ -8410,120 +6506,6 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
     
         
             
-    def _add_contours_to_svg(self, binary_mask, color_hex, root):
-        contours, hierarchy = cv2.findContours(binary_mask, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
-        if hierarchy is None:
-            return
-    
-        hierarchy = hierarchy[0]  # shape: (n_contours, 4)
-    
-        def contour_to_path(contour):
-            points = [f"{pt[0][0]},{pt[0][1]}" for pt in contour]
-            return "M " + " L ".join(points) + " Z"
-    
-        # 輪郭と階層構造から path を構築
-        for i, (contour, hier) in enumerate(zip(contours, hierarchy)):
-            if hier[3] != -1:
-                continue  # 子輪郭（穴）は親のパスで処理されるのでスキップ
-    
-            # ✅ 親輪郭
-            d = contour_to_path(contour)
-    
-            # ✅ 子（穴）を含める
-            child_idx = hier[2]
-            while child_idx != -1:
-                d += " " + contour_to_path(contours[child_idx])
-                child_idx = hierarchy[child_idx][0]
-    
-            new_elem = ET.Element("path")
-            new_elem.set("d", d)
-            new_elem.set("fill", color_hex)
-            new_elem.set("stroke", "none")
-            new_elem.set("fill-rule", "evenodd")  # ⬅️ これが穴を正しく扱うために必要
-            root.append(new_elem)
-
-
-
-
-    
-    # def transfer_drawn_path_to_mask(self):
-    #     from xml.etree import ElementTree as ET
-    #     from PyQt6.QtGui import QImage, QPainterPath
-    #     from PyQt6.QtCore import Qt
-    #     import numpy as np
-    #     import cv2
-    #     import os
-    
-    #     self.save_svg_state_for_undo()
-    
-    #     key_current = self.get_current_image_key()
-    #     if not key_current or key_current not in self.drawn_paths_per_image:
-    #         return
-    
-    #     idx_src = self.combo_target_object.currentIndex()
-    #     idx_dst = self.combo_transfer_target.currentIndex()
-    #     src_rgb = self.color_labels[idx_src]
-    #     dst_rgb = self.color_labels[idx_dst]
-    #     src_color = f'#{src_rgb[0]:02x}{src_rgb[1]:02x}{src_rgb[2]:02x}'
-    #     dst_color = f'#{dst_rgb[0]:02x}{dst_rgb[1]:02x}{dst_rgb[2]:02x}'
-    
-    #     for key, paths in self.drawn_paths_per_image.items():
-    #         if not paths or key not in self.mask_paths or key not in self.image_paths:
-    #             continue
-    
-    #         image_path = self.image_paths[key]
-    #         svg_path = self.mask_paths[key]
-    #         pixmap = QPixmap(image_path)
-    #         width, height = pixmap.width(), pixmap.height()
-    
-    #         if width == 0 or height == 0:
-    #             print(f"[ERROR] Invalid image size for {key}")
-    #             continue
-    
-    #         # 🎯 1. 元のマスクをバイナリ化
-    #         mask_src = self.svg_object_to_binary_mask(key, idx_src).astype(np.uint8)
-    #         if mask_src is None:
-    #             continue
-    
-    #         # ✏ 2. 手描きパスをラスタライズ
-    #         path_union = QPainterPath()
-    #         for path, _ in paths:
-    #             path.closeSubpath()
-    #             path_union.addPath(path)
-    #         path_union.setFillRule(Qt.FillRule.OddEvenFill)
-    #         drawn_mask = self.rasterize_path_to_binary(path_union, width, height).astype(np.uint8)
-    
-    #         # ➕ 3. 転送部分（AND）・残存部分（差分）を計算
-    #         intersected = cv2.bitwise_and(mask_src, drawn_mask)
-    #         subtracted = cv2.bitwise_and(mask_src, cv2.bitwise_not(drawn_mask))
-    
-    #         # 🧼 4. 元のオブジェクト要素を削除
-    #         tree = ET.parse(svg_path)
-    #         root = tree.getroot()
-    #         to_remove = []
-    #         for elem in list(root.iter()):
-    #             fill = elem.attrib.get("fill", "").strip().lower()
-    #             style = elem.attrib.get("style", "")
-    #             if self._normalize_color(fill, style) == src_color:
-    #                 to_remove.append(elem)
-    #         for elem in to_remove:
-    #             root.remove(elem)
-    
-    #         # 🖌 5. 交差領域 → 転送先色で追加
-    #         self._add_contours_to_svg(intersected, dst_color, root)
-    
-    #         # 🖌 6. 残存領域 → 元の色で追加
-    #         self._add_contours_to_svg(subtracted, src_color, root)
-    
-    #         # 💾 7. 保存
-    #         save_path = os.path.join(self.output_mask_dir, os.path.basename(svg_path))
-    #         tree.write(save_path, encoding="utf-8")
-    #         self.mask_paths[key] = save_path
-    #         self.drawn_paths_per_image[key] = []
-    
-    #     self.update_checkboxes_based_on_used_colors()
-    #     self.display_current_image()
-    #     self.scene.update()
         
 
 
@@ -8531,66 +6513,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
     def transfer_drawn_path_to_mask(self):
         self._apply_pending_paths_to_masks("transfer")
     
-
-        
-
-
-    
-    # def convert_object_color_across_svgs(self):
-    #     from xml.etree import ElementTree as ET
-    
-    #     def normalize_color(fill, style):
-    #         def rgb_to_hex(rgb_str):
-    #             match = re.match(r'rgb\((\d+),\s*(\d+),\s*(\d+)\)', rgb_str)
-    #             if match:
-    #                 r, g, b = map(int, match.groups())
-    #                 return f'#{r:02x}{g:02x}{b:02x}'
-    #             return rgb_str.strip().lower()
-    
-    #         color = ""
-    #         if style and "fill:" in style:
-    #             match = re.search(r'fill:([^;"]+)', style)
-    #             if match:
-    #                 color = match.group(1).strip().lower()
-    #         elif fill:
-    #             color = fill.strip().lower()
-    
-    #         if color.startswith("rgb"):
-    #             return rgb_to_hex(color)
-    #         return color
-    
-    #     # 元のオブジェクト番号と変換先オブジェクト番号を取得
-    #     idx_from = self.combo_convert_from.currentIndex()
-    #     idx_to = self.combo_convert_to.currentIndex()
-    #     color_from = f'#{self.color_labels[idx_from][0]:02x}{self.color_labels[idx_from][1]:02x}{self.color_labels[idx_from][2]:02x}'
-    #     color_to   = f'#{self.color_labels[idx_to][0]:02x}{self.color_labels[idx_to][1]:02x}{self.color_labels[idx_to][2]:02x}'
-
-    #     # 一括編集のためUndo保存（全SVG）
-    #     self.save_svg_state_for_undo()  # ← ループの外に1回でOK！
-    
-    #     for key, svg_path in self.mask_paths.items():
-    #         tree = ET.parse(svg_path)
-    #         root = tree.getroot()
-    #         changed = False
-    
-    #         for elem in root.iter():
-    #             tag = elem.tag.lower()
-    #             fill = normalize_color(elem.attrib.get("fill", ""), elem.attrib.get("style", ""))
-    #             if fill == color_from:
-    #                 elem.set("fill", color_to)
-    #                 changed = True
-    
-    #         if changed:
-    #             save_path = os.path.join(self.output_mask_dir, os.path.basename(svg_path))
-    #             tree.write(save_path, encoding="utf-8")
-    #             self.mask_paths[key] = save_path  # 更新
-    #             print(f"[INFO] Converted in {os.path.basename(svg_path)}")
-    
-    #     self.display_current_image()
-    #     self.scene.update()
-        
-    
-    def convert_object_color_across_svgs(self):
+    def convert_object_labels(self):
         # 元オブジェクトID / 変換先オブジェクトID（1〜20）
         src_id = self.combo_convert_from.currentIndex() + 1
         dst_id = self.combo_convert_to.currentIndex() + 1
@@ -8626,188 +6549,11 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
 
     
-    def bring_selected_object_to_front(self):
-        self._reorder_svg_elements(bring_to_front=True)
-    
-    def send_selected_object_to_back(self):
-        self._reorder_svg_elements(bring_to_front=False)
-    
-    def _reorder_svg_elements(self, bring_to_front=True):
-        from xml.etree import ElementTree as ET
-    
-        def normalize_color(fill, style):
-            def rgb_to_hex(rgb_str):
-                match = re.match(r'rgb\((\d+),\s*(\d+),\s*(\d+)\)', rgb_str)
-                if match:
-                    r, g, b = map(int, match.groups())
-                    return f'#{r:02x}{g:02x}{b:02x}'
-                return rgb_str.strip().lower()
-    
-            color = ""
-            if style and "fill:" in style:
-                match = re.search(r'fill:([^;"]+)', style)
-                if match:
-                    color = match.group(1).strip().lower()
-            elif fill:
-                color = fill.strip().lower()
-    
-            if color.startswith("rgb"):
-                return rgb_to_hex(color)
-            return color
-    
-        # 対象オブジェクト色のRGBとHex取得（1回だけでOK）
-        idx = self.combo_reorder_object.currentIndex()
-        target_rgb = self.color_labels[idx]
-        target_hex = f'#{target_rgb[0]:02x}{target_rgb[1]:02x}{target_rgb[2]:02x}'
-
-        # 一括編集のためUndo保存（全SVG）
-        self.save_svg_state_for_undo()  # ← ループの外に1回でOK！
-    
-        for key, svg_path in self.mask_paths.items():
-            try:
-                tree = ET.parse(svg_path)
-                root = tree.getroot()
-            except Exception as e:
-                print(f"[ERROR] Failed to parse SVG ({key}): {e}")
-                continue
-    
-            elements = list(root)
-            matched = []
-            unmatched = []
-    
-            for elem in elements:
-                fill = normalize_color(elem.attrib.get("fill", ""), elem.attrib.get("style", ""))
-                if fill == target_hex:
-                    matched.append(elem)
-                else:
-                    unmatched.append(elem)
-    
-            if not matched:
-                print(f"[INFO] No matching elements found in {key}.svg")
-                continue
-    
-            root[:] = []
-            if bring_to_front:
-                root.extend(unmatched + matched)
-            else:
-                root.extend(matched + unmatched)
-    
-            save_path = os.path.join(self.output_mask_dir, os.path.basename(svg_path))
-            tree.write(save_path, encoding="utf-8")
-            self.mask_paths[key] = save_path
-            print(f"[INFO] {'Brought to front' if bring_to_front else 'Sent to back'} in {key}.svg")
-    
-        self.display_current_image()
-        self.scene.update()
 
 
 
 
-
-    
-    def save_all_modified_svgs(self, output_dir=None):
-        import os
-        for key, tree in self.modified_svg_trees.items():
-            path = self.mask_paths.get(key)
-            if not path:
-                continue
-            save_path = path if output_dir is None else os.path.join(output_dir, os.path.basename(path))
-            tree.write(save_path, encoding="utf-8")
-    
-            
-
-
-    
-    # def export_all_svgs_to_grayscale_tiff(self):
-    #     from PyQt6.QtGui import QImage, QPainter, QPixmap
-    #     from xml.etree import ElementTree as ET
-    #     from io import BytesIO
-    #     from datetime import datetime
-    #     import os
-    #     from PyQt6.QtWidgets import QApplication
-    
-    #     app = QApplication.instance()
-    #     if app is None:
-    #         app = QApplication([])
-    
-    #     if not QApplication.instance():
-    #         print("[ERROR] No QApplication instance found")
-    #         return
-    
-    #     if not self.image_paths:
-    #         print("[ERROR] No images loaded.")
-    #         return
-    
-    #     first_image_path = list(self.image_paths.values())[0]
-    #     pixmap = QPixmap(first_image_path)
-    #     width = pixmap.width()
-    #     height = pixmap.height()
-    #     if width == 0 or height == 0:
-    #         print(f"[ERROR] Failed to get valid size from: {first_image_path}")
-    #         return
-    
-    #     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    #     output_dir = os.path.join(os.getcwd(), f"tiff_output_{timestamp}")
-    #     os.makedirs(output_dir, exist_ok=True)
-    
-    #     svg_dir = self.output_mask_dir
-    #     svg_files = [f for f in os.listdir(svg_dir) if f.endswith(".svg")]
-    #     if not svg_files:
-    #         print("[ERROR] No SVG files found in:", svg_dir)
-    #         return
-        
-    
-    #     grayscale_values = [255, 248, 237, 226, 215, 204, 193, 182, 171, 160,
-    #                         149, 138, 127, 116, 105, 94, 83, 72, 61, 50]
-    #     rgb_to_gray = {
-    #         f'#{r:02x}{g:02x}{b:02x}': f'#{v:02x}{v:02x}{v:02x}'
-    #         for (r, g, b), v in zip(self.color_labels, grayscale_values)
-    #     }
-    
-    #     for filename in svg_files:
-    #         svg_path = os.path.join(svg_dir, filename)
-    #         print(f"[DEBUG] Processing SVG path: {svg_path}")
-    #         tree = ET.parse(svg_path)
-    #         root = tree.getroot()
-    
-    #         for elem in root.iter():
-    #             fill = elem.attrib.get("fill", "")
-    #             style = elem.attrib.get("style", "")
-    #             color = self._normalize_color(fill, style)
-    #             if color in rgb_to_gray:
-    #                 elem.set("fill", rgb_to_gray[color])
-    
-    #         svg_bytes = BytesIO()
-    #         tree.write(svg_bytes, encoding='utf-8')
-    #         svg_bytes.seek(0)
-    #         renderer = QSvgRenderer(svg_bytes.read())
-    
-    #         # image = QImage(width, height, QImage.Format.Format_ARGB32)
-    #         image = QImage(width, height, QImage.Format.Format_RGB32)  # ← ARGBでなくRGBにする
-    #         image.fill(Qt.GlobalColor.black)  # 背景
-
-    #         if image.isNull():
-    #             print("[ERROR] QImage creation failed")
-    #             continue
-    #         image.fill(0)
-    
-    #         painter = QPainter()
-    #         if not painter.begin(image):
-    #             print(f"[ERROR] QPainter failed for {svg_path}")
-    #             continue
-    #         painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
-    #         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, False)
-
-    #         renderer.render(painter)
-    #         painter.end()
-    
-    #         save_path = os.path.join(output_dir, filename.replace(".svg", ".tiff"))
-    #         image.save(save_path, "TIFF")
-    #         print(f"[SAVED] {save_path}")
-    
-    #     print(f"[INFO] Exported {len(svg_files)} grayscale TIFF files to: {output_dir}")
-    
-    def export_all_svgs_to_grayscale_tiff(self):
+    def export_label_masks_to_grayscale_tiff(self):
         from datetime import datetime
         import os
         from PyQt6.QtWidgets import QApplication
@@ -8873,94 +6619,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
 
 
-    # def export_all_svgs_to_grayscale_tiff_reversed(self):
-    #     from PyQt6.QtGui import QImage, QPainter, QPixmap
-    #     from xml.etree import ElementTree as ET
-    #     from io import BytesIO
-    #     from datetime import datetime
-    #     import os
-    #     from PyQt6.QtWidgets import QApplication
-    
-    #     app = QApplication.instance()
-    #     if app is None:
-    #         app = QApplication([])
-    
-    #     if not self.image_paths:
-    #         print("[ERROR] No images loaded.")
-    #         return
-    
-    #     first_image_path = list(self.image_paths.values())[0]
-    #     pixmap = QPixmap(first_image_path)
-    #     width = pixmap.width()
-    #     height = pixmap.height()
-    #     if width == 0 or height == 0:
-    #         print(f"[ERROR] Failed to get valid size from: {first_image_path}")
-    #         return
-    
-    #     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    #     output_dir = os.path.join(os.getcwd(), f"tiff_output_reversed_{timestamp}")
-    #     os.makedirs(output_dir, exist_ok=True)
-    
-    #     svg_dir = self.output_mask_dir
-    #     svg_files = sorted([f for f in os.listdir(svg_dir) if f.endswith(".svg")])
-    
-    #     if not svg_files:
-    #         print("[ERROR] No SVG files found in:", svg_dir)
-    #         return
-    
-    #     grayscale_values = [255, 248, 237, 226, 215, 204, 193, 182, 171, 160,
-    #                         149, 138, 127, 116, 105, 94, 83, 72, 61, 50]
-    #     rgb_to_gray = {
-    #         f'#{r:02x}{g:02x}{b:02x}': f'#{v:02x}{v:02x}{v:02x}'
-    #         for (r, g, b), v in zip(self.color_labels, grayscale_values)
-    #     }
-    
-    #     reversed_files = list(reversed(svg_files))
-    #     total = len(reversed_files)
-    
-    #     for i, filename in enumerate(reversed_files):
-    #         svg_path = os.path.join(svg_dir, filename)
-    #         print(f"[DEBUG] Processing SVG path: {svg_path}")
-    #         tree = ET.parse(svg_path)
-    #         root = tree.getroot()
-    
-    #         for elem in root.iter():
-    #             fill = elem.attrib.get("fill", "")
-    #             style = elem.attrib.get("style", "")
-    #             color = self._normalize_color(fill, style)
-    #             if color in rgb_to_gray:
-    #                 elem.set("fill", rgb_to_gray[color])
-    
-    #         svg_bytes = BytesIO()
-    #         tree.write(svg_bytes, encoding='utf-8')
-    #         svg_bytes.seek(0)
-    #         renderer = QSvgRenderer(svg_bytes.read())
-    
-    #         image = QImage(width, height, QImage.Format.Format_RGB32)
-    #         image.fill(Qt.GlobalColor.black)
-    
-    #         if image.isNull():
-    #             print("[ERROR] QImage creation failed")
-    #             continue
-    
-    #         painter = QPainter()
-    #         if not painter.begin(image):
-    #             print(f"[ERROR] QPainter failed for {svg_path}")
-    #             continue
-    #         painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
-    #         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, False)
-    
-    #         renderer.render(painter)
-    #         painter.end()
-    
-    #         save_filename = f"mask{i+1:04}.tiff"
-    #         save_path = os.path.join(output_dir, save_filename)
-    #         image.save(save_path, "TIFF")
-    #         print(f"[SAVED] {save_path}")
-    
-    #     print(f"[INFO] Exported {total} TIFF files in reversed order to: {output_dir}")
-    
-    def export_all_svgs_to_grayscale_tiff_reversed(self):
+    def export_label_masks_to_grayscale_tiff_reversed(self):
         from datetime import datetime
         import os
         from PyQt6.QtWidgets import QApplication
@@ -9025,183 +6684,6 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
     
         print(f"[INFO] Exported {exported_count} TIFF files in reversed order to: {output_dir}")
         self.label_status.setText(f"✅ Exported {exported_count} reversed TIFFs")        
-
-
-
-    # def export_nifti_labelmap(self):
-    #     from PyQt6.QtGui import QImage, QPainter, QColor
-    #     from PyQt6.QtCore import Qt
-    #     from xml.etree import ElementTree as ET
-    #     from io import BytesIO
-    #     from datetime import datetime
-    #     import numpy as np
-    #     import os
-    
-    #     # 画像サイズの決定
-    #     if not self.image_paths:
-    #         self.label_status.setText("⚠ No images loaded.")
-    #         return
-    #     first_image_path = list(self.image_paths.values())[0]
-    #     pix = QPixmap(first_image_path)
-    #     W, H = pix.width(), pix.height()
-    #     if W == 0 or H == 0:
-    #         self.label_status.setText("⚠ Failed to get image size.")
-    #         return
-    
-    #     # スケール（mm/px, z spacing）
-    #     mm_per_px = self.mm_per_px if self.mm_per_px is not None else 1.0
-    #     z_spacing = self.z_spacing_mm if self.z_spacing_mm is not None else 1.0
-    #     if self.mm_per_px is None or self.z_spacing_mm is None:
-    #         self.label_status.setText("⚠ mm/px or z-spacing not set. Using 1.0 mm by default.")
-    
-    #     # SVG 群
-    #     svg_dir = getattr(self, "output_mask_dir", None)
-    #     if not svg_dir or not os.path.isdir(svg_dir):
-    #         self.label_status.setText("⚠ No SVG mask folder.")
-    #         return
-    #     svg_files = [f for f in os.listdir(svg_dir) if f.lower().endswith(".svg")]
-    #     if not svg_files:
-    #         self.label_status.setText("⚠ No SVG files found.")
-    #         return
-    
-    #     # ファイル名の数値順（0001, 0002, ... を意識）
-    #     def _nums(s): 
-    #         import re
-    #         m = re.findall(r"\d+", s)
-    #         return tuple(map(int, m)) if m else (s,)
-    #     svg_files = sorted(svg_files, key=_nums)
-    
-    #     # 色→ラベルIDの辞書（1..20）
-    #     rgb_list = list(self.color_labels)  # [(R,G,B), ...] 長さ20想定
-    #     color_to_label = { (r, g, b): i+1 for i, (r, g, b) in enumerate(rgb_list) }
-    
-    #     # HEX → (R,G,B)
-    #     def _hex_to_rgb(hx: str):
-    #         hx = hx.lstrip("#")
-    #         return (int(hx[0:2], 16), int(hx[2:4], 16), int(hx[4:6], 16))
-    
-    #     # ラスタライズ & ラベリング
-    #     volume_slices = []
-    #     for name in svg_files:
-    #         svg_path = os.path.join(svg_dir, name)
-    
-    #         # SVGをそのまま描画して「色画像」を作る
-    #         img = QImage(W, H, QImage.Format.Format_RGB32)
-    #         img.fill(Qt.GlobalColor.black)  # 背景=黒
-    #         p = QPainter(img); p.setRenderHint(QPainter.RenderHint.Antialiasing, False)
-    
-    #         # 直接パースして path 毎に描画（fill色で塗る）
-    #         try:
-    #             tree = ET.parse(svg_path)
-    #             root = tree.getroot()
-    #         except Exception as e:
-    #             print(f"[WARN] SVG parse failed: {svg_path}: {e}")
-    #             p.end()
-    #             continue
-    
-    #         # pathごとに塗る（fill-ruleは evenodd 前提）
-    #         for el in root.iter():
-    #             fill = el.attrib.get("fill", "").strip().lower()
-    #             style = el.attrib.get("style", "").strip().lower()
-    #             if "fill:" in style:
-    #                 import re
-    #                 m = re.search(r"fill:([^;]+)", style)
-    #                 if m:
-    #                     fill = m.group(1).strip().lower()
-    #             if not fill or fill == "none":
-    #                 continue
-    
-    #             # rgb() → #RRGGBB 正規化
-    #             if fill.startswith("rgb("):
-    #                 import re
-    #                 m = re.match(r'rgb\((\d+),\s*(\d+),\s*(\d+)\)', fill)
-    #                 if m:
-    #                     r, g, b = map(int, m.groups())
-    #                     fill = f"#{r:02x}{g:02x}{b:02x}"
-    
-    #             if not fill.startswith("#") or len(fill) != 7:
-    #                 continue
-    
-    #             # d属性からQPainterPathへ
-    #             d = el.attrib.get("d", None)
-    #             if not d:
-    #                 continue
-    #             qpath = self.svg_d_to_qpath(d)
-    #             if qpath.isEmpty():
-    #                 continue
-    
-    #             # 塗り色
-    #             r, g, b = _hex_to_rgb(fill)
-    #             p.setPen(Qt.PenStyle.NoPen)
-    #             p.setBrush(QColor(r, g, b))
-    #             p.drawPath(qpath)
-    
-    #         p.end()
-    
-    #         # QImage → numpy (H,W,3)
-    #         ptr = img.bits()
-    #         ptr.setsize(img.width() * img.height() * 4)  # RGBA(=ARGB32) だけどRGB32も4byte/px
-    #         arr = np.frombuffer(ptr, dtype=np.uint8).reshape((H, W, 4))[:, :, :3]  # RGB
-    
-    #         # 色→ラベルID（完全一致）
-    #         # まず背景0で初期化してから、各色を一致置換
-    #         label_slice = np.zeros((H, W), dtype=np.uint8)
-    #         for (r, g, b), lab in color_to_label.items():
-    #             mask = (arr[:, :, 0] == r) & (arr[:, :, 1] == g) & (arr[:, :, 2] == b)
-    #             label_slice[mask] = lab
-    
-    #         volume_slices.append(label_slice)
-    
-    #     if not volume_slices:
-    #         self.label_status.setText("⚠ No valid slices to export.")
-    #         return
-    
-    #     # (H,W,Z) → (X,Y,Z) に転置（X=cols, Y=rows）
-    #     vol = np.stack(volume_slices, axis=-1)              # (H, W, Z)
-    #     vol = np.transpose(vol, (1, 0, 2)).astype(np.uint8) # (W, H, Z) → NIfTIの(X,Y,Z)想定
-    
-    #     # # アフィン（RAS前提の等軸スケール）
-    #     # affine = np.array([
-    #     #     [mm_per_px,      0.0,       0.0, 0.0],
-    #     #     [0.0,       mm_per_px,       0.0, 0.0],
-    #     #     [0.0,            0.0,   z_spacing, 0.0],
-    #     #     [0.0,            0.0,       0.0, 1.0]
-    #     # ], dtype=float)
-    
-    #     # img_nii = nib.Nifti1Image(vol, affine)
-    #     # hdr = img_nii.header
-                
-    #     # ✅ アフィン（Y軸を反転 + 平行移動で画面系→RASへ補正）
-    #     sx = float(mm_per_px)
-    #     sy = float(mm_per_px)
-    #     sz = float(z_spacing)
-        
-    #     affine = np.array([
-    #         [ sx,  0.0, 0.0, 0.0            ],   # X: 右→左（画面の列）= +X
-    #         [ 0.0, -sy, 0.0, (H - 1) * sy   ],   # Y: 画面の下向きをRASの+Yに合わせる
-    #         [ 0.0,  0.0,  sz, 0.0            ],  # Z: スライス間隔
-    #         [ 0.0,  0.0, 0.0, 1.0            ],
-    #     ], dtype=float)
-        
-    #     img_nii = nib.Nifti1Image(vol, affine)
-    #     img_nii.set_sform(affine, code=1)  # scanner anatomical
-    #     img_nii.set_qform(affine, code=1)
-        
-    #     hdr = img_nii.header
-    #     hdr.set_xyzt_units('mm','sec')
-    #     hdr['descrip'] = b'SegRef3D labelmap (1-20); 0=background'
-        
-        
-    #     hdr.set_xyzt_units('mm','sec')
-    #     hdr['descrip'] = b'SegRef3D labelmap (1-20); 0=background'
-    #     # 便利名
-    #     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    #     out_dir = os.path.join(os.getcwd(), f"nifti_output_{timestamp}")
-    #     os.makedirs(out_dir, exist_ok=True)
-    #     out_path = os.path.join(out_dir, "segref3d_labelmap.nii.gz")
-    
-    #     nib.save(img_nii, out_path)
-    #     self.label_status.setText(f"✅ NIfTI exported: {out_path}  (voxel: {mm_per_px}×{mm_per_px}×{z_spacing} mm)")
         
 
     
@@ -9313,143 +6795,6 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
                 progress.close()
 
         
-
-    
-    # def export_nifti_labelmap_reversed(self):
-    #     """
-    #     Z 軸（上下）を反転して NIfTI 出力（vol はそのまま・アフィンで反転）
-    #     """
-    #     from PyQt6.QtGui import QImage, QPainter, QColor, QPixmap
-    #     from PyQt6.QtCore import Qt
-    #     from xml.etree import ElementTree as ET
-    #     from io import BytesIO
-    #     from datetime import datetime
-    #     import numpy as np
-    #     import os, re, nibabel as nib
-    
-    #     # 画像サイズの決定
-    #     if not self.image_paths:
-    #         self.label_status.setText("⚠ No images loaded.")
-    #         return
-    #     first_image_path = list(self.image_paths.values())[0]
-    #     pix = QPixmap(first_image_path)
-    #     W, H = pix.width(), pix.height()
-    #     if W == 0 or H == 0:
-    #         self.label_status.setText("⚠ Failed to get image size.")
-    #         return
-    
-    #     # スケール
-    #     mm_per_px = self.mm_per_px if self.mm_per_px is not None else 1.0
-    #     z_spacing = self.z_spacing_mm if self.z_spacing_mm is not None else 1.0
-    #     if self.mm_per_px is None or self.z_spacing_mm is None:
-    #         self.label_status.setText("⚠ mm/px or z-spacing not set. Using 1.0 mm by default.")
-    
-    #     # SVG 群（数値順）
-    #     svg_dir = getattr(self, "output_mask_dir", None)
-    #     if not svg_dir or not os.path.isdir(svg_dir):
-    #         self.label_status.setText("⚠ No SVG mask folder.")
-    #         return
-    #     svg_files = [f for f in os.listdir(svg_dir) if f.lower().endswith(".svg")]
-    #     if not svg_files:
-    #         self.label_status.setText("⚠ No SVG files found.")
-    #         return
-    #     def _nums(s):
-    #         m = re.findall(r"\d+", s)
-    #         return tuple(map(int, m)) if m else (s,)
-    #     svg_files = sorted(svg_files, key=_nums)
-    
-    #     # 色→ラベルID辞書
-    #     rgb_list = list(self.color_labels)  # [(R,G,B), ...]
-    #     color_to_label = { (r, g, b): i+1 for i, (r, g, b) in enumerate(rgb_list) }
-    #     def _hex_to_rgb(hx: str):
-    #         hx = hx.lstrip("#")
-    #         return (int(hx[0:2], 16), int(hx[2:4], 16), int(hx[4:6], 16))
-    
-    #     # ラスタライズ & ラベリング（vol は通常順）
-    #     volume_slices = []
-    #     for name in svg_files:
-    #         svg_path = os.path.join(svg_dir, name)
-    #         img = QImage(W, H, QImage.Format.Format_RGB32)
-    #         img.fill(Qt.GlobalColor.black)
-    #         p = QPainter(img)
-    #         p.setRenderHint(QPainter.RenderHint.Antialiasing, False)
-    
-    #         try:
-    #             tree = ET.parse(svg_path)
-    #             root = tree.getroot()
-    #         except Exception as e:
-    #             print(f"[WARN] SVG parse failed: {svg_path}: {e}")
-    #             p.end()
-    #             continue
-    
-    #         for el in root.iter():
-    #             fill = el.attrib.get("fill", "").strip().lower()
-    #             style = el.attrib.get("style", "").strip().lower()
-    #             if "fill:" in style:
-    #                 m = re.search(r"fill:([^;]+)", style)
-    #                 if m: fill = m.group(1).strip().lower()
-    #             if not fill or fill == "none":
-    #                 continue
-    #             if fill.startswith("rgb("):
-    #                 m = re.match(r'rgb\((\d+),\s*(\d+),\s*(\d+)\)', fill)
-    #                 if m:
-    #                     r, g, b = map(int, m.groups())
-    #                     fill = f"#{r:02x}{g:02x}{b:02x}"
-    #             if not (fill.startswith("#") and len(fill) == 7):
-    #                 continue
-    
-    #             d = el.attrib.get("d", None)
-    #             if not d: continue
-    #             qpath = self.svg_d_to_qpath(d)
-    #             if qpath.isEmpty(): continue
-    
-    #             r, g, b = _hex_to_rgb(fill)
-    #             p.setPen(Qt.PenStyle.NoPen)
-    #             p.setBrush(QColor(r, g, b))
-    #             p.drawPath(qpath)
-    
-    #         p.end()
-    #         ptr = img.bits(); ptr.setsize(img.width()*img.height()*4)
-    #         arr = np.frombuffer(ptr, dtype=np.uint8).reshape((H, W, 4))[:, :, :3]
-    #         label_slice = np.zeros((H, W), dtype=np.uint8)
-    #         for (r, g, b), lab in color_to_label.items():
-    #             mask = (arr[:, :, 0] == r) & (arr[:, :, 1] == g) & (arr[:, :, 2] == b)
-    #             label_slice[mask] = lab
-    #         volume_slices.append(label_slice)
-    
-    #     if not volume_slices:
-    #         self.label_status.setText("⚠ No valid slices to export.")
-    #         return
-    
-    #     # (H,W,Z) → (X,Y,Z)
-    #     vol = np.stack(volume_slices, axis=-1)              # (H, W, Z)
-    #     vol = np.transpose(vol, (1, 0, 2)).astype(np.uint8) # (W, H, Z)
-    #     D = vol.shape[2]
-    
-    #     # ✅ 反転アフィン：Z スケールを負に、並進に (D-1)*sz
-    #     sx = float(mm_per_px); sy = float(mm_per_px); sz = float(z_spacing)
-    #     affine = np.array([
-    #         [ sx,  0.0,  0.0,            0.0 ],
-    #         [ 0.0, -sy,  0.0,   (H - 1) * sy ],
-    #         [ 0.0,  0.0, -sz,   (D - 1) * sz ],
-    #         [ 0.0,  0.0,  0.0,            1.0 ],
-    #     ], dtype=float)
-    
-    #     img_nii = nib.Nifti1Image(vol, affine)
-    #     img_nii.set_sform(affine, code=1)
-    #     img_nii.set_qform(affine, code=1)
-    #     hdr = img_nii.header
-    #     hdr.set_xyzt_units('mm','sec')
-    #     hdr['descrip'] = b'SegRef3D labelmap (1-20); 0=background; Z reversed'
-    
-    #     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    #     out_dir = os.path.join(os.getcwd(), f"nifti_output_{timestamp}")
-    #     os.makedirs(out_dir, exist_ok=True)
-    #     out_path = os.path.join(out_dir, "segref3d_labelmap_revZ.nii.gz")
-    #     nib.save(img_nii, out_path)
-    #     self.label_status.setText(
-    #         f"✅ NIfTI (Z reversed) exported: {out_path}  (voxel: {sx}×{sy}×{sz} mm)"
-    #     )
 
     
     def export_nifti_labelmap_reversed(self):
@@ -9772,142 +7117,6 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
     
 
-    # def delete_small_parts_in_selected_object(self, min_area_threshold=None):
-    #     if min_area_threshold is None:
-    #         min_area_threshold = self.spinbox_threshold.value()  # ✅ UIから取得
-            
-    #     from xml.etree import ElementTree as ET
-    #     from svgpathtools import parse_path
-    #     from PyQt6.QtGui import QPainterPath
-    #     import re
-    
-    #     def normalize_color(fill, style):
-    #         def rgb_to_hex(rgb_str):
-    #             match = re.match(r'rgb\((\d+),\s*(\d+),\s*(\d+)\)', rgb_str)
-    #             if match:
-    #                 r, g, b = map(int, match.groups())
-    #                 return f'#{r:02x}{g:02x}{b:02x}'
-    #             return rgb_str.strip().lower()
-    
-    #         color = ""
-    #         if style and "fill:" in style:
-    #             match = re.search(r'fill:([^;"]+)', style)
-    #             if match:
-    #                 color = match.group(1).strip().lower()
-    #         elif fill:
-    #             color = fill.strip().lower()
-                
-    #         if color.startswith("rgb"):
-    #             return rgb_to_hex(color).lower()  # ✅ 小文字統一
-    #         return color.lower()  # ✅ 小文字統一
-
-    #     # 対象オブジェクト番号と色（hex）
-    #     obj_index = self.combo_delete_object.currentIndex()
-    #     target_rgb = self.color_labels[obj_index]
-    #     target_hex = '#{:02x}{:02x}{:02x}'.format(*target_rgb).lower()
-
-    
-    #     deleted_count = 0
-                
-    #     # ✅ 一括編集のためUndo保存（全SVG）
-    #     self.save_svg_state_for_undo("__global__")        
-    #     for key, svg_path in self.mask_paths.items():
-    #         # self.save_svg_state_for_undo(key)  # ✅ ここでUndo用バックアップを保存
-    #         tree = ET.parse(svg_path)
-    #         root = tree.getroot()
-    #         parent_map = {c: p for p in root.iter() for c in p}
-    #         changed = False
-    
-    #         for elem in list(root.iter()):
-
-    #             tag = elem.tag
-    #             if '}' in tag:
-    #                 tag = tag.split('}', 1)[1]  # 名前空間を除去
-                
-    #             if tag.lower() != "path":
-    #                 continue
-            
-    
-    #             fill = normalize_color(elem.attrib.get("fill", ""), elem.attrib.get("style", ""))
-    #             if fill != target_hex:
-    #                 continue
-    
-    #             d = elem.attrib.get("d", "")
-    #             if not d:
-    #                 continue
-     
-    #             def polygon_area_from_points(points):
-    #                 if len(points) < 3:
-    #                     return 0.0
-    #                 area = 0.0
-    #                 for i in range(len(points)):
-    #                     x1, y1 = points[i].x(), points[i].y()
-    #                     x2, y2 = points[(i + 1) % len(points)].x(), points[(i + 1) % len(points)].y()
-    #                     area += (x1 * y2 - x2 * y1)
-    #                 return abs(area) / 2.0                
-                
-                
-    #             # qpath = svg_d_to_qpath(d)
-    #             qpath = self.svg_d_to_qpath(d)
-    #             if not qpath:
-    #                 continue
-                
-    #             polygons = qpath.toSubpathPolygons()
-    #             total_area = sum(polygon_area_from_points(poly) for poly in polygons)
-                
-    #             print(f"[DEBUG] Area: {total_area:.2f} px² for object {obj_index+1}")
-                
-                
-                
-                
-                
-                
-    #             # if total_area < min_area_threshold:
-    #             #     parent = parent_map.get(elem)
-    #             #     if parent is not None:
-    #             #         parent.remove(elem)
-    #             #         deleted_count += 1
-    #             #         changed = True
-                
-    #             # 新しいパスデータを構築
-    #             new_path_data = ""
-    #             kept_count = 0
-    #             for poly in polygons:
-    #                 area = polygon_area_from_points(poly)
-    #                 if area >= min_area_threshold:
-    #                     kept_count += 1
-    #                     new_path_data += "M " + " L ".join(f"{pt.x()},{pt.y()}" for pt in poly) + " Z "
-    #                 else:
-    #                     print(f"[DEBUG] Removed subpath with area {area:.2f} px² (below threshold)")
-                
-    #             if kept_count == 0:
-    #                 # 全部小さくて削除された場合 → path要素自体を削除
-    #                 parent = parent_map.get(elem)
-    #                 if parent is not None:
-    #                     parent.remove(elem)
-    #                     deleted_count += 1
-    #                     changed = True
-    #             else:
-    #                 # 一部でも残ったら、d属性を書き換え
-    #                 elem.set("d", new_path_data.strip())
-    #                 changed = True
-                        
-                        
-                        
-                        
-    
-    #         if changed:
-    #             save_path = os.path.join(self.output_mask_dir, os.path.basename(svg_path))
-    #             tree.write(save_path, encoding="utf-8")
-    #             self.mask_paths[key] = save_path
-    #             print(f"[INFO] Removed small parts of object {obj_index+1} in {os.path.basename(svg_path)}")
-    
-    #     self.display_current_image()
-    #     self.scene.update()
-    #     self.label_status.setText(f"Removed small parts of object {obj_index+1} from all SVGs. ({deleted_count} elements removed)")
-
-
-    
     def delete_small_parts_in_selected_object(self, min_area_threshold=None):
         if min_area_threshold is None:
             min_area_threshold = self.spinbox_threshold.value()
@@ -9927,76 +7136,6 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
 
 
-
-
-    
-    # def delete_selected_object_from_current_image(self):
-    #     # self.save_svg_state_for_undo("__global__")
-    #     key = self.get_current_image_key()
-    #     if key:
-    #         self.save_svg_state_for_undo(key)
-        
-        
-        
-    #     from xml.etree import ElementTree as ET
-    #     import re
-    #     import os
-    
-    #     def normalize_color(fill, style):
-    #         def rgb_to_hex(rgb_str):
-    #             match = re.match(r'rgb\((\d+),\s*(\d+),\s*(\d+)\)', rgb_str)
-    #             if match:
-    #                 r, g, b = map(int, match.groups())
-    #                 return f'#{r:02x}{g:02x}{b:02x}'
-    #             return rgb_str.strip().lower()
-    
-    #         color = ""
-    #         if style and "fill:" in style:
-    #             match = re.search(r'fill:([^;"]+)', style)
-    #             if match:
-    #                 color = match.group(1).strip().lower()
-    #         elif fill:
-    #             color = fill.strip().lower()
-    
-    #         if color.startswith("rgb"):
-    #             return rgb_to_hex(color)
-    #         return color
-    
-    #     # 現在表示中の画像キーと対応SVG取得
-    #     key = self.get_current_image_key()
-    #     svg_path = self.mask_paths[key]
-    
-    #     # 削除対象の色を決定
-    #     obj_index = self.combo_delete_object.currentIndex()
-    #     target_rgb = self.color_labels[obj_index]
-    #     target_hex = '#{:02x}{:02x}{:02x}'.format(*target_rgb)
-    
-    #     # SVGを読み込み、該当 path を削除
-    #     tree = ET.parse(svg_path)
-    #     root = tree.getroot()
-    #     parent_map = {c: p for p in root.iter() for c in p}
-    #     deleted_count = 0
-    
-    #     for elem in list(root.iter()):
-    #         if not elem.tag.lower().endswith("path"):
-    #             continue
-    
-    #         fill = normalize_color(elem.attrib.get("fill", ""), elem.attrib.get("style", ""))
-    #         if fill == target_hex:
-    #             parent = parent_map.get(elem)
-    #             if parent is not None:
-    #                 parent.remove(elem)
-    #                 deleted_count += 1
-    
-    #     # 保存先に書き戻す
-    #     save_path = os.path.join(self.output_mask_dir, os.path.basename(svg_path))
-    #     tree.write(save_path, encoding="utf-8")
-    #     self.mask_paths[key] = save_path
-    
-    #     # GUI更新
-    #     self.display_current_image()
-    #     self.scene.update()
-    #     self.label_status.setText(f"Deleted object {obj_index+1} from {os.path.basename(svg_path)}. ({deleted_count} elements removed)")
 
 
     
@@ -10031,70 +7170,6 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
     
     
-    # def delete_selected_object(self):
-       
-    #     from xml.etree import ElementTree as ET
-    #     import re
-        
-    #     # ✅ 全画像Undo保存（ループ前に1回だけ！）
-    #     self.save_svg_state_for_undo()    
-        
-    #     def normalize_color(fill, style):
-    #         def rgb_to_hex(rgb_str):
-    #             match = re.match(r'rgb\((\d+),\s*(\d+),\s*(\d+)\)', rgb_str)
-    #             if match:
-    #                 r, g, b = map(int, match.groups())
-    #                 return f'#{r:02x}{g:02x}{b:02x}'
-    #             return rgb_str.strip().lower()
-    
-    #         color = ""
-    #         if style and "fill:" in style:
-    #             match = re.search(r'fill:([^;"]+)', style)
-    #             if match:
-    #                 color = match.group(1).strip().lower()
-    #         elif fill:
-    #             color = fill.strip().lower()
-    
-    #         if color.startswith("rgb"):
-    #             return rgb_to_hex(color)
-    #         return color
-    
-    #     # オブジェクト番号（1〜20）を取得し、その色を決定
-    #     obj_index = self.combo_delete_object.currentIndex()
-    #     target_rgb = self.color_labels[obj_index]
-    #     target_hex = '#{:02x}{:02x}{:02x}'.format(*target_rgb)
-    
-    #     deleted_count = 0
-    #     for key, svg_path in self.mask_paths.items():
-    #         # self.save_svg_state_for_undo(key)
-    #         tree = ET.parse(svg_path)
-    #         root = tree.getroot()
-    #         parent_map = {c: p for p in root.iter() for c in p}
-    #         changed = False
-    
-    #         for elem in list(root.iter()):
-    #             tag = elem.tag.lower()
-    #             if not tag.endswith("path"):
-    #                 continue
-    
-    #             fill = normalize_color(elem.attrib.get("fill", ""), elem.attrib.get("style", ""))
-    #             if fill == target_hex:
-    #                 parent = parent_map.get(elem)
-    #                 if parent is not None:
-    #                     parent.remove(elem)
-    #                     deleted_count += 1
-    #                     changed = True
-    
-    #         if changed:
-    #             save_path = os.path.join(self.output_mask_dir, os.path.basename(svg_path))
-    #             tree.write(save_path, encoding="utf-8")
-    #             self.mask_paths[key] = save_path  # 更新
-    #             print(f"[INFO] Deleted object {obj_index+1} from {os.path.basename(svg_path)}")
-    
-    #     self.display_current_image()
-    #     self.scene.update()
-    #     self.label_status.setText(f"Deleted object {obj_index+1} from all SVGs. ({deleted_count} elements removed)")
-    
     def delete_selected_object(self):
         obj_id = self.combo_delete_object.currentIndex() + 1
     
@@ -10128,645 +7203,146 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
 
 
-    # def export_colorwise_stl_with_scale(self):
-    #     import os
-    #     import numpy as np
-    #     from datetime import datetime
-    #     from xml.etree import ElementTree as ET
-    #     from PyQt6.QtGui import QImage, QPainter
-    #     from PyQt6.QtCore import Qt
-    #     from io import BytesIO
-    #     from trimesh.voxel.ops import matrix_to_marching_cubes
-    #     from trimesh.voxel import VoxelGrid
-    #     from trimesh.smoothing import filter_laplacian
-        
+    def _stl_source_volume(self):
+        """Collect the editor label maps without mutating them."""
+        if not self.image_paths:
+            raise ValueError("No images are loaded.")
+        has_volinfo_spacing = False
+        if hasattr(self, "volinf") and isinstance(self.volinf, dict):
+            try:
+                has_volinfo_spacing = all(
+                    float(self.volinf.get(name, 0)) > 0
+                    for name in ("x_spacing", "y_spacing", "z_spacing")
+                )
+            except (TypeError, ValueError):
+                has_volinfo_spacing = False
+        if (
+            self.volume_geometry is None
+            and not has_volinfo_spacing
+            and (self.mm_per_px is None or self.z_spacing_mm is None)
+        ):
+            self.load_volinf_csv()
+        if (
+            self.volume_geometry is None
+            and not has_volinfo_spacing
+            and (self.mm_per_px is None or self.z_spacing_mm is None)
+        ):
+            raise ValueError(
+                "Voxel spacing is not set. Load VolInfo or complete Manual Calibration first."
+            )
+        keys = list(self.image_paths.keys())
+        source_slices = []
+        expected_shape = None
+        frontside = self.combo_stack_order.currentIndex() == 0
+        ordered_keys = list(reversed(keys)) if frontside else keys
+        for key in ordered_keys:
+            label_mask = np.asarray(self.ensure_label_mask_exists(key))
+            if label_mask.ndim != 2:
+                raise ValueError(f"Frame {key} does not contain a two-dimensional label mask.")
+            if expected_shape is None:
+                expected_shape = label_mask.shape
+            elif label_mask.shape != expected_shape:
+                raise ValueError(
+                    f"Frame {key} mask dimensions {label_mask.shape} do not match {expected_shape}."
+                )
+            source_slices.append(np.flipud(label_mask) if frontside else label_mask)
+        volume = np.stack(source_slices, axis=0).astype(np.uint8, copy=False)
+        height, width = expected_shape
+        geometry, _ = self._volume_geometry_for_shape((width, height, len(source_slices)))
+        return volume, geometry.spacing
 
-    #     if self.mm_per_px is None or self.z_spacing_mm is None:
-    #         print(f"[DEBUG] Spacing values before CSV load: mm_per_px={self.mm_per_px}, z_spacing_mm={self.z_spacing_mm}")
+    def _selected_stl_labels(self, volume):
+        used = set(int(value) for value in np.unique(volume) if int(value) != 0)
+        scope = self.combo_stl_objects.currentData()
+        if scope == "target":
+            selected = [self.combo_target_object.currentIndex() + 1]
+        elif scope == "visible":
+            selected = [
+                index + 1 for index, checkbox in enumerate(self.checkboxes)
+                if checkbox.isChecked()
+            ]
+        else:
+            raise ValueError("Choose a valid STL object scope.")
+        selected = [label for label in selected if label in used]
+        if not selected:
+            raise ValueError("The selected object set has no label pixels.")
+        return selected
+
+    def _stl_smoothing_iterations(self):
+        if self.combo_smooth_mode.currentData() != "mesh":
+            return 0
+        level_text = self.combo_smooth_level.currentText()
+        match = re.search(r"\d+", level_text)
+        level = int(match.group()) if match else 0
+        return 0 if level <= 0 else 10 + level * 5
                         
-    #         import csv
-    #         from PyQt6.QtWidgets import QFileDialog
+    def _build_stl_meshes_from_controls(self, progress_callback=None):
+        """Common Preview/Export entry into the shared mesh generation pipeline."""
+        volume, spacing = self._stl_source_volume()
+        labels = self._selected_stl_labels(volume)
+        factor = int(self.combo_stl_factor.currentData())
+        return build_stl_meshes(
+            volume,
+            labels,
+            factor,
+            spacing,
+            output_stem=self.output_file_stem(),
+            smoothing_iterations=self._stl_smoothing_iterations(),
+            progress_callback=progress_callback,
+        )
             
-    #         # 🔽 常にユーザーにCSVファイルを選ばせる
-    #         file_path, _ = QFileDialog.getOpenFileName(self, "Select CSV File", "", "CSV Files (*.csv)")
-    #         if not file_path:
-    #             print("[ERROR] CSV file not selected. Aborting STL export.")
-    #             return
+    def _prepare_stl_meshes(self, action):
+        progress = QProgressDialog(f"{action}...", "", 0, 0, self)
+        progress.setWindowTitle(action)
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.setCancelButton(None)
+        progress.setMinimumDuration(0)
+        progress.show()
             
-    #         try:
-    #             with open(file_path, newline='', encoding='utf-8') as f:
-    #                 reader = csv.reader(f)
-    #                 rows = list(reader)
+        def update(message):
+            progress.setLabelText(message)
+            self.label_status.setText(message)
+            QApplication.processEvents()
             
-    #                 x_spacing = float(rows[3][0])  # 4行目・1列目
-    #                 z_spacing = float(rows[3][2])  # 4行目・3列目
+        try:
+            return self._build_stl_meshes_from_controls(update)
+        finally:
+            progress.close()
             
-    #                 self.mm_per_px = x_spacing
-    #                 self.z_spacing_mm = z_spacing
-    #                 print(f"[INFO] Loaded spacing: mm/px = {self.mm_per_px}, z = {self.z_spacing_mm}")
-    #                 print(f"[DEBUG] Spacing values after CSV load: mm_per_px={self.mm_per_px}, z_spacing_mm={self.z_spacing_mm}")
-    #         except Exception as e:
-    #             print(f"[ERROR] Failed to read CSV file: {e}")
-    #             return
-
-    #     rgb_keys = [f"#{r:02x}{g:02x}{b:02x}" for r, g, b in self.color_labels]
-    #     num_colors = len(rgb_keys)
-
-    #     svg_dir = self.output_mask_dir
-    #     svg_files = sorted([f for f in os.listdir(svg_dir) if f.endswith(".svg")])
-    #     if not svg_files:
-    #         print("[ERROR] No SVG files found")
-    #         return
-        
-    #     svg_files.sort()  # デフォルトは昇順（mask0001.svg → maskNNNN.svg）
-        
-    #     # ✅ Stacking direction を UI から取得して反映
-    #     # 0: Backside (ascending), 1: Frontside (descending)
-    #     if self.combo_stack_order.currentIndex() == 0:
-    #         svg_files.reverse()
-    #         print("[INFO] Using descending stacking order (Frontside)")
-    #     else:
-    #         print("[INFO] Using ascending stacking order (Backside)")        
-
-    #     first_svg = os.path.join(svg_dir, svg_files[0])
-    #     renderer = QSvgRenderer(first_svg)
-    #     width, height = renderer.defaultSize().width(), renderer.defaultSize().height()
-
-    #     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    #     output_dir = os.path.join(os.getcwd(), f"stl_output_{timestamp}")
-    #     os.makedirs(output_dir, exist_ok=True)
-
-    #     # masks_per_color = [np.zeros((len(svg_files), height, width), dtype=np.uint8) for _ in range(num_colors)]
-    #     # ✅ チェックされているインデックスだけ抽出
-    #     target_indices = [i for i, cb in enumerate(self.checkboxes) if cb.isChecked()]
-    #     masks_per_color = [np.zeros((len(svg_files), height, width), dtype=np.uint8) for _ in target_indices]
-
-        
-    #     # 🔧 進捗表示関数を定義
-    #     def update_progress_bar(label, task, current, total):
-    #         percent = int(current / total * 100)
-    #         bar_length = 20
-    #         filled_length = int(bar_length * percent // 100)
-    #         bar = '█' * filled_length + '-' * (bar_length - filled_length)
-    #         label.setText(f"{task}... |{bar}| {percent}%")
-    #         QApplication.processEvents()
-
-        
-    #     #進捗表示用
-    #     self.label_status.setText("Generating masks from SVG...")
-    #     QApplication.processEvents()
-
-
-
-    #     svg_files = sorted([f for f in os.listdir(svg_dir) if f.endswith(".svg")])
-    #     for z, fname in enumerate(svg_files):
-    #         svg_path = os.path.join(svg_dir, fname)
-
-    #         for out_idx, color_idx in enumerate(target_indices):  # ✅ 選択色だけ処理
-    #             rgb = rgb_keys[color_idx]
-    #             tree = ET.parse(svg_path)
-    #             root = tree.getroot()
-    #             parent_map = {c: p for p in root.iter() for c in p}
-            
-    #             for elem in list(root.iter()):
-    #                 fill = elem.attrib.get("fill", "")
-    #                 style = elem.attrib.get("style", "")
-    #                 color = self._normalize_color(fill, style)
-            
-    #                 if color == rgb:
-    #                     elem.set("fill", "white")
-    #                     elem.attrib.pop("style", None)
-    #                 else:
-    #                     parent = parent_map.get(elem)
-    #                     if parent is not None:
-    #                         parent.remove(elem)
-            
-    #             svg_bytes = BytesIO()
-    #             tree.write(svg_bytes, encoding='utf-8')
-    #             svg_bytes.seek(0)
-    #             renderer = QSvgRenderer(svg_bytes.read())
-            
-    #             image = QImage(width, height, QImage.Format.Format_Grayscale8)
-    #             image.fill(Qt.GlobalColor.black)
-    #             painter = QPainter(image)
-    #             renderer.render(painter)
-    #             painter.end()
-            
-    #             ptr = image.bits()
-    #             ptr.setsize(image.width() * image.height())
-    #             array = np.frombuffer(ptr, dtype=np.uint8).reshape((height, width))
-                                
-    #             # ✅ Frontside（降順）の場合は上下反転
-    #             if self.combo_stack_order.currentIndex() == 0:
-    #                 array = np.flipud(array)
-                
-                
-    #             masks_per_color[out_idx][z] = (array > 127).astype(np.uint8) * 255
-                            
-            
-                
-    #             # ✅ 進捗表示更新（スライス単位）
-    #             update_progress_bar(self.label_status, "Generating masks", z + 1, len(svg_files))                
-
-
-
-    #     #進捗表示用
-    #     self.label_status.setText("Exporting STL files...")
-    #     QApplication.processEvents()
-        
-    #     num_valid_volumes = sum(np.count_nonzero(vol) > 0 for vol in masks_per_color)
-    #     exported_count = 0
-        
-        
-    #     # for i, volume in enumerate(masks_per_color):
-    #     for i, volume in enumerate(masks_per_color):
-    #         color_idx = target_indices[i]
-    #         if np.count_nonzero(volume) == 0:
-    #             continue
-    #         print(f"[DEBUG] Final spacing values before STL export: mm_per_px={self.mm_per_px}, z_spacing_mm={self.z_spacing_mm}")
-        
-    #         if self.mm_per_px is None or self.z_spacing_mm is None:
-    #             print("[ERROR] Calibration not completed.")
-    #             return
-        
-                    
-    #         # # 🔽 空でないスライスの範囲を抽出してトリミング
-    #         # nonzero_slices = np.any(volume > 127, axis=(1, 2))
-    #         # if not np.any(nonzero_slices):
-    #         #     print(f"[SKIP] Object {color_idx+1} is completely empty. Skipped.")
-    #         #     continue
-            
-    #         # z_start, z_end = np.where(nonzero_slices)[0][[0, -1]]
-    #         # trimmed_volume = volume[z_start:z_end + 1]
-            
-    #         if np.count_nonzero(volume) == 0:
-    #             print(f"[SKIP] Object {color_idx+1} is completely empty. Skipped.")
-    #             continue
-            
-    #         binary_volume = (volume > 127)  # ✅ 修正点
-        
-        
-        
-    #         # ✅ VoxelGrid を使わずに直接メッシュ化
-    #         mesh = matrix_to_marching_cubes(
-    #             binary_volume,
-    #             pitch=[self.z_spacing_mm, self.mm_per_px, self.mm_per_px]
-    #         )
-            
-            
-            
-    #         # 🔽 スムージングモードとレベルを取得
-    #         mode_text = self.combo_smooth_mode.currentText()
-    #         level_str = self.combo_smooth_level.currentText().split("（")[0]
-    #         smooth_level = int(level_str)
-            
-    #         from scipy.ndimage import zoom
-            
-    #         adjusted_z_spacing = self.z_spacing_mm  # 初期値
-            
-    #         # 🔽 Z方向補間（volume smoothing）
-    #         if smooth_level > 0 and mode_text in ["Z-interpolation only", "Both"]:
-    #             z_factor = 1.0 + smooth_level * 0.4
-                
-                
-    #             binary_volume = zoom(
-    #                 binary_volume.astype(np.uint8), 
-    #                 zoom=[z_factor, 1.0, 1.0], 
-    #                 order=3
-    #             ) > 0.5
-    #             adjusted_z_spacing = self.z_spacing_mm / z_factor  # 🔧 ここを追加
-                
-                
-    #             print(f"[INFO] Applied Z-direction interpolation with factor {z_factor:.2f}")
-    #         else:
-    #             print("[INFO] Volume smoothing skipped")
-            
-      
-            
-    #         # ✅ 補正済みのピッチでメッシュ化
-    #         mesh = matrix_to_marching_cubes(
-    #             binary_volume,
-    #             pitch=[adjusted_z_spacing, self.mm_per_px, self.mm_per_px]
-    #         )            
-            
-            
-    #         # 🔽 メッシュスムージング（surface smoothing）
-    #         if smooth_level > 0 and mode_text in ["Mesh smoothing only", "Both"]:
-    #             iterations = 10 + smooth_level * 5
-                
-    #             filter_laplacian(mesh, lamb=0.5, iterations=iterations)
-    #             print(f"[INFO] Applied mesh smoothing: {iterations} iterations")
-    #         else:
-    #             print("[INFO] Mesh smoothing skipped")
-
-
-
-        
-    #         # stl_path = os.path.join(output_dir, f"object_{i+1:02}.stl")
-    #         stl_path = os.path.join(output_dir, f"object_{color_idx + 1:02}.stl")
-    #         mesh.export(stl_path)
-    #         print(f"[SAVED] {stl_path}")          
-                    
-    #         # ✅ 進捗表示更新（色ごとのSTL出力単位）
-    #         exported_count += 1
-    #         update_progress_bar(self.label_status, "Exporting STLs", exported_count, num_valid_volumes)            
-            
-
-    #     self.label_status.setText(f"[Done] Exported STL per color to: {output_dir}")
-    
-        
-    
-    
-    #     # 出力後に最新フォルダを特定してプレビュー
-    #     try:
-    #         # 直近で作成された stl_output_* フォルダを取得
-    #         base_dir = os.getcwd()
-    #         stl_dirs = [d for d in os.listdir(base_dir) if d.startswith("stl_output_")]
-    #         if stl_dirs:
-    #             latest_dir = max(stl_dirs, key=lambda d: os.path.getmtime(os.path.join(base_dir, d)))
-    #             stl_dir_path = os.path.join(base_dir, latest_dir)
-        
-    #             # STLファイル一覧を取得
-    #             stl_files = [os.path.join(stl_dir_path, f) for f in os.listdir(stl_dir_path) if f.lower().endswith(".stl")]
-        
-    #             if stl_files:
-    #                 # dlg = STLPreviewDialog(self, stl_files)
-    #                 # dlg.exec()
-    #                 dlg = STLPreviewDialog(
-    #                     parent=self,
-    #                     stl_paths=stl_files,               # ← ここを stl_files に
-    #                     color_labels=self.color_labels       # ← これが肝
-    #                 )
-    #                 dlg.exec()
-                    
-    #                 self.label_status.setText(f"✅ Preview opened for {len(stl_files)} STL files in '{latest_dir}'")
-    #             else:
-    #                 self.label_status.setText("⚠ No STL files found in latest output folder.")
-    #         else:
-    #             self.label_status.setText("⚠ No stl_output_* folder found.")
-    #     except Exception as e:
-    #         self.label_status.setText(f"⚠ Failed to open preview: {e}")
-
+    def preview_stl_with_scale(self):
+        """Preview the selected in-memory mesh without creating any files."""
+        try:
+            meshes = self._prepare_stl_meshes("Preparing 3D preview")
+            dialog = STLPreviewDialog(
+                parent=self,
+                mesh_items=meshes,
+                color_labels=self.color_labels,
+            )
+            dialog.exec()
+            self.label_status.setText(
+                f"✅ Previewed {len(meshes)} object surface(s) with "
+                f"{meshes[0].factor}x slice interpolation."
+            )
+        except Exception as exc:
+            self.label_status.setText(f"⚠ 3D preview failed: {exc}")
+            QMessageBox.warning(self, "Preview 3D", f"3D preview failed.\n\n{exc}")
     
     def export_colorwise_stl_with_scale(self):
-        import os
-        import numpy as np
-        from datetime import datetime
-        from trimesh.voxel.ops import matrix_to_marching_cubes
-        from trimesh.smoothing import filter_laplacian
-    
-        if self.mm_per_px is None or self.z_spacing_mm is None:
-            print(f"[DEBUG] Spacing values before CSV load: mm_per_px={self.mm_per_px}, z_spacing_mm={self.z_spacing_mm}")
-    
-            import csv
-            from PyQt6.QtWidgets import QFileDialog
-    
-            file_path, _ = QFileDialog.getOpenFileName(self, "Select CSV File", "", "CSV Files (*.csv)")
-            if not file_path:
-                print("[ERROR] CSV file not selected. Aborting STL export.")
-                return
-    
-            try:
-                with open(file_path, newline='', encoding='utf-8') as f:
-                    reader = csv.reader(f)
-                    rows = list(reader)
-    
-                    x_spacing = float(rows[3][0])  # 4行目・1列目
-                    z_spacing = float(rows[3][2])  # 4行目・3列目
-    
-                    self.mm_per_px = x_spacing
-                    self.z_spacing_mm = z_spacing
-                    print(f"[INFO] Loaded spacing: mm/px = {self.mm_per_px}, z = {self.z_spacing_mm}")
-            except Exception as e:
-                print(f"[ERROR] Failed to read CSV file: {e}")
-                return
-    
-        if not self.image_paths:
-            self.label_status.setText("⚠ No images loaded.")
-            return
-    
-        # 数値順
-        def _nums(s):
-            import re
-            m = re.findall(r"\d+", s)
-            return tuple(map(int, m)) if m else (s,)
-    
-        keys = sorted(self.image_paths.keys(), key=_nums)
-        if not keys:
-            self.label_status.setText("⚠ No image keys found.")
-            return
-    
-        # 最初の1枚でサイズ確認
-        first_mask = self.ensure_label_mask_exists(keys[0])
-        if first_mask.ndim != 2:
-            self.label_status.setText("⚠ Invalid label mask format.")
-            return
-        height, width = first_mask.shape
-    
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_dir = os.path.join(
-            os.getcwd(), self.timestamped_output_name("stl_output", timestamp)
-        )
-        os.makedirs(output_dir, exist_ok=True)
-    
-        # ✅ チェックされているオブジェクトだけ対象
-        target_indices = [i for i, cb in enumerate(self.checkboxes) if cb.isChecked()]
-        if not target_indices:
-            self.label_status.setText("⚠ No objects checked for STL export.")
-            return
-    
-        # stack order
-        if self.combo_stack_order.currentIndex() == 0:
-            # Frontside
-            keys = list(reversed(keys))
-            print("[INFO] Using descending stacking order (Frontside)")
-        else:
-            print("[INFO] Using ascending stacking order (Backside)")
-    
-        # オブジェクトごとの volume 準備
-        masks_per_color = [
-            np.zeros((len(keys), height, width), dtype=np.uint8)
-            for _ in target_indices
-        ]
-    
-        def update_progress_bar(label, task, current, total):
-            percent = int(current / total * 100) if total > 0 else 100
-            bar_length = 20
-            filled_length = int(bar_length * percent // 100)
-            bar = '█' * filled_length + '-' * (bar_length - filled_length)
-            label.setText(f"{task}... |{bar}| {percent}%")
-            QApplication.processEvents()
-    
-        # ========= label_masks から volume 構築 =========
-        self.label_status.setText("Generating masks from label maps...")
-        QApplication.processEvents()
-    
-        for z, key in enumerate(keys):
-            try:
-                label_mask = self.ensure_label_mask_exists(key)
-    
-                if label_mask.shape != (height, width):
-                    print(f"[WARN] Skipping {key}: shape mismatch {label_mask.shape} != {(height, width)}")
-                    continue
-    
-                for out_idx, color_idx in enumerate(target_indices):
-                    obj_id = color_idx + 1
-                    binary = (label_mask == obj_id).astype(np.uint8) * 255
-    
-                    # ✅ Frontside の場合は上下反転（旧挙動を維持）
-                    if self.combo_stack_order.currentIndex() == 0:
-                        binary = np.flipud(binary)
-    
-                    masks_per_color[out_idx][z] = binary
-    
-            except Exception as e:
-                print(f"[WARN] Failed to build volume slice for {key}: {e}")
-    
-            update_progress_bar(self.label_status, "Generating masks", z + 1, len(keys))
-    
-        # ========= STL 出力 =========
-        self.label_status.setText("Exporting STL files...")
-        QApplication.processEvents()
-    
-        num_valid_volumes = sum(np.count_nonzero(vol) > 0 for vol in masks_per_color)
-        exported_count = 0
-    
-        for i, volume in enumerate(masks_per_color):
-            color_idx = target_indices[i]
-    
-            if np.count_nonzero(volume) == 0:
-                print(f"[SKIP] Object {color_idx + 1} is completely empty. Skipped.")
-                continue
-    
-            if self.mm_per_px is None or self.z_spacing_mm is None:
-                print("[ERROR] Calibration not completed.")
-                return
-    
-            binary_volume = (volume > 127)
-    
-            # 初回メッシュ化（旧挙動維持）
-            mesh = matrix_to_marching_cubes(
-                binary_volume,
-                pitch=[self.z_spacing_mm, self.mm_per_px, self.mm_per_px]
-            )
-    
-            # スムージング設定
-            mode_text = self.combo_smooth_mode.currentText()
-            level_str = self.combo_smooth_level.currentText().split("（")[0]
-            smooth_level = int(level_str)
-    
-            from scipy.ndimage import zoom
-    
-            adjusted_z_spacing = self.z_spacing_mm
-    
-            # Z方向補間
-            if smooth_level > 0 and mode_text in ["Z-interpolation only", "Both"]:
-                z_factor = 1.0 + smooth_level * 0.4
-    
-                binary_volume = zoom(
-                    binary_volume.astype(np.uint8),
-                    zoom=[z_factor, 1.0, 1.0],
-                    order=3
-                ) > 0.5
-                adjusted_z_spacing = self.z_spacing_mm / z_factor
-    
-                print(f"[INFO] Applied Z-direction interpolation with factor {z_factor:.2f}")
-            else:
-                print("[INFO] Volume smoothing skipped")
-    
-            # 補正済みピッチで再メッシュ化
-            mesh = matrix_to_marching_cubes(
-                binary_volume,
-                pitch=[adjusted_z_spacing, self.mm_per_px, self.mm_per_px]
-            )
-    
-            # メッシュスムージング
-            if smooth_level > 0 and mode_text in ["Mesh smoothing only", "Both"]:
-                iterations = 10 + smooth_level * 5
-                filter_laplacian(mesh, lamb=0.5, iterations=iterations)
-                print(f"[INFO] Applied mesh smoothing: {iterations} iterations")
-            else:
-                print("[INFO] Mesh smoothing skipped")
-    
-            stl_path = os.path.join(
-                output_dir,
-                f"{self.output_file_stem()}_object_{color_idx + 1:02}.stl",
-            )
-            mesh.export(stl_path)
-            print(f"[SAVED] {stl_path}")
-    
-            exported_count += 1
-            update_progress_bar(self.label_status, "Exporting STLs", exported_count, num_valid_volumes)
-    
-        self.label_status.setText(f"[Done] Exported STL per color to: {output_dir}")
-    
-        # ========= プレビュー =========
+        """Export the exact mesh type and pipeline displayed by Preview 3D."""
         try:
-            stl_files = [
-                os.path.join(output_dir, filename)
-                for filename in os.listdir(output_dir)
-                if filename.lower().endswith(".stl")
-            ]
-            if stl_files:
-                dlg = STLPreviewDialog(
-                    parent=self,
-                    stl_paths=stl_files,
-                    color_labels=self.color_labels
-                )
-                dlg.exec()
-                self.label_status.setText(f"✅ Preview opened for {len(stl_files)} STL files")
-            else:
-                self.label_status.setText("⚠ No STL files were generated.")
-        except Exception as e:
-            self.label_status.setText(f"⚠ Failed to open preview: {e}")
-
-
-
-        
-    
-            
-    # def export_colorwise_volumes_to_csv(self):
-    #     import os
-    #     import numpy as np
-    #     import csv
-    #     from datetime import datetime
-    
-    #     if self.mm_per_px is None or self.z_spacing_mm is None:
-    #         from PyQt6.QtWidgets import QFileDialog
-    #         file_path, _ = QFileDialog.getOpenFileName(self, "Select CSV File", "", "CSV Files (*.csv)")
-    #         if not file_path:
-    #             print("[ERROR] CSV file not selected. Aborting volume export.")
-    #             return
-    #         try:
-    #             with open(file_path, newline='', encoding='utf-8') as f:
-    #                 reader = csv.reader(f)
-    #                 rows = list(reader)
-    #                 self.mm_per_px = float(rows[3][0])
-    #                 self.z_spacing_mm = float(rows[3][2])
-    #                 print(f"[INFO] Loaded spacing: mm/px = {self.mm_per_px}, z = {self.z_spacing_mm}")
-    #         except Exception as e:
-    #             print(f"[ERROR] Failed to read CSV file: {e}")
-    #             return
-    
-    #     if not self.image_paths:
-    #         print("[ERROR] No images loaded.")
-    #         return
-    
-    #     def _nums(s):
-    #         import re
-    #         m = re.findall(r"\d+", s)
-    #         return tuple(map(int, m)) if m else (s,)
-    
-    #     keys = sorted(self.image_paths.keys(), key=_nums)
-    #     if not keys:
-    #         print("[ERROR] No image keys found.")
-    #         return
-    
-    #     num_colors = len(self.color_labels)
-    
-    #     # 最初の1枚でサイズ確認
-    #     first_mask = self.ensure_label_mask_exists(keys[0])
-    #     if first_mask.ndim != 2:
-    #         print("[ERROR] Invalid label mask format.")
-    #         return
-    
-    #     height, width = first_mask.shape
-    
-    #     masks_per_color = [
-    #         np.zeros((len(keys), height, width), dtype=np.uint8)
-    #         for _ in range(num_colors)
-    #     ]
-    
-    #     self.label_status.setText("Generating masks for volume calculation...")
-    #     QApplication.processEvents()
-    
-    #     for z, key in enumerate(keys):
-    #         try:
-    #             label_mask = self.ensure_label_mask_exists(key)
-    
-    #             if label_mask.shape != (height, width):
-    #                 print(f"[WARN] Skipping {key}: shape mismatch {label_mask.shape} != {(height, width)}")
-    #                 continue
-    
-    #             for i in range(num_colors):
-    #                 obj_id = i + 1
-    #                 masks_per_color[i][z] = (label_mask == obj_id).astype(np.uint8)
-    
-    #         except Exception as e:
-    #             print(f"[WARN] Failed to collect mask for {key}: {e}")
-    
-    #     voxel_volume_mm3 = (self.mm_per_px ** 2) * self.z_spacing_mm
-    
-    #     results = []
-    #     overlap_results = []
-    
-    #     # 通常体積 + 各スライスの面積
-    #     per_slice_areas_all = []
-    
-    #     for i, volume in enumerate(masks_per_color):
-    #         voxel_count = np.count_nonzero(volume)
-    #         total_volume_mm3 = voxel_count * voxel_volume_mm3
-    #         total_volume_cm3 = total_volume_mm3 / 1000
-    #         print(f"[RESULT] Object {i+1:02}: {total_volume_cm3:.3f} cm³")
-    #         results.append((f"Object {i+1}", total_volume_mm3, total_volume_cm3))
-    
-    #         slice_areas_mm2 = []
-    #         for z in range(volume.shape[0]):
-    #             slice_pixel_count = np.count_nonzero(volume[z])
-    #             slice_area_mm2 = slice_pixel_count * (self.mm_per_px ** 2)
-    #             slice_areas_mm2.append(slice_area_mm2)
-    #         per_slice_areas_all.append(slice_areas_mm2)
-    
-    #     # オーバーラップ体積
-    #     for i in range(num_colors):
-    #         for j in range(i + 1, num_colors):
-    #             overlap = np.logical_and(masks_per_color[i], masks_per_color[j])
-    #             voxel_count = np.count_nonzero(overlap)
-    #             total_volume_mm3 = voxel_count * voxel_volume_mm3
-    #             total_volume_cm3 = total_volume_mm3 / 1000
-    #             if voxel_count > 0:
-    #                 print(f"[OVERLAP] Object {i+1} & Object {j+1}: {total_volume_cm3:.3f} cm³")
-    #                 overlap_results.append((f"Object {i+1} & {j+1}", total_volume_mm3, total_volume_cm3))
-    
-    #     # 出力
-    #     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    #     output_csv = os.path.join(os.getcwd(), f"volume_output_{timestamp}.csv")
-    
-    #     with open(output_csv, 'w', newline='', encoding='utf-8') as f:
-    #         writer = csv.writer(f)
-    #         writer.writerow(["Label", "Volume (mm^3)", "Volume (cm^3)"])
-    #         writer.writerows(results)
-    
-    #         writer.writerow([])
-    #         writer.writerow(["Slice Areas (mm^2)"])
-    #         header = ["Slice Index"] + [f"Obj {i+1}" for i in range(num_colors)]
-    #         writer.writerow(header)
-    
-    #         num_slices = len(keys)
-    #         for z in range(num_slices):
-    #             row = [z + 1]
-    #             for i in range(num_colors):
-    #                 area = per_slice_areas_all[i][z] if i < len(per_slice_areas_all) else 0
-    #                 row.append(f"{area:.2f}")
-    #             writer.writerow(row)
-    
-    #         if overlap_results:
-    #             writer.writerow([])
-    #             writer.writerow(["Overlapping Volumes"])
-    #             writer.writerow(["Overlap Pair", "Volume (mm^3)", "Volume (cm^3)"])
-    #             writer.writerows(overlap_results)
-    
-    #         if self.measurement_results:
-    #             writer.writerow([])
-    #             writer.writerow(["Measurement Results"])
-    #             writer.writerow(["Label", "Length (px)", "Length (mm)"])
-    #             for i, (_, _, px, mm) in enumerate(self.measurement_results):
-    #                 label = f"Measurement {i+1:02d}"
-    #                 mm_str = f"{mm:.2f}" if mm is not None else "N/A"
-    #                 writer.writerow([label, f"{px:.2f}", mm_str])
-    
-    #     self.label_status.setText(f"✅ Volume CSV exported")
-
+            meshes = self._prepare_stl_meshes("Exporting STL")
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            output_dir = os.path.join(
+                os.getcwd(), self.timestamped_output_name("stl_output", timestamp)
+            )
+            paths = export_stl_meshes(meshes, output_dir)
+            self.label_status.setText(
+                f"✅ Exported {len(paths)} STL file(s) with {meshes[0].factor}x "
+                f"slice interpolation to: {output_dir}"
+            )
+        except Exception as exc:
+            self.label_status.setText(f"⚠ STL export failed: {exc}")
+            QMessageBox.warning(self, "Export STL", f"STL export failed.\n\n{exc}")
     
     def export_colorwise_volumes_to_csv(self):
         import os
@@ -11047,6 +7623,9 @@ if __name__ == "__main__":
             )
         except Exception as exc:
             print("=== SegRef3D Local GPU Diagnostic ===")
+            print(f"Product edition: {os.environ.get('SEGREF3D_EDITION', 'unknown')}")
+            print(f"Frozen: {bool(getattr(sys, 'frozen', False))}")
+            print(f"Exception type: {type(exc).__name__}")
             print(f"GPU diagnostic failed: {exc}")
             print("===============================")
             sys.exit(2)

@@ -79,6 +79,21 @@ class MaskCleanupTests(unittest.TestCase):
 
 
 class MaskInterpolationTests(unittest.TestCase):
+    def test_frames_one_and_six_generate_four_masks_without_changing_endpoints(self):
+        frame_one = np.zeros((9, 9), dtype=np.uint8)
+        frame_six = np.zeros((9, 9), dtype=np.uint8)
+        frame_one[2:6, 1:5] = 1
+        frame_six[3:7, 4:8] = 1
+        first_before = frame_one.copy()
+        last_before = frame_six.copy()
+
+        generated = interpolate_label_masks(frame_one, frame_six, 1, 4)
+
+        self.assertEqual(len(generated), 4)
+        self.assertTrue(all(np.any(mask) for mask in generated))
+        np.testing.assert_array_equal(frame_one, first_before)
+        np.testing.assert_array_equal(frame_six, last_before)
+
     def test_multilabel_volume_upsampling_preserves_every_source_slice(self):
         source = np.zeros((3, 7, 7), dtype=np.uint8)
         source[0, 1:4, 1:4] = 1

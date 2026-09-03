@@ -156,7 +156,9 @@ class SAM2Interface:
     
 
     
-    def run_segmentation(self, image_np, box_prompt, progress_callback=None):
+    def run_segmentation(
+        self, image_np, box_prompt, progress_callback=None, temp_root=None
+    ):
         import tempfile
         from PIL import Image
         import numpy as np
@@ -169,45 +171,46 @@ class SAM2Interface:
     
     
     
-    # 一時ディレクトリに画像を保存
-        temp_dir = tempfile.mkdtemp()
-        temp_image_path = os.path.join(temp_dir, "0.jpg")
-        Image.fromarray(image_np).save(temp_image_path)
-        
-        if progress_callback:
-            progress_callback(25)    
-            
-        # 推論の初期化
-        inference_state = self.predictor.init_state(video_path=temp_dir)
-            
-        if progress_callback:
-            progress_callback(50)
-    
-        # ボックスプロンプトを numpy 配列に変換
-        box = np.array([
-            box_prompt[0][0], box_prompt[0][1],
-            box_prompt[1][0], box_prompt[1][1]
-        ], dtype=np.float32)
-    
-        # ボックスを使って推論を実行
-        frame_idx = 0
-        _, _, out_mask_logits = self.predictor.add_new_points_or_box(
-            inference_state=inference_state,
-            frame_idx=frame_idx,
-            obj_id=1,
-            box=box
-        )
-    
-        if progress_callback:
-            progress_callback(75)
+        if temp_root:
+            os.makedirs(temp_root, exist_ok=True)
 
-        # ロジットからバイナリマスクを生成
-        mask = (out_mask_logits[0] > 0.0).cpu().numpy().squeeze()
-            
-        if progress_callback:
-            progress_callback(100)
-        
-        return mask
+        # 推論中だけ必要な画像は、成功・例外のどちらでも自動削除する。
+        with tempfile.TemporaryDirectory(
+            prefix="segmentation-", dir=temp_root
+        ) as temp_dir:
+            temp_image_path = os.path.join(temp_dir, "0.jpg")
+            Image.fromarray(image_np).save(temp_image_path)
+
+            if progress_callback:
+                progress_callback(25)
+
+            inference_state = self.predictor.init_state(video_path=temp_dir)
+
+            if progress_callback:
+                progress_callback(50)
+
+            box = np.array([
+                box_prompt[0][0], box_prompt[0][1],
+                box_prompt[1][0], box_prompt[1][1]
+            ], dtype=np.float32)
+
+            frame_idx = 0
+            _, _, out_mask_logits = self.predictor.add_new_points_or_box(
+                inference_state=inference_state,
+                frame_idx=frame_idx,
+                obj_id=1,
+                box=box
+            )
+
+            if progress_callback:
+                progress_callback(75)
+
+            mask = (out_mask_logits[0] > 0.0).cpu().numpy().squeeze()
+
+            if progress_callback:
+                progress_callback(100)
+
+            return mask
 
     
     

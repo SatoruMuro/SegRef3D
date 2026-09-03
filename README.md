@@ -5,7 +5,7 @@
 SegRef3D helps researchers segment structures, refine masks, measure calibrated volumes, and
 reconstruct 3D models from serial images and volumetric data.
 
-[**Open SegRef3D Lite**][lite] · [**Download Local GPU v1.2.6**][gpu-download] ·
+[**Open SegRef3D Lite**][lite] · [**Download Local GPU v1.3.0**][gpu-download] ·
 [Tutorial](Tutorial/TutorialSegRef3DLiteEN.md) · [Ask AI](Tutorial/AskAISegRef3D.md) ·
 [日本語](READMEJP.md)
 
@@ -75,11 +75,19 @@ be refined in SegRef3D before quantitative analysis or 3D export.
 | Version | Best for | Start |
 | --- | --- | --- |
 | **SegRef3D Lite** | Most users; Windows, macOS, or Linux; no installation | [**Open in browser**][lite] |
-| **SegRef3D Local GPU v1.2.6** | Windows + compatible NVIDIA CUDA GPU; local SAM2 | [**Download ZIP**][gpu-download] |
+| **SegRef3D Local GPU v1.3.0** | Windows + compatible NVIDIA CUDA GPU; local SAM2 | [**Download ZIP**][gpu-download] |
 | **SegRef3D Local CPU v1.2.6** | Windows CPU-only/offline desktop legacy workflow | [**Download ZIP**][cpu-download] |
 
 Start with **SegRef3D Lite** unless you specifically need a Windows desktop build. Choose Local GPU
 to run the included SAM2 workflow locally. Local CPU is a legacy/fallback option without local SAM2.
+
+Local GPU v1.3.0 provides local SAM2 box-prompt segmentation and multi-frame tracking. It uses
+PyTorch 2.11.0+cu128 (CUDA 12.8), supports RTX 50-series / Blackwell `sm_120`, and has been verified
+on an RTX 5080 Laptop GPU. A compatible NVIDIA GPU is required.
+
+Local v1.3.0 also includes Interpolate Between Frames; Preview 3D and STL export with 1x, 5x, or 10x
+slice interpolation; PNG and legacy SVG mask import; Label PNG and colored SVG mask export; and
+session-based autosave storage.
 
 For a Local build: download the ZIP, extract the complete folder, and run `SegRef3D.exe`. See the
 [Local installation guide](Tutorial/LocalInstallation.md) for driver, folder, and startup notes.
@@ -128,5 +136,5 @@ SegRef3D is developed by [Satoru Muro](https://github.com/SatoruMuro) and distri
 [Apache License 2.0](LICENSE).
 
 [lite]: https://satorumuro.github.io/SegRef3D/lite-web/
-[gpu-download]: https://www.dropbox.com/scl/fi/ku3hj0spnw5rrmzgpc5ui/SegRef3D-Local-GPU-v1.2.6-Windows.zip?rlkey=aqd47l35lfl1kf6a7r5rv3xa3&st=e34tvblg&dl=1
+[gpu-download]: https://www.dropbox.com/scl/fi/ktsn1ljcuvj75c334kbnp/SegRef3D-Local-GPU-v1.3.0-Windows_FIXED.zip?rlkey=vn5d4j6u0glagk7xgoqfw93ox&st=p5ivqyca&dl=1
 [cpu-download]: https://www.dropbox.com/scl/fi/05evqq67tokxvo37ixw87/SegRef3D-Local-CPU-v1.2.6-Windows.zip?rlkey=mz1kvdlkxmmffipp411xc1kux&st=nwh3k3rn&dl=1

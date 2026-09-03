@@ -47,8 +47,9 @@ class Ui_MainWindow:
         self.spin_thin_factor.setValue(1)  # デフォルト=1（間引かない）
         self.btn_thin_images = QPushButton("Apply Thinning")
         
-        self.btn_load_masks = QPushButton("Load Masks")
-        self.btn_save_svg_as = QPushButton("Save Masks")
+        self.btn_load_masks = QPushButton("Load Masks (PNG / SVG)")
+        self.btn_save_masks = QPushButton("Save Label PNG Masks")
+        self.btn_export_svg_masks = QPushButton("Export SVG Masks")
         
         self.btn_export_nifti = QPushButton("Export NIfTI Labelmap")
         self.btn_export_nifti_5x = QPushButton("NIfTI Labelmap (5x)")
@@ -100,7 +101,8 @@ class Ui_MainWindow:
         button_layout1.addWidget(self.spin_thin_factor)
         button_layout1.addWidget(self.btn_thin_images)
         button_layout1.addWidget(self.btn_load_masks)
-        button_layout1.addWidget(self.btn_save_svg_as)
+        button_layout1.addWidget(self.btn_save_masks)
+        button_layout1.addWidget(self.btn_export_svg_masks)
         
         button_layout1.addWidget(self.btn_export_nifti)
         button_layout1.addWidget(self.btn_export_nifti_5x)
@@ -277,12 +279,12 @@ class Ui_MainWindow:
         self.btn_set_tracking_start = QPushButton("Set Tracking Start")
         self.btn_set_tracking_end = QPushButton("Set Tracking End")
         self.btn_add_object_prompt = QPushButton("Add Object Prompt")
-        self.btn_batch_tracking = QPushButton("Run Batch Tracking")
         self.btn_manage_batch_jobs = QPushButton("Batch Jobs")
         self.btn_manage_local_batch_jobs = QPushButton("Batch Jobs")
         self.btn_export_segonweb = QPushButton("Create Input ZIP")
         self.btn_import_segonweb_result = QPushButton("Import Result ZIP")
         self.btn_run_tracking = QPushButton("Run Tracking")
+        self.btn_local_sam2_add = QPushButton("Add")
         self.btn_run_sam2 = QPushButton("Run Seg")
         self.btn_seg_on_web = QPushButton("Seg Anything")
         self.btn_instant3dweb = QPushButton("Legacy Instant3DWeb")
@@ -296,7 +298,6 @@ class Ui_MainWindow:
         sam_layout.addWidget(self.btn_set_tracking_start)
         sam_layout.addWidget(self.btn_set_tracking_end)
         sam_layout.addWidget(self.btn_add_object_prompt)
-        sam_layout.addWidget(self.btn_batch_tracking)
         sam_layout.addWidget(self.btn_manage_batch_jobs)
         sam_layout.addWidget(self.btn_manage_local_batch_jobs)
         sam_layout.addWidget(self.btn_export_segonweb)
@@ -313,25 +314,6 @@ class Ui_MainWindow:
         # 🔹 編集対象オブジェクト選択 + Add ボタン
         add_layout = QHBoxLayout()
         
-        self.label_overlap = QLabel("Overlap Between:")
-        self.label_overlap.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        
-        self.combo_overlap1 = QComboBox()
-        self.combo_overlap1.addItems([str(i + 1) for i in range(20)])
-        self.combo_overlap1.setCurrentIndex(0)
-        
-        self.combo_overlap2 = QComboBox()
-        self.combo_overlap2.addItems([str(i + 1) for i in range(20)])
-        self.combo_overlap2.setCurrentIndex(1)
-        
-        self.btn_extract_overlap = QPushButton("Extract Overlap CurrentImg")
-        self.btn_extract_overlap_all = QPushButton("Extract Overlap AllImg")
-
-
-
-
-
-
         
         # self.label_target_object = QLabel("Target Object:")
         # self.label_target_object.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
@@ -508,15 +490,6 @@ class Ui_MainWindow:
         
         self.btn_convert_color = QPushButton("Convert Object Color")
         
-        self.label_reorder_object = QLabel("Reorder:")
-        self.label_reorder_object.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self.combo_reorder_object = QComboBox()
-        self.combo_reorder_object.addItems([str(i+1) for i in range(20)])
-        self.combo_reorder_object.setCurrentIndex(0)
-        
-        self.btn_bring_to_front = QPushButton("Bring to Front")
-        self.btn_send_to_back = QPushButton("Send to Back")
-        
         self.label_delete_object = QLabel("Delete Object:")
         self.label_delete_object.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         
@@ -550,11 +523,6 @@ class Ui_MainWindow:
         convert_layout.addWidget(self.label_convert_to)
         convert_layout.addWidget(self.combo_convert_to)
         convert_layout.addWidget(self.btn_convert_color)
-        
-        convert_layout.addWidget(self.label_reorder_object)
-        convert_layout.addWidget(self.combo_reorder_object)
-        convert_layout.addWidget(self.btn_bring_to_front)
-        convert_layout.addWidget(self.btn_send_to_back)
         
         convert_layout.addWidget(self.label_delete_object)
         convert_layout.addWidget(self.combo_delete_object)
@@ -632,20 +600,30 @@ class Ui_MainWindow:
         self.combo_smooth_level.setCurrentIndex(5)  # デフォルトはレベル5（中）
         
         # スムージングモードの選択ラベルとコンボボックスを追加
-        self.label_smooth_mode = QLabel("Smooth Mode:")
+        self.label_smooth_mode = QLabel("Mesh smoothing:")
         self.label_smooth_mode.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         
         self.combo_smooth_mode = QComboBox()
-        self.combo_smooth_mode.addItems([
-            "None",                 # スムージングなし
-            "Z-interpolation only",# Z方向補間のみ
-            "Mesh smoothing only",  # メッシュスムージングのみ
-            "Both"                  # 両方
-        ])
-        self.combo_smooth_mode.setCurrentIndex(0)  # デフォルト: なし
-        
+        self.combo_smooth_mode.addItem("None", "none")
+        self.combo_smooth_mode.addItem("Mesh smoothing", "mesh")
+        self.combo_smooth_mode.setCurrentIndex(0)
 
-        self.btn_export_stl_colorwise = QPushButton("Export 3D")
+        self.label_stl_factor = QLabel("Slice interpolation:")
+        self.label_stl_factor.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.combo_stl_factor = QComboBox()
+        self.combo_stl_factor.addItem("1x", 1)
+        self.combo_stl_factor.addItem("5x", 5)
+        self.combo_stl_factor.addItem("10x", 10)
+        self.combo_stl_factor.setCurrentIndex(1)
+
+        self.label_stl_objects = QLabel("Objects:")
+        self.label_stl_objects.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.combo_stl_objects = QComboBox()
+        self.combo_stl_objects.addItem("Current target", "target")
+        self.combo_stl_objects.addItem("Visible objects", "visible")
+
+        self.btn_preview_stl = QPushButton("Preview 3D")
+        self.btn_export_stl_colorwise = QPushButton("Export STL")
         self.btn_export_volume_csv = QPushButton("Export Measurements")  # 🔽 体積出力ボタン
 
         # calibration_layout.addWidget(self.btn_rescan_used_colors)
@@ -667,6 +645,11 @@ class Ui_MainWindow:
         calibration_layout.addWidget(self.combo_smooth_level)
         calibration_layout.addWidget(self.label_smooth_mode)
         calibration_layout.addWidget(self.combo_smooth_mode)
+        calibration_layout.addWidget(self.label_stl_factor)
+        calibration_layout.addWidget(self.combo_stl_factor)
+        calibration_layout.addWidget(self.label_stl_objects)
+        calibration_layout.addWidget(self.combo_stl_objects)
+        calibration_layout.addWidget(self.btn_preview_stl)
         calibration_layout.addWidget(self.btn_export_stl_colorwise)
         calibration_layout.addWidget(self.btn_export_volume_csv)
 
@@ -832,7 +815,6 @@ class Ui_MainWindow:
             
             "Batch Tracking": [
                 self.btn_add_object_prompt,
-                self.btn_batch_tracking,
                 self.btn_manage_batch_jobs,
                 self.btn_export_segonweb,
                 self.btn_import_segonweb_result,
@@ -913,8 +895,10 @@ class Ui_MainWindow:
         for btn in [
             self.btn_run_sam2,
             self.btn_run_tracking,
+            self.btn_preview_stl,
             self.btn_export_stl_colorwise,
-            self.btn_save_svg_as
+            self.btn_save_masks,
+            self.btn_export_svg_masks,
         ]:
             btn.setStyleSheet(heavy_style)
                     
@@ -922,15 +906,12 @@ class Ui_MainWindow:
         edit_style = "background-color: #99ddff; color: black;"  # 明るい水色
         for btn in [
             self.btn_add_to_mask,
+            self.btn_local_sam2_add,
             self.btn_cut_from_mask,
             self.btn_transfer_to_mask
         ]:
             btn.setStyleSheet(edit_style)
         
-        # 🆕 バッチ専用（赤系）
-        batch_style = "background-color: #ff6666; color: white;"  # 強調赤
-        self.btn_batch_tracking.setStyleSheet(batch_style)
-                    
         # 🆕 バッチ準備（淡赤系）
         prepare_style = "background-color: #ff9999; color: black;"  # 準備ボタンに合う色
         self.btn_add_object_prompt.setStyleSheet(prepare_style)        
@@ -970,15 +951,18 @@ class Ui_MainWindow:
         """
         for btn in [
             self.btn_load_images,
-            self.btn_save_svg_as,
+            self.btn_save_masks,
+            self.btn_export_svg_masks,
             self.btn_prepare_tracking,
             self.btn_set_box_prompt,
             self.btn_set_tracking_start,
             self.btn_set_tracking_end,
             self.btn_run_tracking,
             self.btn_add_to_mask,
+            self.btn_local_sam2_add,
             self.btn_cut_from_mask,
             self.btn_draw_calibration_line,
+            self.btn_preview_stl,
             self.btn_export_stl_colorwise
         ]:
             prev_style = btn.styleSheet()
@@ -1061,7 +1045,8 @@ class Ui_MainWindow:
         for button in (
             self.btn_load_images,
             self.btn_load_masks,
-            self.btn_save_svg_as,
+            self.btn_save_masks,
+            self.btn_export_svg_masks,
             self.btn_fit_to_window,
             self.btn_undo,
             self.btn_redo,
@@ -1215,6 +1200,7 @@ class Ui_MainWindow:
             row(QLabel("Transfer to"), self.combo_transfer_target),
         ]))
         self.btn_add_to_mask.setProperty("primary", True)
+        self.btn_local_sam2_add.setProperty("primary", True)
         self.btn_clear_current_path.setText("Clear Current Drawing")
         self.btn_clear_all_paths.setText("Clear All Pending Drawings")
         draw_layout.addWidget(group("Pending Drawing", [
@@ -1224,7 +1210,6 @@ class Ui_MainWindow:
 
         ai_layout = tool_page("AI Segmentation")
         self.btn_add_object_prompt.setText("Add Current Prompt")
-        self.btn_batch_tracking.setText("Run Local Batch Tracking")
         self.prompt_setup_widget = group("Prompt Setup", [
             QLabel("Define the box prompt and tracking range used by local SAM2 or Seg Anything."),
             row(self.btn_set_box_prompt, self.btn_clear_box),
@@ -1236,8 +1221,8 @@ class Ui_MainWindow:
             self.btn_run_sam2,
             self.btn_prepare_tracking,
             self.btn_run_tracking,
+            self.btn_local_sam2_add,
             self.btn_manage_local_batch_jobs,
-            self.btn_batch_tracking,
         ])
         self.btn_run_sam2.setProperty("primary", True)
         ai_layout.addWidget(self.local_sam2_widget)
@@ -1318,11 +1303,15 @@ class Ui_MainWindow:
         measurement_layout.addWidget(manual_calibration)
 
         export_layout = tool_page("3D & Export")
-        export_layout.addWidget(group("3D Reconstruction", [
+        export_layout.addWidget(group("STL", [
+            row(self.label_stl_factor, self.combo_stl_factor),
+            row(self.label_stl_objects, self.combo_stl_objects),
+            row(self.btn_preview_stl, self.btn_export_stl_colorwise),
+        ]))
+        export_layout.addWidget(group("3D Options", [
             row(self.label_smooth_mode, self.combo_smooth_mode),
             row(self.label_smooth, self.combo_smooth_level),
             row(self.label_stack_order, self.combo_stack_order),
-            self.btn_export_stl_colorwise,
             self.btn_instant3dweb,
         ]))
         self.btn_instant3dweb.setText("Legacy Instant3DWeb")
@@ -1463,7 +1452,19 @@ class Ui_MainWindow:
         )
         self.btn_seg_on_web.setToolTip("Open the Google Colab SAM2 workflow.")
         self.btn_run_tracking.setToolTip("Propagate the box-prompt mask through the selected range.")
-        self.combo_smooth_mode.setToolTip("Choose Z interpolation, mesh smoothing, both, or neither.")
+        self.combo_stl_factor.setToolTip(
+            "Interpolate masks between source slices only for 3D generation; source masks are unchanged."
+        )
+        self.combo_stl_objects.setToolTip(
+            "Use the current target or the objects currently visible in the editor."
+        )
+        self.btn_preview_stl.setToolTip(
+            "Build and display the selected mesh without saving STL files."
+        )
+        self.btn_export_stl_colorwise.setToolTip(
+            "Export STL files from the same mesh pipeline used by Preview 3D."
+        )
+        self.combo_smooth_mode.setToolTip("Optionally smooth the generated surface mesh.")
         self.combo_smooth_level.setToolTip("Set the mesh smoothing strength for 3D export.")
         self.btn_export_nifti.setToolTip(
             "Preserves source CT/MRI geometry. In 3D Slicer, load as "
