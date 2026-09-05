@@ -111,6 +111,7 @@ identifiable patient information into a third-party AI service.
 | I want to... | Guide |
 | --- | --- |
 | Get started with SegRef3D Lite | [Basic tutorial](Tutorial/TutorialSegRef3DLiteEN.md) |
+| Watch the SegRef3D Lite workflow in Japanese | [SegRef3D Lite 使い方解説｜AIセグメンテーションから3D表示まで](https://youtu.be/V0WZmJSZHgg) |
 | Watch the basic workflow | [Tutorial video](https://youtu.be/JModwfnBTYU) |
 | Learn the complete desktop workflow | [Full SegRef3D tutorial](Tutorial/TutorialSegRef3DEN.md) |
 | Work with serial histology | [Registration / serial section guide](Tutorial/Registration.md) |
