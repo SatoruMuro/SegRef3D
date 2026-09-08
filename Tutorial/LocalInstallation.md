@@ -4,7 +4,7 @@ This guide applies to the Windows desktop editions of SegRef3D v1.2.6.
 
 ## Download
 
-- [SegRef3D Local GPU v1.2.6](https://www.dropbox.com/scl/fi/ku3hj0spnw5rrmzgpc5ui/SegRef3D-Local-GPU-v1.2.6-Windows.zip?rlkey=aqd47l35lfl1kf6a7r5rv3xa3&st=e34tvblg&dl=1) for Windows with a compatible NVIDIA CUDA GPU
+- [SegRef3D Local GPU v1.3.0](https://www.dropbox.com/scl/fi/hvnum0h40i1no1jybvx0h/SegRef3D-Local-GPU-v1.3.0-SIZE-TEST-D.zip?rlkey=kpc9hb6woayqlslnxpamd3kj5&st=qw557b0u&dl=1) for Windows with a compatible NVIDIA CUDA GPU
 - [SegRef3D Local CPU v1.2.6](https://www.dropbox.com/scl/fi/05evqq67tokxvo37ixw87/SegRef3D-Local-CPU-v1.2.6-Windows.zip?rlkey=mz1kvdlkxmmffipp411xc1kux&st=nwh3k3rn&dl=1) for a CPU-only/offline legacy Windows workflow
 
 SegRef3D Lite is recommended for most users who do not require a Windows desktop application.
@@ -44,7 +44,7 @@ Windowsデスクトップ版SegRef3D v1.2.6向けの案内です。
 
 ## ダウンロード
 
-- [SegRef3D Local GPU v1.2.6](https://www.dropbox.com/scl/fi/ku3hj0spnw5rrmzgpc5ui/SegRef3D-Local-GPU-v1.2.6-Windows.zip?rlkey=aqd47l35lfl1kf6a7r5rv3xa3&st=e34tvblg&dl=1)：対応NVIDIA CUDA GPU搭載Windows向け
+- [SegRef3D Local GPU v1.3.0](https://www.dropbox.com/scl/fi/hvnum0h40i1no1jybvx0h/SegRef3D-Local-GPU-v1.3.0-SIZE-TEST-D.zip?rlkey=kpc9hb6woayqlslnxpamd3kj5&st=qw557b0u&dl=1)：対応NVIDIA CUDA GPU搭載Windows向け
 - [SegRef3D Local CPU v1.2.6](https://www.dropbox.com/scl/fi/05evqq67tokxvo37ixw87/SegRef3D-Local-CPU-v1.2.6-Windows.zip?rlkey=mz1kvdlkxmmffipp411xc1kux&st=nwh3k3rn&dl=1)：CPU-only／offline Windows workflow向けlegacy版
 
 Windowsデスクトップアプリが必須でない場合は、SegRef3D Liteを推奨します。

@@ -81,7 +81,7 @@ edition and encoding. Consult the detailed guide before making a recommendation.
 - [SegRef3D Lite](https://satorumuro.github.io/SegRef3D/lite-web/)
 - [TrainRef3D workflow and schema](https://github.com/SatoruMuro/SegRef3D/blob/main/train-web/README.md)
 - [InferRef3D inference formats](https://github.com/SatoruMuro/SegRef3D/blob/main/docs/TRAINREF3D_INFERENCE_FORMAT.md)
-- [SegRef3D Local GPU v1.2.6 for Windows](https://www.dropbox.com/scl/fi/ku3hj0spnw5rrmzgpc5ui/SegRef3D-Local-GPU-v1.2.6-Windows.zip?rlkey=aqd47l35lfl1kf6a7r5rv3xa3&st=e34tvblg&dl=1)
+- [SegRef3D Local GPU v1.3.0 for Windows](https://www.dropbox.com/scl/fi/hvnum0h40i1no1jybvx0h/SegRef3D-Local-GPU-v1.3.0-SIZE-TEST-D.zip?rlkey=kpc9hb6woayqlslnxpamd3kj5&st=qw557b0u&dl=1)
 - [SegRef3D Local CPU v1.2.6 for Windows](https://www.dropbox.com/scl/fi/05evqq67tokxvo37ixw87/SegRef3D-Local-CPU-v1.2.6-Windows.zip?rlkey=mz1kvdlkxmmffipp411xc1kux&st=nwh3k3rn&dl=1)
 - [Basic tutorial](https://satorumuro.github.io/SegRef3D/Tutorial/TutorialSegRef3DLiteEN.html)
 - [Repository](https://github.com/SatoruMuro/SegRef3D)

@@ -141,5 +141,5 @@ SegRef3D is developed by [Satoru Muro](https://github.com/SatoruMuro) and distri
 [Apache License 2.0](LICENSE).
 
 [lite]: https://satorumuro.github.io/SegRef3D/lite-web/
-[gpu-download]: https://www.dropbox.com/scl/fi/ktsn1ljcuvj75c334kbnp/SegRef3D-Local-GPU-v1.3.0-Windows_FIXED.zip?rlkey=vn5d4j6u0glagk7xgoqfw93ox&st=p5ivqyca&dl=1
+[gpu-download]: https://www.dropbox.com/scl/fi/hvnum0h40i1no1jybvx0h/SegRef3D-Local-GPU-v1.3.0-SIZE-TEST-D.zip?rlkey=kpc9hb6woayqlslnxpamd3kj5&st=qw557b0u&dl=1
 [cpu-download]: https://www.dropbox.com/scl/fi/05evqq67tokxvo37ixw87/SegRef3D-Local-CPU-v1.2.6-Windows.zip?rlkey=mz1kvdlkxmmffipp411xc1kux&st=nwh3k3rn&dl=1
