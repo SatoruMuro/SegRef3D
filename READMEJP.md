@@ -5,7 +5,7 @@
 SegRef3Dは、連続画像や3D volumeから、構造のsegmentation、mask修正、校正済み体積の計測、
 3Dモデルの再構築を行う研究者向けオープンソースplatformです。
 
-[**SegRef3D Liteを開く**][lite] · [**Local GPU v1.3.0をダウンロード**][gpu-download] ·
+[**SegRef3D Liteを開く**][lite] · [**Local GPU v1.3.1の配布情報**][gpu-download] ·
 [基本操作](Tutorial/TutorialSegRef3DLiteJP.md) · [AIに相談](Tutorial/AskAISegRef3D.md) ·
 [English](README.md)
 
@@ -80,15 +80,15 @@ AI支援segmentationは、ローカルまたは任意のColab workflowで利用�
 | 版 | 適している環境 | 開始 |
 | --- | --- | --- |
 | **SegRef3D Lite** | 大多数のユーザー；Windows／macOS／Linux；install不要 | [**browserで開く**][lite] |
-| **SegRef3D Local GPU v1.3.0** | Windows + 対応NVIDIA CUDA GPU；ローカルSAM2 | [**ZIPをダウンロード**][gpu-download] |
+| **SegRef3D Local GPU v1.3.1** | Windows + 対応NVIDIA CUDA GPU；ローカルSAM2 | [**配布情報**][gpu-download] |
 | **SegRef3D Local CPU v1.2.6** | Windows CPU-only／offline desktopのlegacy workflow | [**ZIPをダウンロード**][cpu-download] |
 
 Windows desktop版が必要でなければ、まず**SegRef3D Lite**を使用してください。同梱SAM2をローカル実行
 する場合はLocal GPUを選びます。Local CPUはローカルSAM2を含まないlegacy／fallback版です。
 
-Local GPU v1.3.0では、Local SAM2によるBox Prompt segmentationとmulti-frame trackingを利用できます。
+Local GPU v1.3.1では、Local SAM2によるBox Prompt segmentationとmulti-frame trackingを利用できます。
 PyTorch 2.11.0+cu128（CUDA 12.8）を採用し、RTX 50-series／Blackwell `sm_120`に対応しています。
-RTX 5080 Laptop GPUで実機確認済みですが、動作には対応NVIDIA GPUが必要です。
+RTX 5080 Laptop GPUでの実機確認は旧版のGPU runtimeについての記録です。今回のv1.3.1 ZIPでの実GPU SAM2検証は後日行います。対応するNVIDIA CUDA GPUが必要です。
 
 Local v1.3.0は、Interpolate Between Frames、slice補間1x／5x／10xを使うPreview 3D・STL export、
 PNG／legacy SVG mask import、Label PNG／colored SVG mask export、session単位のautosave storageにも対応します。
@@ -152,5 +152,5 @@ SegRef3Dは[Satoru Muro](https://github.com/SatoruMuro)が開発し、
 [Apache License 2.0](LICENSE)で公開しています。
 
 [lite]: https://satorumuro.github.io/SegRef3D/lite-web/
-[gpu-download]: https://www.dropbox.com/scl/fi/hvnum0h40i1no1jybvx0h/SegRef3D-Local-GPU-v1.3.0-SIZE-TEST-D.zip?rlkey=kpc9hb6woayqlslnxpamd3kj5&st=qw557b0u&dl=1
+[gpu-download]: SegRef3D/docs/RELEASE_1_3_1.md
 [cpu-download]: https://www.dropbox.com/scl/fi/05evqq67tokxvo37ixw87/SegRef3D-Local-CPU-v1.2.6-Windows.zip?rlkey=mz1kvdlkxmmffipp411xc1kux&st=nwh3k3rn&dl=1

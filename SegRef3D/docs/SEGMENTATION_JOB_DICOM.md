@@ -1,5 +1,7 @@
 # Seg Anything DICOM Job ZIP修正・検証記録
 
+以下は初期修正時点の記録。その後のmain反映・Lite本番公開・正式Windows ZIPと公開後検証は [v1.3.1配布情報](RELEASE_1_3_1.md) を参照。
+
 2026-09-09。Qt lifecycle／Windows署名対応のコミット `c961acc` を保持し、同じ作業ブランチ `fix/qt-item-lifecycle-windows-signing` で追加対応した。
 
 ## 原因と修正
