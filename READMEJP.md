@@ -9,7 +9,10 @@ SegRef3Dは、連続画像や3D volumeから、構造のsegmentation、mask修�
 [基本操作](Tutorial/TutorialSegRef3DLiteJP.md) · [AIに相談](Tutorial/AskAISegRef3D.md) ·
 [English](README.md)
 
-<img src="images/SegRef3D-v1.2.0-GUI.png" alt="SegRef3D desktop interface" width="100%">
+<p align="center">
+  <img src="images/segref3d-lite-segmentation.webp" alt="SegRef3D Lite segmentation and mask refinement interface" width="49%">
+  <img src="images/segref3d-lite-3d-preview.webp" alt="SegRef3D Lite 3D STL preview" width="49%">
+</p>
 
 ## どんな画像を持っていますか？
 
