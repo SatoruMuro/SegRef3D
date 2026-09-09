@@ -7,6 +7,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 import zipfile
+from segjob_image_fixtures import make_series
 
 import numpy as np
 from PIL import Image
@@ -136,6 +137,48 @@ class SegOnWebUiTests(unittest.TestCase):
         self.assertEqual(manifest["objects"][0]["tracking_start"], 0)
         self.assertEqual(manifest["images"]["files"][0]["original_filename"], "original-0001.png")
         self.assertEqual(manifest["source"]["project_name"], "Test Images")
+
+    def test_loaded_dicom_and_raster_series_export_displayed_jpegs(self):
+        # Both Local editions use these same load/prompt/export methods.
+        for kind in ("dicom", "png", "jpg", "tiff"):
+            with self.subTest(kind=kind):
+                folder = make_series(self.temp_dir.name, kind)
+                with patch.object(app_module.QFileDialog, "getExistingDirectory", return_value=str(folder)), \
+                     patch.object(app_module.QMessageBox, "information"):
+                    self.window.load_image_folder()
+                self.assertEqual(len(self.window.image_paths), 15)
+                self.window.current_index = 0
+                self.window.set_tracking_start()
+                self.window.current_index = 14
+                self.window.set_tracking_end()
+                self.window.current_index = 6
+                self.window.display_current_image()
+                self.window.start_box_prompt_mode()
+                # These are the image-space results of the two Box Prompt clicks.
+                self.window.last_used_box_px = ((40, 50), (280, 300))
+                self.window.last_used_box_index = 6
+                self.window.combo_target_object.setCurrentText("1")
+                self.window.add_object_prompt_for_batch()
+                output = Path(self.temp_dir.name) / f"{kind}.zip"
+                with patch.object(app_module.QFileDialog, "getSaveFileName", return_value=(str(output), "")), \
+                     patch.object(app_module.QMessageBox, "information"), \
+                     patch.object(app_module.QMessageBox, "critical") as critical:
+                    self.window.export_for_segonweb()
+                critical.assert_not_called()
+                manifest = validate_job_zip(str(output))
+                self.assertEqual(manifest["format_version"], "segref3d-segjob-1.0")
+                self.assertEqual((manifest["images"]["count"], manifest["images"]["width"], manifest["images"]["height"]), (15, 400, 400))
+                obj = manifest["objects"][0]
+                self.assertEqual((obj["tracking_start"], obj["tracking_end"], obj["prompt_frame"]), (0, 14, 6))
+                self.assertEqual(obj["box"], [40, 50, 280, 300])
+                with zipfile.ZipFile(output) as archive:
+                    self.assertEqual(len([name for name in archive.namelist() if name.startswith("images/")]), 15)
+                    for record in manifest["images"]["files"]:
+                        payload = archive.read(record["archive_path"])
+                        # Desktop viewer loads precisely this prepared JPEG path.
+                        self.assertEqual(payload, Path(self.window.image_paths[record["key"]]).read_bytes())
+                        with Image.open(io.BytesIO(payload)) as image:
+                            self.assertEqual((image.format, image.mode, image.size), ("JPEG", "RGB", (400, 400)))
 
     def test_lite_mode_keeps_segonweb_job_tools_enabled(self):
         self.assertEqual(self.window.windowTitle(), "SegRef3D Local CPU")

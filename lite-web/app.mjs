@@ -3833,15 +3833,22 @@ function saveSegmentationObject() {
   }
 }
 
-function workingImageJpegBlob(image) {
-  const canvas = document.createElement("canvas");
-  canvas.width = image.width;
-  canvas.height = image.height;
-  const outputContext = canvas.getContext("2d");
-  const pixels = outputContext.createImageData(image.width, image.height);
-  pixels.data.set(image.basePixels);
-  outputContext.putImageData(pixels, 0, 0);
-  return canvasToBlob(canvas, "image/jpeg", 0.95);
+async function workingImageJpegBlob(image) {
+  const pixelCount = image.width * image.height;
+  const hasModalityPixels = image.modalityPixels instanceof Float32Array &&
+    image.modalityPixels.length === pixelCount;
+  if (!image.sourceCanvas || pixelCount <= 0 ||
+      (!hasModalityPixels && image.basePixels?.length !== pixelCount * 4)) {
+    throw new Error(`Cannot prepare ${image.name}: display image data is missing. Reload the image series and try again.`);
+  }
+  // Refresh unvisited slices too. This is the viewer's image-only canvas:
+  // it applies the existing modality/window/display conversion, without masks or prompts.
+  ensureDisplayImage(image);
+  try {
+    return await canvasToBlob(image.sourceCanvas, "image/jpeg", 0.95);
+  } catch (error) {
+    throw new Error(`Cannot encode ${image.name} as a working JPG. Reload the image series and try again.`, { cause: error });
+  }
 }
 
 async function exportSegmentationJob() {

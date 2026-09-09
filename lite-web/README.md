@@ -265,6 +265,12 @@ use; no DICOM bytes or metadata are uploaded.
 
 ### Seg Anything workflow
 
+Create Input ZIP uses the current image display, including DICOM window/level,
+brightness and contrast, to generate 8-bit working JPEGs for every slice. Masks,
+drawn paths and box overlays are excluded. PNG/JPG/TIFF inputs use the same
+image-only display path. The archive remains `segref3d-segjob-1.0` and is created
+entirely in the browser. See the [DICOM export verification and browser test commands](../SegRef3D/docs/SEGMENTATION_JOB_DICOM.md).
+
 1. Load an image sequence in SegRef3D Lite.
 2. Open **AI Segmentation > Edit Setup** in the Tools dock.
 3. Define the tracking range for each object.
