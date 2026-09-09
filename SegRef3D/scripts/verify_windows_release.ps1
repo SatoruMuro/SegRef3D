@@ -12,17 +12,21 @@ if (Test-Path -LiteralPath $destination) { throw 'Choose a new, empty extraction
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $archive = [IO.Compression.ZipFile]::OpenRead($zipPathResolved)
 try {
-    $top = @($archive.Entries | ForEach-Object { ($_.FullName -split '/')[0] } | Sort-Object -Unique)
+    $top = @($archive.Entries | ForEach-Object { ($_.FullName -split '[\\/]')[0] } | Sort-Object -Unique)
     if ($top.Count -ne 1 -or $top[0] -notmatch '^SegRef3D-Local-GPU-v[0-9.]+-Windows$') { throw 'Unexpected ZIP root.' }
     $seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    $hasExecutable = $false
     foreach ($entry in $archive.Entries) {
-        $target = [IO.Path]::GetFullPath((Join-Path $destination $entry.FullName))
+        $entryName = $entry.FullName.Replace('\', '/')
+        if ($entryName.Contains(':')) { throw 'Unsafe ZIP path.' }
+        if ($entryName -eq ($top[0] + '/SegRef3D.exe')) { $hasExecutable = $true }
+        $target = [IO.Path]::GetFullPath((Join-Path $destination $entryName))
         if (-not $target.StartsWith($destination.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Unsafe ZIP path.' }
         if (-not $seen.Add($target)) { throw 'Duplicate ZIP path.' }
-        $vendorLicense = $entry.FullName -match '\.dist-info/licenses/'
-        if (-not $vendorLicense -and $entry.FullName -match '(^|/)(__pycache__|\.pytest_cache|\.git|tests|test)/|\.(pfx|p12|key|pyc|pyo|pdb|dmp|ipynb)$') { throw "Unexpected release artifact: $($entry.FullName)" }
+        $vendorLicense = $entryName -match '\.dist-info/licenses/'
+        if (-not $vendorLicense -and $entryName -match '(^|/)(__pycache__|\.pytest_cache|\.git|tests|test)/|\.(pfx|p12|key|pyc|pyo|pdb|dmp|ipynb)$') { throw "Unexpected release artifact: $entryName" }
     }
-    if (-not $archive.GetEntry($top[0] + '/SegRef3D.exe')) { throw 'SegRef3D.exe missing.' }
+    if (-not $hasExecutable) { throw 'SegRef3D.exe missing.' }
 } finally { $archive.Dispose() }
 [IO.Compression.ZipFile]::ExtractToDirectory($zipPathResolved, $destination)
 $root = Join-Path $destination $top[0]

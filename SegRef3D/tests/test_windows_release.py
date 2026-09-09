@@ -54,6 +54,11 @@ class WindowsReleaseTests(unittest.TestCase):
                 self.assertIsNone(archive.testzip())
                 info = archive.read(root.name + "/release-info.json").decode("utf-8-sig")
                 self.assertIn('"unsigned"', info)
+            extraction = Path(temp) / "extracted"
+            verify = subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(ROOT / "scripts/verify_windows_release.ps1"), "-ZipPath", str(archive_path), "-ExtractDir", str(extraction)], capture_output=True)
+            self.assertEqual(verify.returncode, 0, verify.stderr.decode(errors="replace"))
+            self.assertEqual((extraction / root.name / "SegRef3D.exe").read_bytes(), (root / "SegRef3D.exe").read_bytes())
+            self.assertTrue((extraction / "verification.json").is_file())
 
 
 if __name__ == "__main__":
