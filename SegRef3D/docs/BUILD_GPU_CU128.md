@@ -2,9 +2,17 @@
 
 For signature inventory, production certificate setup, third-party binary review,
 and the required order of signing and packaging, see [Windows signing](WINDOWS_SIGNING.md).
-`SIGNING_ENABLED=0` is the default development mode; `RELEASE_BUILD=1` requires
-`SIGNING_ENABLED=1`. Final ZIP names now end in `-signed.zip` or `-unsigned.zip`.
-The build preflights VTK imports and refuses to package when final VTK/GPU checks fail.
+`SIGNING_ENABLED=0` is the default development mode. `RELEASE_BUILD=1` requires
+signing or explicit `ALLOW_UNSIGNED_RELEASE=1`. Formal ZIP names follow
+`SegRef3D-Local-GPU-v<version>-Windows.zip`; `release-info.json` records signing status.
+Development ZIPs retain the `-signed.zip` / `-unsigned.zip` suffix.
+For the explicitly authorized unsigned v1.3.1 release, set `RELEASE_BUILD=1`,
+`ALLOW_UNSIGNED_RELEASE=1`, and `SIGNING_ENABLED=0`. After packaging, run:
+
+```powershell
+.\scripts\verify_windows_release.ps1 -ZipPath .\dist\SegRef3D-Local-GPU-v1.3.1-Windows.zip -ExtractDir .\dist\verify-v1.3.1 -RuntimeChecks
+```
+The build preflights VTK imports; final VTK/GPU/GUI checks run on the extracted ZIP.
 
 This build profile is for NVIDIA GPU compatibility, including RTX 50-series /
 Blackwell GPUs such as RTX 5080 Laptop GPU (`sm_120`).

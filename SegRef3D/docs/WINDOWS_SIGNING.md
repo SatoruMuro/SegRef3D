@@ -78,10 +78,12 @@ $env:SIGNING_TIMESTAMP_URL = '<CAが提供するRFC3161 timestamp URL>'
 3. 全PEの診断と許可リストを確認する。未レビュー／不正な署名が1件でもあれば、署名開始前に停止する。
 4. 有効なvendor署名を検証し、対象の未署名PEだけを署名する。署名・timestamp・検証の失敗や警告はエラーとする。
 5. 全PEの署名を再検証し、vendorファイルのハッシュが変わっていないことを確認する。部分的に署名して失敗したstagingはリリースに使わず、原因を解消してクリーンビルドする。
-6. 最終バイナリで `--vtk-check` と `--gpu-check` を実行し、成功後にZIPとSHA-256を生成する。ZIPは `-signed.zip` または `-unsigned.zip` と明示する。既存ZIPは上書きしない。
-7. 別のWindows 11検証機にZIPを展開し、SAC有効のまま起動・編集・VTK・DICOM・実GPUのSAM2を確認する。CodeIntegrityログの新しいブロックも調べる。合格した同じZIPだけを公開する。
+6. `prepare_windows_release.py` でテスト・キャッシュ・debugデータを除き、指定されたREADME・署名資料を同梱する。署名工程後にZIPとSHA-256を生成する。正式名は `SegRef3D-Local-GPU-v<version>-Windows.zip`。署名状態は `release-info.json` に記録し、既存ZIPは上書きしない。
+7. ZIPを別ディレクトリへ展開し、`verify_windows_release.ps1 -RuntimeChecks` で最終バイナリの `--vtk-check`・`--gpu-check`・GUI起動を確認する。SACによるブロックも検証結果に記録し、成功とは扱わない。
 
-証明書なしの開発ビルドは `SIGNING_ENABLED=0`（既定）で可能。`RELEASE_BUILD=1` との併用はエラー。未署名でもVTK／GPU診断が失敗すればZIPは生成しない。`--gpu-check` はGPU非搭載時に成功終了する既存仕様のため、終了コードだけでGPU推論成功と判断してはいけない。実GPUでの検証は公開前の必須作業である。
+証明書なしの開発ビルドは `SIGNING_ENABLED=0`（既定）で可能。正式未署名配布を明示的に承認した場合だけ、`RELEASE_BUILD=1`、`ALLOW_UNSIGNED_RELEASE=1`、`SIGNING_ENABLED=0` を併用する。明示フラグなしの未署名正式ビルドは拒否する。2026-09-09のv1.3.1はこの未署名配布に該当し、実機・実GPU検証は配布物完成後に行う運用を採用した。SAC有効PCでの既知のブロックを、この未署名配布全体の中止条件にはしない。
+
+`--gpu-check` はGPU非搭載時に成功終了する既存仕様のため、終了コードだけでGPU推論成功と判断してはいけない。実GPUのSAM2と共同研究者の実DICOMは今回の正式ZIPを使って後から確認する。証明書導入後のsigned releaseでは、第三者許可リスト・SignTool・timestamp・全PE検証を省略しない。
 
 `VENV_DIR` で既存環境を指定でき、`SKIP_ENV_SETUP=1` はその環境のpip再インストールを省略する。productionで使う際は、その環境がレビュー済みの依存に一致することを確認する。
 

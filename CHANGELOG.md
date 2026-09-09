@@ -3,6 +3,18 @@
 Release and development history moved from the main README. Dates and descriptions before this
 move are preserved in their original language.
 
+## 2026.9.9 — Local GPU v1.3.1 and Lite DICOM Job ZIP fix
+
+- Fixed Qt graphics-item ownership and cleanup around Auto Erase, Box Prompt,
+  scene refresh and mode changes, without changing segmentation or mask formats.
+- Fixed Lite DICOM Create Input ZIP by exporting the existing image-only display
+  canvas, including window/level, brightness and contrast. Job ZIP schema is unchanged.
+- Added Windows signature audit, guarded signing, formal ZIP preparation and
+  post-extraction verification. This release is explicitly unsigned; Smart App
+  Control blocking of internal VTK PYDs remains a documented known issue.
+- Bumped the Local GPU patch version to distinguish these fixes from published
+  v1.3.0. The published Local CPU v1.2.6 artifact and download link are unchanged.
+
 ## 2026.9.1 — InferRef3D MVP (local implementation)
 
 - Added SegRef3D Lite **Custom Model** workflow for strict browser-local validation of

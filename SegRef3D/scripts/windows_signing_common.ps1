@@ -1,5 +1,9 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+# Python/CMD can inherit a PowerShell 7 PSModulePath when launching Windows
+# PowerShell 5.1. Bind the security cmdlets to this host's own standard module.
+Import-Module (Join-Path $PSHOME 'Modules/Microsoft.PowerShell.Security/Microsoft.PowerShell.Security.psd1') -ErrorAction Stop
+Import-Module (Join-Path $PSHOME 'Modules/Microsoft.PowerShell.Utility/Microsoft.PowerShell.Utility.psd1') -ErrorAction Stop
 
 function Get-PeSignatureTable {
     param([Parameter(Mandatory)][string]$DistDir)

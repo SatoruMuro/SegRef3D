@@ -5,8 +5,8 @@ cd /d "%~dp0"
 
 if "%VENV_DIR%"=="" set "VENV_DIR=.venv-gpu-cu128"
 if "%SIGNING_ENABLED%"=="" set "SIGNING_ENABLED=0"
-if "%RELEASE_BUILD%"=="1" if not "%SIGNING_ENABLED%"=="1" (
-    echo Production release requires SIGNING_ENABLED=1.
+if "%RELEASE_BUILD%"=="1" if not "%SIGNING_ENABLED%"=="1" if not "%ALLOW_UNSIGNED_RELEASE%"=="1" (
+    echo Release requires signing or explicit ALLOW_UNSIGNED_RELEASE=1.
     exit /b 5
 )
 if "%PYTHON_EXE%"=="" set "PYTHON_EXE=python"
@@ -153,6 +153,8 @@ python tools\prepare_windows_gpu_dist.py "dist\%APP_NAME%" --check-only
 if errorlevel 1 exit /b 1
 python tools\audit_windows_gpu_dlls.py "dist\%APP_NAME%"
 if errorlevel 1 exit /b 1
+python tools\prepare_windows_release.py "dist\%APP_NAME%"
+if errorlevel 1 exit /b 1
 
 echo.
 echo === Signing policy and final ZIP ===
@@ -162,7 +164,8 @@ if errorlevel 1 exit /b 1
 echo.
 echo Build complete:
 echo %CD%\dist\%APP_NAME%\SegRef3D.exe
-echo %CD%\dist\%APP_NAME%-signed.zip or %APP_NAME%-unsigned.zip
+echo %CD%\dist\%APP_NAME%.zip for RELEASE_BUILD=1
+echo Signing status is recorded in release-info.json and README.md.
 echo.
 echo To verify startup diagnostics:
 echo "%CD%\dist\%APP_NAME%\SegRef3D.exe"

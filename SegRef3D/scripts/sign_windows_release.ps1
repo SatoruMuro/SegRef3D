@@ -24,7 +24,7 @@ $plan = @($before | ForEach-Object {
 })
 $plan | Export-Csv -LiteralPath (Join-Path $ReportDir 'before.csv') -NoTypeInformation -Encoding UTF8
 $plan | Group-Object Action | Select-Object Count, Name | Format-Table
-if ($AuditOnly) { Write-Host 'Audit only: no files signed; NeedsReview/BlockedSignature prevent release.'; return }
+if ($AuditOnly) { Write-Host 'Audit only: no files signed; NeedsReview/BlockedSignature prevent a signed release.'; return }
 if ($env:SIGNING_ENABLED -cne '1') { throw 'Set SIGNING_ENABLED=1 explicitly to sign.' }
 if ($plan | Where-Object { $_.Action -in 'NeedsReview', 'BlockedSignature' }) { throw 'Preflight blocked. Review before.csv; no files have been signed.' }
 if (-not $SignTool) { $SignTool = (Get-Command signtool.exe -ErrorAction Stop).Source }

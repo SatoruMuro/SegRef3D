@@ -125,12 +125,15 @@ identifiable patient information into a third-party AI service.
 
 ## Troubleshooting: Windows 11 blocks an internal PYD
 
-The current Local GPU distribution may show `VTK preview unavailable`,
-`DLL load failed`, or “blocked by an application control policy”
+The current Local GPU distribution is unsigned and may show `VTK preview unavailable`,
+`DLL load failed while importing vtkInteractionStyle`, or “blocked by an application control policy”
 (「アプリケーション制御ポリシーによってこのファイルがブロックされました」)
 when Smart App Control blocks an internal `.pyd`. In Event Viewer, check
 `Microsoft → Windows → CodeIntegrity → Operational` for the affected file and time.
-An antivirus allowing the EXE does not necessarily allow its DLL/PYD dependencies.
+The reported event identified `vtkInteractionWidgets.cp312-win_amd64.pyd` as not meeting
+Enterprise signing level requirements. An antivirus allowing the EXE does not
+necessarily allow its DLL/PYD dependencies. Disabling SAC allowed startup on the
+reported PC; this is a diagnosis/temporary workaround, not a requirement.
 
 The long-term remedy is code signing that covers bundled native binaries; see the
 [signing and release design](SegRef3D/docs/WINDOWS_SIGNING.md).
