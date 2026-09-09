@@ -48,11 +48,15 @@ class BuildEditionTests(unittest.TestCase):
 
         prepare = 'python tools\\prepare_windows_gpu_dist.py "dist\\%APP_NAME%"'
         audit = 'python tools\\audit_windows_gpu_dlls.py "dist\\%APP_NAME%"'
-        frozen_check = '"dist\\%APP_NAME%\\SegRef3D.exe" --gpu-check'
+        package = (ROOT / "scripts" / "package_windows_release.ps1").read_text()
         self.assertIn(prepare, gpu)
         self.assertIn(audit, gpu)
-        self.assertIn(frozen_check, gpu)
-        self.assertLess(gpu.index(frozen_check), gpu.index("Compress-Archive"))
+        self.assertIn("--noupx", gpu)
+        self.assertLess(gpu.index(audit), gpu.index("package_windows_release.ps1"))
+        self.assertLess(package.index("sign_windows_release.ps1"), package.index("--vtk-check"))
+        self.assertLess(package.index("--gpu-check"), package.index("CreateFromDirectory"))
+        self.assertIn("SIGNING_ENABLED", package)
+        self.assertIn("RELEASE_BUILD", package)
 
     def test_gpu_runtime_hook_preloads_authoritative_msvc_runtime(self):
         hook = (ROOT / "tools" / "pyi_local_gpu.py").read_text(encoding="utf-8")

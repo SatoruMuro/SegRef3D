@@ -3,12 +3,17 @@ setlocal
 
 cd /d "%~dp0"
 
-set "VENV_DIR=.venv-gpu-cu128"
+if "%VENV_DIR%"=="" set "VENV_DIR=.venv-gpu-cu128"
+if "%SIGNING_ENABLED%"=="" set "SIGNING_ENABLED=0"
+if "%RELEASE_BUILD%"=="1" if not "%SIGNING_ENABLED%"=="1" (
+    echo Production release requires SIGNING_ENABLED=1.
+    exit /b 5
+)
 if "%PYTHON_EXE%"=="" set "PYTHON_EXE=python"
 
 echo === SegRef3D Local GPU CUDA 12.8 Build ===
 echo Python: %PYTHON_EXE%
-echo Venv: %CD%\%VENV_DIR%
+echo Venv: %VENV_DIR%
 
 if not exist "%VENV_DIR%\Scripts\python.exe" (
     "%PYTHON_EXE%" -m venv "%VENV_DIR%"
@@ -18,6 +23,8 @@ if not exist "%VENV_DIR%\Scripts\python.exe" (
 call "%VENV_DIR%\Scripts\activate.bat"
 if errorlevel 1 exit /b 1
 
+if "%SKIP_ENV_SETUP%"=="1" goto environment_ready
+
 python -m pip install --upgrade pip setuptools wheel
 if errorlevel 1 exit /b 1
 
@@ -26,6 +33,8 @@ if errorlevel 1 exit /b 1
 
 python -m pip install -r requirements\requirements-gpu-cu128.txt
 if errorlevel 1 exit /b 1
+
+:environment_ready
 
 for /f "tokens=2 delims==" %%i in ('findstr /b "__version__" SegRef3D.py') do set "VERSION=%%i"
 set "VERSION=%VERSION: =%"
@@ -64,6 +73,10 @@ if errorlevel 3 (
 )
 
 echo.
+echo === Required VTK import preflight ===
+python tools\check_windows_vtk_import.py
+if errorlevel 1 exit /b 7
+
 echo === Building %APP_NAME% with PyInstaller onedir ===
 python -m PyInstaller SegRef3D.py ^
     --name "%PYINSTALLER_NAME%" ^
@@ -71,6 +84,7 @@ python -m PyInstaller SegRef3D.py ^
     --clean ^
     --onedir ^
     --console ^
+    --noupx ^
     --icon "SegRef3D.ico" ^
     --runtime-hook "tools\pyi_local_gpu.py" ^
     --paths "sam2pkg" ^
@@ -124,7 +138,10 @@ python -m PyInstaller SegRef3D.py ^
     --exclude-module flash_attn
 if errorlevel 1 exit /b 1
 
-if exist "dist\%APP_NAME%" rmdir /s /q "dist\%APP_NAME%"
+if exist "dist\%APP_NAME%" (
+    echo Distribution already exists. Archive it and use fresh staging before rebuilding.
+    exit /b 6
+)
 move "dist\%PYINSTALLER_NAME%" "dist\%APP_NAME%"
 if errorlevel 1 exit /b 1
 
@@ -138,22 +155,14 @@ python tools\audit_windows_gpu_dlls.py "dist\%APP_NAME%"
 if errorlevel 1 exit /b 1
 
 echo.
-echo === Required frozen GPU diagnostic ===
-"dist\%APP_NAME%\SegRef3D.exe" --gpu-check
-if errorlevel 1 (
-    echo Frozen SegRef3D.exe --gpu-check failed. The build will not be packaged.
-    exit /b 4
-)
-
-echo.
-echo === Creating zip ===
-powershell -NoProfile -ExecutionPolicy Bypass -Command "Compress-Archive -LiteralPath 'dist\%APP_NAME%' -DestinationPath 'dist\%APP_NAME%.zip' -Force"
+echo === Signing policy and final ZIP ===
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\package_windows_release.ps1 -DistDir "dist\%APP_NAME%"
 if errorlevel 1 exit /b 1
 
 echo.
 echo Build complete:
 echo %CD%\dist\%APP_NAME%\SegRef3D.exe
-echo %CD%\dist\%APP_NAME%.zip
+echo %CD%\dist\%APP_NAME%-signed.zip or %APP_NAME%-unsigned.zip
 echo.
 echo To verify startup diagnostics:
 echo "%CD%\dist\%APP_NAME%\SegRef3D.exe"

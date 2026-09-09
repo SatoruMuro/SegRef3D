@@ -1,5 +1,11 @@
 # SegRef3D Local GPU Build Notes
 
+For signature inventory, production certificate setup, third-party binary review,
+and the required order of signing and packaging, see [Windows signing](WINDOWS_SIGNING.md).
+`SIGNING_ENABLED=0` is the default development mode; `RELEASE_BUILD=1` requires
+`SIGNING_ENABLED=1`. Final ZIP names now end in `-signed.zip` or `-unsigned.zip`.
+The build preflights VTK imports and refuses to package when final VTK/GPU checks fail.
+
 This build profile is for NVIDIA GPU compatibility, including RTX 50-series /
 Blackwell GPUs such as RTX 5080 Laptop GPU (`sm_120`).
 

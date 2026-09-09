@@ -16,6 +16,14 @@ This folder contains the SegRef3D v1.2.2 desktop source backup.
 
 ## Notes
 
+Windows 11 Smart App Control may block bundled `.pyd` files with
+“blocked by an application control policy”, including VTK imports. Check
+Event Viewer → Microsoft → Windows → CodeIntegrity → Operational.
+See the [signing and release design](docs/WINDOWS_SIGNING.md). Signing only
+SegRef3D.exe does not cover dependency PYDs. Disabling Smart App Control is
+not a prerequisite; any temporary diagnostic workaround is subject to the
+device's security policy.
+
 - SAM2 checkpoints, `sam2pkg`, virtual environments, generated masks, and PyInstaller outputs are intentionally not tracked.
 - The Lite build is controlled by `SEGREF3D_DISABLE_SAM2=1` and should launch without Torch/SAM2.
 - The GPU build uses CUDA 12.8 PyTorch and checks for modern GPU architecture support such as `sm_120`.

@@ -121,6 +121,18 @@ Local版はZIP全体を展開して`SegRef3D.exe`を実行します。driver、f
 [変更履歴](CHANGELOG.md) · [旧版ダウンロード](Tutorial/LegacyDownloads.md) ·
 [AI向け詳細文書](llms.txt)
 
+## Troubleshooting: Windows 11で内部PYDがブロックされる
+
+現行のLocal GPU版では、Smart App Controlが内部の `.pyd` をブロックし、
+`VTK preview unavailable` や `DLL load failed`、
+「アプリケーション制御ポリシーによってこのファイルがブロックされました」
+と表示される場合があります。イベントビューアーの
+`Microsoft → Windows → CodeIntegrity → Operational` で、対象ファイルと発生時刻を確認してください。
+ウイルス対策ソフトがEXEを許可していても、この制御でDLL/PYDが拒否されることがあります。
+
+恒久対策は内部バイナリを含む配布物のコード署名です。[署名・リリース設計](SegRef3D/docs/WINDOWS_SIGNING.md)を参照してください。
+Smart App Controlの無効化は利用条件ではありません。無効化を検討する場合も、原因切り分けや現行版の暫定回避として扱い、管理者と端末のセキュリティ方針を確認してください。
+
 ## 関連ツール
 
 - [**SliceBridge**](https://satorumuro.github.io/SegRef3D/slice-bridge/)は、3D Slicerの**Fill between slices**で補間するためのNIfTI基準sliceを作成します。[使い方](Tutorial/SliceBridgeJP.md)

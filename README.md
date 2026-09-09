@@ -123,6 +123,21 @@ identifiable patient information into a third-party AI service.
 [View the release history](CHANGELOG.md) · [Legacy downloads](Tutorial/LegacyDownloads.md) ·
 [AI-readable documentation](llms.txt)
 
+## Troubleshooting: Windows 11 blocks an internal PYD
+
+The current Local GPU distribution may show `VTK preview unavailable`,
+`DLL load failed`, or “blocked by an application control policy”
+(「アプリケーション制御ポリシーによってこのファイルがブロックされました」)
+when Smart App Control blocks an internal `.pyd`. In Event Viewer, check
+`Microsoft → Windows → CodeIntegrity → Operational` for the affected file and time.
+An antivirus allowing the EXE does not necessarily allow its DLL/PYD dependencies.
+
+The long-term remedy is code signing that covers bundled native binaries; see the
+[signing and release design](SegRef3D/docs/WINDOWS_SIGNING.md).
+Disabling Smart App Control is not a requirement to use SegRef3D. Treat any such
+change only as diagnosis or a temporary workaround for the current release,
+subject to the device administrator's security policy.
+
 ## Related tools
 
 - [**SliceBridge**](https://satorumuro.github.io/SegRef3D/slice-bridge/) creates NIfTI anchor slices for interpolation with 3D Slicer's **Fill between slices**. [Guide](Tutorial/SliceBridgeEN.md)

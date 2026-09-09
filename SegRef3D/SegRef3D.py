@@ -42,6 +42,8 @@ from PyQt6.QtWidgets import (
     QTextEdit,
 )
 
+from graphics_lifecycle import EditorGraphicsScene, release_item
+
 from PyQt6.QtWidgets import QMessageBox
 
 from PyQt6.QtGui import (
@@ -194,13 +196,12 @@ except FileNotFoundError as exc:
 class CustomGraphicsView(QGraphicsView):
     def __init__(self, parent=None):
         super().__init__(parent)
-        scene = QGraphicsScene(self)
+        scene = EditorGraphicsScene(self)
         scene.setBackgroundBrush(QBrush(CANVAS_BACKGROUND_COLOR))
         self.setScene(scene)
         self.setBackgroundBrush(QBrush(CANVAS_BACKGROUND_COLOR))
         self.drawing = False
         self.current_path = None
-        self.paths = []  # 各画像ごとに後で辞書化予定
 
         # ✅ ペン色とペン本体
         self.pen_color = Qt.GlobalColor.gray  # ← pen_color を定義
@@ -220,12 +221,39 @@ class CustomGraphicsView(QGraphicsView):
         self.middle_mouse_panning = False
         self.last_pan_pos = None
         self.cursor_before_pan = None
+        scene.about_to_clear.connect(self.reset_interaction)
 
 
 
         
   
         
+    def reset_interaction(self):
+        """Cancel only unfinished input; completed paths belong to the scene/model."""
+        self.drawing = False
+        self.click_points = []
+        self.current_path = None
+        self.point_pick_callback = None
+        self.middle_mouse_panning = False
+        self.last_pan_pos = None
+        if self.cursor_before_pan is not None:
+            self.setCursor(self.cursor_before_pan)
+            self.cursor_before_pan = None
+        release_item(self, "temp_preview_item")
+        release_item(self, "current_path_item")
+
+    def _commit_drawing(self, path):
+        # A value copy survives synchronous mask updates / scene.clear() in save.
+        path = QPainterPath(path)
+        path.closeSubpath()
+        self.current_path_item.setPath(path)
+        # Completed display items are scene-owned, never cached in the view.
+        self.current_path_item = None
+        self.reset_interaction()
+        if self.save_callback:
+            self.save_callback(path)
+        self.scene().update()
+
     def create_smooth_path(self, points):
         if len(points) < 2:
             return QPainterPath()
@@ -343,14 +371,12 @@ class CustomGraphicsView(QGraphicsView):
             else:
                 # すべて削除されたらパスを消去
                 if self.current_path_item:
-                    self.scene().removeItem(self.current_path_item)
-                    self.current_path_item = None
+                    release_item(self, "current_path_item")
                     self.current_path = None
     
             # 仮プレビューも消す
             if self.temp_preview_item:
-                self.scene().removeItem(self.temp_preview_item)
-                self.temp_preview_item = None
+                release_item(self, "temp_preview_item")
     
             self.scene().update()
    
@@ -376,6 +402,7 @@ class CustomGraphicsView(QGraphicsView):
                 return
 
             if self.draw_mode == 'free':
+                self.reset_interaction()
                 self.drawing = True
                 self.current_path = QPainterPath(scene_pos)
                 self.current_path_item = QGraphicsPathItem()
@@ -402,8 +429,7 @@ class CustomGraphicsView(QGraphicsView):
     
                 # 仮プレビューの削除
                 if self.temp_preview_item:
-                    self.scene().removeItem(self.temp_preview_item)
-                    self.temp_preview_item = None
+                    release_item(self, "temp_preview_item")
     
             event.accept()
 
@@ -427,26 +453,6 @@ class CustomGraphicsView(QGraphicsView):
     
         # ✅ freeモード（従来の手描き）
         if self.draw_mode == 'free' and self.drawing:
-            if self.current_path is None or self.current_path_item is None:
-                print("[WARN] Drawing path or item is None. Cancelling drawing.")
-                self.drawing = False
-                return
-    
-            try:
-                # ⚠️ この行でRuntimeErrorを防止
-                if self.current_path_item.scene() is None:
-                    print("[WARN] current_path_item was removed from scene. Cancelling drawing.")
-                    self.current_path = None
-                    self.current_path_item = None
-                    self.drawing = False
-                    return
-            except RuntimeError:
-                print("[WARN] current_path_item already deleted. Cancelling drawing.")
-                self.current_path = None
-                self.current_path_item = None
-                self.drawing = False
-                return
-    
             self.current_path.lineTo(scene_pos)
             self.current_path_item.setPath(self.current_path)
     
@@ -455,14 +461,9 @@ class CustomGraphicsView(QGraphicsView):
             temp_points = self.click_points + [scene_pos]
             smooth_path = self.create_smooth_path(temp_points)
     
-            # 🔒 temp_preview_item の存在と有効性をチェック
-            if self.temp_preview_item:
-                if self.temp_preview_item.scene() is not None:
-                    self.temp_preview_item.setPath(smooth_path)
-                else:
-                    print("[WARN] temp_preview_item is deleted or invalid")
-                    self.temp_preview_item = None
-    
+            if self.temp_preview_item is not None:
+                self.temp_preview_item.setPath(smooth_path)
+
             if not self.temp_preview_item:
                 self.temp_preview_item = QGraphicsPathItem()
                 self.temp_preview_item.setPen(QPen(Qt.GlobalColor.gray, 1, Qt.PenStyle.DashLine))  # 仮表示は点線で
@@ -475,25 +476,9 @@ class CustomGraphicsView(QGraphicsView):
 
     
     def finalize_click_drawing(self):
-        if self.click_points and self.current_path_item:
-            smooth_path = self.create_smooth_path(self.click_points)
-            smooth_path.closeSubpath()
-            self.current_path_item.setPath(smooth_path)
-            self.paths.append(self.current_path_item)
-    
-            if self.save_callback:
-                self.save_callback(smooth_path)
-    
-            if self.temp_preview_item:
-                self.scene().removeItem(self.temp_preview_item)
-                self.temp_preview_item = None
-    
-            self.click_points = []
-            self.current_path = None
-            self.current_path_item = None
-            self.scene().update()
+        if self.click_points:
+            self._commit_drawing(self.create_smooth_path(self.click_points))
 
-                
     def mouseReleaseEvent(self, event: QMouseEvent):
         if event.button() == Qt.MouseButton.MiddleButton and self.middle_mouse_panning:
             self.middle_mouse_panning = False
@@ -506,15 +491,8 @@ class CustomGraphicsView(QGraphicsView):
 
         if self.draw_mode == 'free':
             if event.button() == Qt.MouseButton.LeftButton and self.drawing:
-                self.drawing = False
-                path = self.current_path_item.path()
-                path.closeSubpath()
-                self.current_path_item.setPath(path)
-                self.paths.append(self.current_path_item)
-                if self.save_callback:
-                    self.save_callback(self.current_path_item.path())
-                self.scene().update()
-    
+                self._commit_drawing(self.current_path)
+
         elif self.draw_mode in ['click', 'click_snap']:
             if event.button() == Qt.MouseButton.RightButton:
                 self.finalize_click_drawing()  # ← 共通処理に置き換え
@@ -741,9 +719,8 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         layout.insertWidget(index, self.graphicsView)
 
         # ✅ Scene を作成
-        self.scene = QGraphicsScene()
-        self.scene.setBackgroundBrush(QBrush(CANVAS_BACKGROUND_COLOR))
-        self.graphicsView.setScene(self.scene)
+        self.scene = self.graphicsView.scene()
+        self.scene.about_to_clear.connect(self._reset_scene_interaction)
         self.graphicsView.setBackgroundBrush(QBrush(CANVAS_BACKGROUND_COLOR))
 
         # ✅ チェックボックスのイベント接続
@@ -821,6 +798,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         
         self.combo_color.currentTextChanged.connect(self.update_pen_color)
         self.combo_draw_mode.currentTextChanged.connect(self.change_draw_mode)
+        self.combo_auto_apply_mode.currentTextChanged.connect(self.reset_editor_interaction)
         
 
 
@@ -2432,7 +2410,33 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
 
             
+    def _reset_scene_interaction(self, clear_scene=True):
+        """Clear transient overlays/points before scene destruction or replacement.
+
+        Keep the selected prompt tool on redraw, but restart its points on the
+        displayed slice. Confirmed prompt coordinates remain in box_per_frame.
+        """
+        for name in ("temp_box_item",
+                     "temp_crosshair_hline", "temp_crosshair_vline",
+                     "temp_line_item", "temp_measurement_line_item"):
+            release_item(self, name)
+        if clear_scene:
+            release_item(self, "confirmed_box_item")
+            self.pixmap_item = None
+        self.box_points = []
+        self.calibration_points = []
+        self.measurement_points = []
+        self.current_crosshair_pos = None
+
+    def reset_editor_interaction(self, *_args):
+        self.graphicsView.reset_interaction()
+        self._reset_scene_interaction(clear_scene=False)
+        self.box_mode = False
+        self.calibration_mode = False
+        self.measurement_mode = False
+
     def change_draw_mode(self, mode):
+        self.reset_editor_interaction()
         if mode == "Click (Snap)":
             self.graphicsView.draw_mode = "click_snap"
         elif mode == "Click":
@@ -2448,34 +2452,11 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
     
     def start_box_prompt_mode(self):
+        self.reset_editor_interaction()
+        release_item(self, "confirmed_box_item")
         self.box_mode = True
-        self.box_points = []
         print("[DEBUG] start_box_prompt_mode called")
 
-            
-        # クロスヘア仮線の初期化
-        self.temp_crosshair_hline = None
-        self.temp_crosshair_vline = None        
-    
-        # 以前の仮ボックスが残っていれば削除
-        if hasattr(self, "temp_box_item") and self.temp_box_item:
-            self.scene.removeItem(self.temp_box_item)
-            self.temp_box_item = None
-            
-     
-
-                    
-        # 🔸 確定ボックス削除（実線のやつ）
-        if hasattr(self, "confirmed_box_item"):
-            try:
-                if self.confirmed_box_item is not None and self.confirmed_box_item.scene() is not None:
-                    self.scene.removeItem(self.confirmed_box_item)
-            except RuntimeError:
-                print("[WARN] confirmed_box_item has been already deleted.")
-            self.confirmed_box_item = None
-            
-    
-    
         # 🔸 保存済みのボックス情報もリセット
         self.last_box_prompt = None
         self.last_used_box_px = None
@@ -2487,23 +2468,9 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         
     
     def clear_box(self):
-        # ✅ ボックスが表示されていれば削除
-        if hasattr(self, "confirmed_box_item") and self.confirmed_box_item:
-            try:
-                if self.confirmed_box_item.scene() is not None:
-                    self.scene.removeItem(self.confirmed_box_item)
-            except RuntimeError:
-                print("[WARN] confirmed_box_item has already been deleted.")
-            self.confirmed_box_item = None
-    
-        if hasattr(self, "temp_box_item") and self.temp_box_item:
-            try:
-                if self.temp_box_item.scene() is not None:
-                    self.scene.removeItem(self.temp_box_item)
-            except RuntimeError:
-                print("[WARN] temp_box_item has already been deleted.")
-            self.temp_box_item = None
-    
+        self.reset_editor_interaction()
+        release_item(self, "confirmed_box_item")
+
         # ✅ 状態を初期化
         self.box_points = []
         self.last_box_prompt = None
@@ -2599,12 +2566,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         
         # 🔸 表示されている確定ボックス（赤線）を削除
         if hasattr(self, "confirmed_box_item"):
-            try:
-                if self.confirmed_box_item is not None and self.confirmed_box_item.scene() is not None:
-                    self.scene.removeItem(self.confirmed_box_item)
-            except RuntimeError:
-                print("[WARN] confirmed_box_item has been already deleted.")
-            self.confirmed_box_item = None
+            release_item(self, "confirmed_box_item")
         
 
         
@@ -2618,8 +2580,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         
         # ✅ 仮ボックス（マウス移動中の点線）を削除
         if self.temp_box_item:
-            self.scene.removeItem(self.temp_box_item)
-            self.temp_box_item = None
+            release_item(self, "temp_box_item")
         
         self.display_current_image()
 
@@ -2682,12 +2643,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         
     def hide_confirmed_box(self):
         if hasattr(self, "confirmed_box_item"):
-            try:
-                if self.confirmed_box_item and self.confirmed_box_item.scene():
-                    self.scene.removeItem(self.confirmed_box_item)
-            except RuntimeError:
-                print("[WARN] confirmed_box_item has been already deleted.")
-            self.confirmed_box_item = None  # 表示だけ消す。中身のbox情報は残す
+            release_item(self, "confirmed_box_item")
 
 
     
@@ -2950,12 +2906,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
         # 🔸 表示されている確定ボックス（赤線）を削除
         if hasattr(self, "confirmed_box_item"):
-            try:
-                if self.confirmed_box_item is not None and self.confirmed_box_item.scene() is not None:
-                    self.scene.removeItem(self.confirmed_box_item)
-            except RuntimeError:
-                print("[WARN] confirmed_box_item has been already deleted.")
-            self.confirmed_box_item = None
+            release_item(self, "confirmed_box_item")
     
         # 🔸 ボックス情報をリセット
         self.last_box_prompt = None
@@ -3539,12 +3490,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
     
         # 確定ボックス削除
         if hasattr(self, "confirmed_box_item"):
-            try:
-                if self.confirmed_box_item is not None and self.confirmed_box_item.scene() is not None:
-                    self.scene.removeItem(self.confirmed_box_item)
-            except RuntimeError:
-                print("[WARN] confirmed_box_item has been already deleted.")
-            self.confirmed_box_item = None
+            release_item(self, "confirmed_box_item")
     
         # ボックス情報リセット
         self.last_box_prompt = None
@@ -3727,6 +3673,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         self.scene.setSceneRect(0, 0, 360, 180)
 
     def start_calibration(self):
+        self.reset_editor_interaction()
         self.display_current_image()
         self.calibration_mode = True
         self.calibration_points = []
@@ -3740,12 +3687,12 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
             
     def start_measurement_mode(self):
+        self.reset_editor_interaction()
         self.measurement_mode = True
         self.measurement_points = []
     
         if self.temp_measurement_line_item:
-            self.scene.removeItem(self.temp_measurement_line_item)
-            self.temp_measurement_line_item = None
+            release_item(self, "temp_measurement_line_item")
     
         self.label_status.setText("Click two points to measure distance.")
 
@@ -5582,6 +5529,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             box_item.setPen(QPen(Qt.GlobalColor.red, 2))
             box_item.setZValue(10)
             self.scene.addItem(box_item)
+            self.confirmed_box_item = box_item
     
         # ========= OpenCV グレースケールをスナップ用にセット =========
         gray = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
@@ -5758,8 +5706,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
                 p2 = self.graphicsView.mapToScene(event.pos())
         
                 if self.temp_box_item:
-                    self.scene.removeItem(self.temp_box_item)
-                    self.temp_box_item = None
+                    release_item(self, "temp_box_item")
         
                 rect = QRectF(p1, p2).normalized()
                 self.temp_box_item = QGraphicsRectItem(rect)
@@ -5783,9 +5730,9 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
                 
                 # 以前のクロスヘアを削除
                 if hasattr(self, "temp_crosshair_hline") and self.temp_crosshair_hline:
-                    self.scene.removeItem(self.temp_crosshair_hline)
+                    release_item(self, "temp_crosshair_hline")
                 if hasattr(self, "temp_crosshair_vline") and self.temp_crosshair_vline:
-                    self.scene.removeItem(self.temp_crosshair_vline)
+                    release_item(self, "temp_crosshair_vline")
                 
                 scene_rect = self.graphicsView.sceneRect()
                 
@@ -5819,7 +5766,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
                 p2 = self.graphicsView.mapToScene(event.pos())
         
                 if hasattr(self, "temp_line_item") and self.temp_line_item:
-                    self.scene.removeItem(self.temp_line_item)
+                    release_item(self, "temp_line_item")
         
                 path = QPainterPath()
                 path.moveTo(p1)
@@ -5838,7 +5785,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             
                 # 既存の仮線を削除
                 if self.temp_measurement_line_item:
-                    self.scene.removeItem(self.temp_measurement_line_item)
+                    release_item(self, "temp_measurement_line_item")
             
                 path = QPainterPath()
                 path.moveTo(p1)
@@ -5853,7 +5800,9 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             
 
         
-        elif event.type() == event.Type.MouseButtonPress and event.button() == Qt.MouseButton.LeftButton:
+        elif (event.type() == event.Type.MouseButtonPress
+              and source == self.graphicsView.viewport()
+              and event.button() == Qt.MouseButton.LeftButton):
             # ✅ マウスカーソルの現在位置を scene 座標に変換（ズレ防止）
             scene_pos = self.graphicsView.mapToScene(
                 self.graphicsView.viewport().mapFromGlobal(QCursor.pos())
@@ -5878,8 +5827,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
                     # 仮線削除
                     if hasattr(self, "temp_line_item") and self.temp_line_item:
-                        self.scene.removeItem(self.temp_line_item)
-                        self.temp_line_item = None
+                        release_item(self, "temp_line_item")
 
                     px_length = ((p1.x() - p2.x()) ** 2 + (p1.y() - p2.y()) ** 2) ** 0.5
                     real_length_mm = self.spin_mm_input.value()
@@ -5915,8 +5863,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             
                     # 仮線削除
                     if self.temp_measurement_line_item:
-                        self.scene.removeItem(self.temp_measurement_line_item)
-                        self.temp_measurement_line_item = None
+                        release_item(self, "temp_measurement_line_item")
             
                     # 長さ計算
                     px_length = ((p1.x() - p2.x()) ** 2 + (p1.y() - p2.y()) ** 2) ** 0.5
@@ -5951,7 +5898,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
                 if self.box_mode:
                     if len(self.box_points) == 0:
                         # ✅ 1点目はクロスヘア（狙った位置）
-                        if hasattr(self, "current_crosshair_pos"):
+                        if self.current_crosshair_pos is not None:
                             self.box_points.append(self.current_crosshair_pos)
                         else:
                             self.box_points.append(self.graphicsView.mapToScene(event.pos()))
@@ -5972,11 +5919,9 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
                 # 1点目クリック後 → クロスヘア削除
                 if len(self.box_points) == 1:
                     if hasattr(self, "temp_crosshair_hline") and self.temp_crosshair_hline:
-                        self.scene.removeItem(self.temp_crosshair_hline)
-                        self.temp_crosshair_hline = None
+                        release_item(self, "temp_crosshair_hline")
                     if hasattr(self, "temp_crosshair_vline") and self.temp_crosshair_vline:
-                        self.scene.removeItem(self.temp_crosshair_vline)
-                        self.temp_crosshair_vline = None
+                        release_item(self, "temp_crosshair_vline")
 
                 # 2点目クリック → ボックス確定
                 elif len(self.box_points) == 2:
@@ -5991,8 +5936,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
                 
                     # ✅ 仮ボックスがあれば削除
                     if self.temp_box_item:
-                        self.scene.removeItem(self.temp_box_item)
-                        self.temp_box_item = None
+                        release_item(self, "temp_box_item")
                 
                     # ✅ 終了処理
                     self.box_mode = False
@@ -7603,6 +7547,13 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
 
 if __name__ == "__main__":
+    if "--vtk-check" in sys.argv:
+        if vtk is None or QVTKRenderWindowInteractor is None:
+            print("[VTK] Required VTK preview imports failed.", flush=True)
+            sys.exit(3)
+        from vtkmodules import vtkInteractionStyle, vtkInteractionWidgets
+        print(f"[VTK] Import OK: {vtk.vtkVersion.GetVTKVersion()}", flush=True)
+        sys.exit(0)
     if "--gpu-check" in sys.argv:
         try:
             from gpu_runtime import (

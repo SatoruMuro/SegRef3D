@@ -28,3 +28,10 @@ SegRef3D/checkpoints/
 SegRef3D/sam_model/
 SegRef3D/sam2pkg/
 SegRef3D/ffmpeg_bin/
+
+# Signing material must stay outside the repository.
+*.pfx
+*.p12
+*.key
+*.pem
+*.cer
