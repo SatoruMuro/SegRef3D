@@ -3328,6 +3328,11 @@ svg {
     display: none;
   }
 
+  .header-actions .related-tool-link {
+    display: inline-flex;
+    white-space: nowrap;
+  }
+
   .command-bar {
     padding: 5px 7px;
   }
