@@ -25,8 +25,14 @@ Smart App ControlがEXEをブロックしており、起動成功を確認した
 Dropboxクラウド同期完了と新しい共有URLは未確認です。README等はこの配布情報を
 案内し、確認済みの共有URLが取得できるまでZIPの直接リンクは掲載しません。
 
-v1.3.1の同名差し替えは行いません。v1.3.2の配置・参照先更新後に、旧v1.3.1を
-broken buildとして通常の配布対象から外し、元のファイル名とハッシュを保存します。
+v1.3.2の配置・参照先更新・Pages公開後、旧v1.3.1を通常の配布フォルダから
+`50_SegRef3D/backup/20260910/broken-build-v1.3.1/` へ退避しました。
+同名差し替えや削除は行わず、元のZIP名・サイズ4,027,879,398 bytes・更新日時を
+記録しています。移動前後のSHA-256は
+`666005b0cfb01c6c09bb52da59bd78beb2855047c604085cf501cba53738de8a` で一致しました。
+退避先に `archive-record.json` と `README-BROKEN-BUILD.txt` を置き、起動不能の理由と
+v1.3.2への案内を記載しました。既存Dropbox共有リンクの有無・失効は未確認であり、
+ローカル移動によって共有リンクが失効したとは扱いません。
 
 ## 配布後の実機確認
 
@@ -65,6 +71,14 @@ instant3d bridge v5も保持しました。統合アプリをv48、offline cache
 ブラウザ検証はローカル配信した統合ソースを使用し、状態参照はテストサーバーだけで
 追加しています。公開アプリにテストAPIは含めません。結果はGit管理外の
 `build/verification/v132-*-browser/` と `v132-merge-*-tests.log` に保存しています。
+
+通常merge commitは `c5e871f38ff1a69b19211e1d145c5a7d16c98252` です。
+mainをこのmerge commitへ進めて通常pushしました。force push・rebase・履歴書き換えは行っていません。
+[Lite CI](https://github.com/SatoruMuro/SegRef3D/actions/runs/34442561263) と
+[Pages deploy](https://github.com/SatoruMuro/SegRef3D/actions/runs/34442560391) は成功しました。
+[公開Lite](https://satorumuro.github.io/SegRef3D/lite-web/) はHTTP 200で、公開app・service worker・
+DICOM source・instant3d bridge・demo definitions・構造物カタログの内容が検証済みmainと一致しました。
+CPU版の配布リンクは変更していません。
 
 ## 根本原因はARM64ホストのruntime DLLの混入
 
