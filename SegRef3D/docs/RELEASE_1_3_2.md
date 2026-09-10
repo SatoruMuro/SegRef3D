@@ -1,9 +1,11 @@
 # SegRef3D Local GPU v1.3.2 配布情報
 
 v1.3.1で報告された起動直後のWinError 193について、原因の特定、修正、
-v1.3.2の再ビルドとZIP整合性検証まで完了しました。ただし、展開したEXEの起動が
-この端末のSmart App Controlでブロックされ、**GUI・VTKの実起動検証は未完了**です。
-このZIPを検証済みの完成版とは扱わず、Dropboxへの正式配布も保留しています。
+v1.3.2の再ビルドとZIP整合性検証まで完了しました。2026-09-10、リリース方針を
+変更し、原因修正・自動テスト・全PE architecture検査・CRC・SHA-256検証を根拠に、
+このZIPを正式配布版としました。x64／NVIDIA実機での確認は配布後に実施します。
+**完成ZIPからのGUI・VTK起動と実GPU推論は未確認**です。ARM64の作業端末では
+Smart App ControlがEXEをブロックしており、起動成功を確認したという意味ではありません。
 
 | 項目 | 内容 |
 |---|---|
@@ -15,8 +17,22 @@ v1.3.2の再ビルドとZIP整合性検証まで完了しました。ただし�
 | 署名状態 | unsigned（Microsoft等の既存vendor署名は保持） |
 | 配布状況 | 作業環境のdistに作成済み。Dropbox未更新 |
 
-v1.3.1の同名差し替えは行っていません。起動確認を終えた新版ができる前に
-既存ZIPを整理しないという作業順序を守り、Dropbox上のv1.3.1もまだ変更していません。
+v1.3.1の同名差し替えは行いません。v1.3.2の配置・参照先更新後に、旧v1.3.1を
+broken buildとして通常の配布対象から外し、元のファイル名とハッシュを保存します。
+
+## 配布後の実機確認
+
+次の項目は自動テストやPE検査では代替できず、現時点では未確認です。
+
+- 通常のx64 Windowsで完成ZIPを新規展開し、PowerShellから引数なしで起動する。
+- WinError 193／bootstrap errorの再発がなく、GUIが表示され継続動作する。
+- VTK importとpreview、DICOM読み込み・スライス移動・Window/Level。
+- NVIDIA CUDAでのSAM2推論・tracking、mask生成・保存。
+- Auto Erase、Draw、Box Promptとの反復切替と描画後の保存。
+
+今回はこれらを正式配布の事前条件から外しました。production certificateは未導入で、
+署名基盤を維持したunsignedリリースです。SACによるEXE／PYDのポリシーブロックと、
+runtime architecture不一致によるWinError 193は別問題です。SACの無効化を利用条件にはしません。
 
 ## 根本原因はARM64ホストのruntime DLLの混入
 

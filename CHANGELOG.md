@@ -12,8 +12,9 @@ move are preserved in their original language.
 - Enable Seg CT/MRI for compatible DICOM CT/MR volumes in Lite and Local GPU,
   with modality metadata, generated NIfTI input and patient-space geometry validation.
 - Identify the v1.3.1 Windows GPU ZIP as unsuitable for native x64 distribution.
-  The rebuilt ZIP passed integrity checks; distribution is held pending startup
-  verification because this host's Smart App Control blocks the new unsigned EXE.
+  Release the unchanged v1.3.2 ZIP after architecture, CRC, hash and automated-test
+  checks. Native x64 startup, VTK and NVIDIA SAM2 verification remain post-release
+  checks; this ARM64 host's Smart App Control blocks the unsigned EXE.
 
 ## 2026.9.9 — Local GPU v1.3.1 and Lite DICOM Job ZIP fix
 
