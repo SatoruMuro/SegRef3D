@@ -49,13 +49,13 @@ test("offline cache uses the current UI asset generation", async () => {
   assert.match(html, /favicon\.ico/);
   assert.match(html, /apple-touch-icon\.png/);
   assert.match(html, /class="brand-icon" src="\.\/icon-192\.png"/);
-  assert.match(html, /app\.mjs\?v=49/);
-  assert.match(html, /<script type="module" src="\.\/app\.mjs\?v=49"><\/script>/);
+  assert.match(html, /app\.mjs\?v=50/);
+  assert.match(html, /<script type="module" src="\.\/app\.mjs\?v=50"><\/script>/);
   assert.match(html, /id="window-center"[^>]+min="-4096"[^>]+max="4095"/);
   assert.match(html, /id="window-width"[^>]+max="8192"/);
   assert.match(html, /TutorialSegRef3DLiteEN\.html/);
   assert.match(html, /AskAISegRef3D\.html/);
-  assert.match(worker, /segref3d-lite-web-v52/);
+  assert.match(worker, /segref3d-lite-web-v53/);
   assert.match(worker, /medical-geometry\.mjs\?v=3/);
   assert.match(worker, /mask-tools\.mjs\?v=20/);
   assert.match(worker, /styles\.css\?v=35/);
@@ -63,7 +63,7 @@ test("offline cache uses the current UI asset generation", async () => {
   assert.match(worker, /apple-touch-icon\.png/);
   assert.match(worker, /icon-192\.png/);
   assert.match(worker, /icon-512\.png/);
-  assert.match(worker, /app\.mjs\?v=49/);
+  assert.match(worker, /app\.mjs\?v=50/);
   assert.match(worker, /image-tools\.mjs\?v=26/);
   assert.match(worker, /medical-io\.mjs\?v=25/);
   assert.match(worker, /medical-source\.mjs\?v=2/);
@@ -72,7 +72,7 @@ test("offline cache uses the current UI asset generation", async () => {
   assert.match(worker, /mask-sequence\.mjs\?v=1/);
   assert.match(worker, /custom-model\.mjs\?v=1/);
   assert.match(worker, /workspace-ui\.mjs\?v=32/);
-  assert.match(worker, /instant3d-bridge\.mjs\?v=6/);
+  assert.match(worker, /instant3d-bridge\.mjs\?v=7/);
   assert.match(worker, /totalsegmentator_roi_catalog\.json/);
 });
 

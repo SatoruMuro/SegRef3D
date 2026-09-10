@@ -1,10 +1,10 @@
-const CACHE_NAME = "segref3d-lite-web-v52";
+const CACHE_NAME = "segref3d-lite-web-v53";
 // Demo images and volumes are downloaded only when selected; cache on demand.
 const APP_FILES = [
   "./",
   "./index.html",
   "./styles.css?v=35",
-  "./app.mjs?v=49",
+  "./app.mjs?v=50",
   "./workspace-ui.mjs?v=32",
   "./core.mjs?v=28",
   "./mask-sequence.mjs?v=1",
@@ -16,7 +16,7 @@ const APP_FILES = [
   "./training-export.mjs?v=2",
   "./custom-model.mjs?v=1",
   "./medical-geometry.mjs?v=3",
-  "./instant3d-bridge.mjs?v=6",
+  "./instant3d-bridge.mjs?v=7",
   "../resources/totalsegmentator_roi_catalog.json",
   "./segmentation-job.mjs?v=17",
   "./mask-tools.mjs?v=20",

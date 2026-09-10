@@ -5,6 +5,7 @@ import { readFile, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { gzipSync } from "node:zlib";
+import { createHash } from "node:crypto";
 import { parseZip, createZip } from "../zip.mjs";
 import { readNiftiTrainingVolume, createNiftiScalarVolume } from "../training-export.mjs";
 
@@ -42,6 +43,9 @@ try {
     await page.locator(format === "dicom" ? "#folder-input" : "#volume-input")
       .setInputFiles(path.join(fixtures, format === "dicom" ? modality : `${modality}.nii`));
     await page.waitForFunction(() => medicalTest.state.sourceVolume && !medicalTest.state.loading);
+    // Reproduce a source whose loader/restored session did not cache SHA-256.
+    // Never pre-seed the expected digest in the test.
+    await page.evaluate(() => { delete medicalTest.state.sourceVolume.sha256; });
     await page.locator('[data-tool-tab="ai"]').click();
     const expected = modality === "MR" ? "MRI" : "CT";
     if (format === "nifti") await page.locator("#instant3d-modality").selectOption(expected);
@@ -64,15 +68,27 @@ try {
     const manifest = JSON.parse(new TextDecoder().decode(entries.find(e=>e.name==='manifest.json').bytes));
     assert.doesNotMatch(JSON.stringify(manifest), /instant3d|segonweb/i);
     assert.ok(entries.every(e => !/instant3d|segonweb/i.test(e.name)));
-    const source = readNiftiTrainingVolume(entries.find(e=>e.name.startsWith('image/')).bytes);
+    const sourceBytes = entries.find(e=>e.name.startsWith('image/')).bytes;
+    assert.equal(manifest.source.sha256, createHash('sha256').update(sourceBytes).digest('hex'));
+    assert.equal(await page.evaluate(() => medicalTest.state.sourceVolume.sha256), manifest.source.sha256);
+    const source = readNiftiTrainingVolume(sourceBytes);
     assert.equal(manifest.source.modality, expected);
     assert.equal(manifest.objects[0].task, task);
     assert.deepEqual(source.shape, [6,5,4]);
     assert.equal(source.values[0], -1064);
     assert.equal(source.values[3*30+4*6+5], (29+300-20)*5-1024);
     const labels = new Uint8Array(120); labels[2*30+1*6+4] = labels[3*6+1] = 3;
+    // Match the published Colab result manifest (only inference voxels are synthetic).
+    const resultManifest = {
+      schema: manifest.schema, schema_version: manifest.schema_version,
+      request_id: manifest.request_id, status: 'success', source: manifest.source,
+      objects: manifest.objects,
+      result: { labelmap: 'labelmap/labels.nii.gz', label_png: [] },
+      software: { segct_mri: 'browser-fixture', totalsegmentator: 'synthetic-inference', python: 'fixture', torch: 'fixture' },
+      warnings: [], overlaps: [],
+    };
     const result = await createZip([
-      {name:'manifest.json', blob:new Blob([JSON.stringify({...manifest,status:'success'})])},
+      {name:'manifest.json', blob:new Blob([JSON.stringify(resultManifest)])},
       {name:'labelmap/labels.nii.gz', blob:new Blob([gzipSync(createNiftiScalarVolume({values:labels,width:6,height:5,depth:4,geometry:source.geometry}))])},
     ]);
     const resultPath = path.join(output, `${format}-${modality}-result.zip`);
@@ -81,6 +97,49 @@ try {
     await page.waitForFunction(() => medicalTest.state.images[2].mask[10] === 3);
     const masks = await page.evaluate(() => medicalTest.state.images.flatMap(i=>[...i.mask]));
     assert.deepEqual(masks, [...labels]);
+    // Reload the original input, then import without having exported any request
+    // in that load. Reject a single-voxel change before accepting original bytes.
+    await page.reload();
+    await page.waitForFunction(() => !!globalThis.medicalTest);
+    await page.locator(format === "dicom" ? "#folder-input" : "#volume-input")
+      .setInputFiles(path.join(fixtures, format === "dicom" ? modality : `${modality}.nii`));
+    await page.waitForFunction(() => medicalTest.state.sourceVolume && !medicalTest.state.loading);
+    if (format === "nifti") {
+      await page.locator('[data-tool-tab="ai"]').click();
+      await page.locator("#instant3d-modality").selectOption(expected);
+    }
+    await page.evaluate(() => {
+      medicalTest.state.images.forEach(i => i.mask.fill(0));
+      const source = medicalTest.state.sourceVolume;
+      delete source.sha256;
+      source.bytes[352] ^= 1;
+    });
+    await page.locator('#instant3d-result-input').setInputFiles(resultPath);
+    await page.waitForFunction(() => !medicalTest.state.loading && document.querySelector('#instant3d-result-input').value === '');
+    assert.match(alerts.pop(), /source checksum/);
+    assert.ok(await page.evaluate(() => medicalTest.state.images.every(i => i.mask.every(v => v === 0))));
+    await page.evaluate(() => {
+      const source = medicalTest.state.sourceVolume;
+      source.bytes[352] ^= 1;
+      delete source.sha256;
+    });
+    await page.locator('#instant3d-result-input').setInputFiles(resultPath);
+    await page.waitForFunction(() => medicalTest.state.images[2].mask[10] === 3);
+    assert.equal(await page.evaluate(() => medicalTest.state.sourceVolume.sha256), manifest.source.sha256);
+    assert.deepEqual(await page.evaluate(() => medicalTest.state.images.flatMap(i=>[...i.mask])), [...labels]);
+    // Legacy schema, same source identity and labels.
+    const legacy = await createZip([
+      {name:'manifest.json', blob:new Blob([JSON.stringify({...resultManifest, schema:'segref3d-instant3d-bridge'})])},
+      {name:'labelmap/labels.nii.gz', blob:new Blob([gzipSync(createNiftiScalarVolume({values:labels,width:6,height:5,depth:4,geometry:source.geometry}))])},
+    ]);
+    const legacyPath = path.join(output, `${format}-${modality}-legacy-result.zip`);
+    await writeFile(legacyPath, new Uint8Array(await legacy.arrayBuffer()));
+    await page.evaluate(() => {
+      medicalTest.state.images.forEach(i=>i.mask.fill(0));
+      delete medicalTest.state.sourceVolume.sha256;
+    });
+    await page.locator('#instant3d-result-input').setInputFiles(legacyPath);
+    await page.waitForFunction(() => medicalTest.state.images[2].mask[10] === 3);
     // Existing Project ZIP restores masks onto the loaded original medical source.
     const projectDownload = page.waitForEvent('download');
     await page.locator('#export-menu summary').click();
@@ -94,7 +153,7 @@ try {
     assert.deepEqual(await page.evaluate(() => medicalTest.state.images.flatMap(i=>[...i.mask])), [...labels]);
     assert.equal(await page.evaluate(() => medicalTest.state.sourceVolume.modality), expected);
     assert.deepEqual(errors, []); assert.deepEqual(alerts, []);
-    results.push({format,modality:expected,structures:await page.locator('#instant3d-available option').count(),export:true,import:true,project:true});
+    results.push({format,modality:expected,structures:await page.locator('#instant3d-available option').count(),export:true,import:true,reload:true,changedVoxelRejected:true,legacy:true,project:true});
     await context.close();
   }
   await writeFile(path.join(output,'results.json'),JSON.stringify(results,null,2));

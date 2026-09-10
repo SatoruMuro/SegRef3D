@@ -27,13 +27,15 @@ for (const modality of ["CT", "MRI"]) {
     test(`${modality} DICOM source retains scalars and mask coordinates for ${iop}`, async () => {
       const decoded = volume(modality, iop);
       const source = dicomMedicalSource(decoded);
-      source.sha256 = await sha256Hex(source.bytes);
+      assert.equal(source.sha256, undefined);
       const read = readNiftiTrainingVolume(source.bytes);
       assert.deepEqual([...read.values], decoded.frames.flatMap((f) => [...f.modalityPixels]));
       assert.deepEqual(read.shape, [6,5,4]);
       const task = modality === "MRI" ? "total_mr" : "total";
       const { manifest } = await createInstant3DRequest({ source, objects: [{object_id: 3, task, roi: "liver"}], catalog });
       assert.equal(manifest.source.modality, modality);
+      assert.equal(source.sha256, await sha256Hex(source.bytes));
+      assert.equal(manifest.source.sha256, source.sha256);
       assert.deepEqual(geometryMismatches(manifest.source, source), []);
       const values = new Uint8Array(120);
       values[2*30+1*6+4] = values[0*30+3*6+1] = 3;
@@ -42,15 +44,24 @@ for (const modality of ["CT", "MRI"]) {
         { name: "manifest.json", bytes: new TextEncoder().encode(JSON.stringify({ ...manifest, status: "success" })) },
         { name: "labelmap/labels.nii.gz", bytes },
       ];
-      const result = validateInstant3DResult(entries, source, catalog);
+      const result = await validateInstant3DResult(entries, source, catalog);
       const labels = parseNiftiLabelVolume(result.labelmap.bytes, "labels.nii");
       assert.deepEqual(geometryMismatches(manifest.source, labels, {includeChecksum: false}), []);
       assert.equal(labels.frames[2][1*6+4], 3);
       assert.equal(labels.frames[0][3*6+1], 3);
+      // A fresh load has no cached checksum and did not create this request.
+      const reloaded = dicomMedicalSource(decoded);
+      assert.equal(reloaded.sha256, undefined);
+      await validateInstant3DResult(entries, reloaded, catalog);
+      assert.equal(reloaded.sha256, manifest.source.sha256);
+      // Same geometry, only one scalar voxel differs: must still reject.
+      const different = volume(modality, iop);
+      different.frames[0].modalityPixels[0] += 1;
+      await assert.rejects(validateInstant3DResult(entries, dicomMedicalSource(different), catalog), /source checksum/);
       const shifted = { ...source, affine: source.affine.map((row) => [...row]) };
       shifted.affine[0][3] += 0.7;
-      assert.throws(() => validateInstant3DResult(entries, shifted, catalog), /affine/);
-      assert.throws(() => validateInstant3DResult(entries, { ...source, sha256: "bad" }, catalog), /checksum/);
+      await assert.rejects(() => validateInstant3DResult(entries, shifted, catalog), /affine/);
+      await assert.rejects(() => validateInstant3DResult(entries, { ...source, sha256: "bad" }, catalog), /checksum/);
     });
   }
 }

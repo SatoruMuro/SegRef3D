@@ -5,6 +5,7 @@ import test from "node:test";
 import {
   collapseInstant3DObjects,
   createInstant3DRequest,
+  sha256Hex,
   validateInstant3DObjects,
   validateInstant3DResult,
 } from "../instant3d-bridge.mjs";
@@ -119,7 +120,7 @@ test("shared rib groups have exact members and expand to official ROIs on one ob
   assert.equal(deduplicated.filter((item) => item.roi === "rib_left_1").length, 1);
 });
 
-test("rejects duplicate object IDs and source-mismatched results", () => {
+test("rejects duplicate object IDs and source-mismatched results", async () => {
   assert.throws(() => validateInstant3DObjects([objects[0], { ...objects[1], object_id: 2 }], catalog), /Duplicate object ID/);
   const bytes = sourceNifti();
   const volume = parseNiftiVolume(bytes, "source.nii");
@@ -140,11 +141,41 @@ test("rejects duplicate object IDs and source-mismatched results", () => {
     { name: "manifest.json", bytes: new TextEncoder().encode(JSON.stringify(resultManifest)) },
     { name: "labelmap/labels.nii.gz", bytes },
   ];
-  assert.throws(() => validateInstant3DResult(entries, source, catalog), /source checksum/);
+  await assert.rejects(() => validateInstant3DResult(entries, source, catalog), /source checksum/);
   resultManifest.source.sha256 = source.sha256;
   for (const schema of ["segref3d-instant3d-bridge", "segref3d-segct-mri-bridge"]) {
     resultManifest.schema = schema;
     entries[0].bytes = new TextEncoder().encode(JSON.stringify(resultManifest));
-    assert.equal(validateInstant3DResult(entries, source, catalog).manifest.schema, schema);
+    assert.equal((await validateInstant3DResult(entries, source, catalog)).manifest.schema, schema);
+  }
+});
+
+
+test("NIfTI checksum survives request/import and fresh reload for current and legacy results", async () => {
+  const bytes = sourceNifti();
+  const volume = parseNiftiVolume(bytes, "source.nii");
+  const makeSource = (data = bytes) => ({
+    format: "nifti", filename: "source.nii", bytes: data,
+    shape: [volume.width, volume.height, volume.depth], spacing: volume.spacing,
+    affine: volume.affine, orientation: volume.orientation,
+  });
+  const source = makeSource();
+  assert.equal(source.sha256, undefined);
+  const { manifest, entries: requestEntries } = await createInstant3DRequest({ source, objects, catalog });
+  assert.equal(source.sha256, await sha256Hex(requestEntries[1].bytes));
+  assert.equal(manifest.source.sha256, source.sha256);
+  for (const schema of ["segref3d-segct-mri-bridge", "segref3d-instant3d-bridge"]) {
+    const entries = [
+      { name: "manifest.json", bytes: new TextEncoder().encode(JSON.stringify({ ...manifest, schema, status: "success" })) },
+      { name: "labelmap/labels.nii.gz", bytes },
+    ];
+    await validateInstant3DResult(entries, source, catalog);
+    const reloaded = makeSource();
+    await validateInstant3DResult(entries, reloaded, catalog);
+    assert.equal(reloaded.sha256, source.sha256);
+    const changed = bytes.slice();
+    changed[352] ^= 1; // First uint8 voxel; preserve the entire NIfTI header.
+    await assert.rejects(validateInstant3DResult(entries, makeSource(changed), catalog), /source checksum/);
+    await assert.rejects(validateInstant3DResult(entries, { ...makeSource(), bytes: null }, catalog), /source volume bytes/);
   }
 });

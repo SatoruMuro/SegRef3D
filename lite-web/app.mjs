@@ -55,7 +55,7 @@ import {
   geometryMismatches as instant3DGeometryMismatches,
   sha256Hex,
   validateInstant3DResult,
-} from "./instant3d-bridge.mjs?v=6";
+} from "./instant3d-bridge.mjs?v=7";
 import {
   adjustedRgba,
   displayControlRange,
@@ -684,7 +684,7 @@ async function importInstant3DResult(file) {
   try {
     setLoading(true, "Importing SegCT/MRI result", "Opening ZIP");
     const entries = await parseZip(file);
-    const validated = validateInstant3DResult(entries, state.sourceVolume, state.instant3dCatalog);
+    const validated = await validateInstant3DResult(entries, state.sourceVolume, state.instant3dCatalog);
     const volume = parseNiftiLabelVolume(validated.labelmap.bytes, validated.labelmap.name);
     const geometryErrors = instant3DGeometryMismatches(validated.manifest.source, volume, { includeChecksum: false });
     if (geometryErrors.length) throw new Error(`Result labelmap geometry mismatch: ${geometryErrors.join(", ")}.`);

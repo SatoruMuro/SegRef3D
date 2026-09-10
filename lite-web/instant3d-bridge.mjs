@@ -122,6 +122,14 @@ export async function sha256Hex(bytes) {
   return [...new Uint8Array(digest)].map((value) => value.toString(16).padStart(2, "0")).join("");
 }
 
+// Source transport bytes are immutable for the lifetime of a loaded volume.
+// Cache on that source object, including sources recreated by a later reload.
+export async function ensureSourceChecksum(source) {
+  requireValue(source?.bytes, "The loaded source volume bytes are unavailable. Reload the original DICOM series or NIfTI volume.");
+  if (!source.sha256) source.sha256 = await sha256Hex(source.bytes);
+  return source.sha256;
+}
+
 export async function createInstant3DRequest({ source, objects, catalog, fast = false }) {
   requireValue(source?.format === "nifti" && source.bytes, "SegCT/MRI requires a compatible CT/MRI DICOM series or NIfTI volume.");
   requireValue(catalog?.schema_version === INSTANT3D_SCHEMA_VERSION, "The ROI catalog is unavailable or unsupported.");
@@ -133,7 +141,7 @@ export async function createInstant3DRequest({ source, objects, catalog, fast = 
     `Selected structures are not available for ${modality}.`);
   const extension = source.filename.toLowerCase().endsWith(".nii.gz") ? ".nii.gz" : ".nii";
   const sourceFilename = `source${extension}`;
-  const checksum = source.sha256 || await sha256Hex(source.bytes);
+  const checksum = await ensureSourceChecksum(source);
   const manifest = {
     schema: INSTANT3D_SCHEMA,
     schema_version: INSTANT3D_SCHEMA_VERSION,
@@ -176,7 +184,7 @@ export function geometryMismatches(expected, actual, { includeChecksum = true } 
   return [...new Set(mismatches)];
 }
 
-export function validateInstant3DResult(entries, currentSource, catalog) {
+export async function validateInstant3DResult(entries, currentSource, catalog) {
   const byName = new Map();
   for (const entry of entries) {
     const name = safeArchivePath(entry.name, "SegCT/MRI ZIP member");
@@ -195,6 +203,7 @@ export function validateInstant3DResult(entries, currentSource, catalog) {
   requireValue(manifest.status === "success", "SegCT/MRI result status is not success.");
   manifest.objects = validateInstant3DObjects(manifest.objects, catalog);
   requireValue(currentSource?.format === "nifti", "Load the original DICOM series or NIfTI volume before importing its result.");
+  await ensureSourceChecksum(currentSource);
   const mismatches = geometryMismatches(manifest.source, currentSource);
   requireValue(mismatches.length === 0,
     `SegCT/MRI result does not match the loaded volume: ${mismatches.join(", ")}.`);
