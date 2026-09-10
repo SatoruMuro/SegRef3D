@@ -15,7 +15,15 @@ Smart App ControlがEXEをブロックしており、起動成功を確認した
 | ビルド元commit | `c350e71960bcc77c59f9a5648c0dbbb378937c16` |
 | PE数／ZIP entry数 | 911／18,753 |
 | 署名状態 | unsigned（Microsoft等の既存vendor署名は保持） |
-| 配布状況 | 作業環境のdistに作成済み。Dropbox未更新 |
+| 配布状況 | 2026-09-10、既存Dropbox配布フォルダへコピー・照合済み |
+
+正式ZIPは再圧縮・同名差し替えをせず、検証した完成物を
+`50_SegRef3D/GitHubDownload/SegRef3D-Local-GPU-v1.3.2-Windows.zip` へ新規コピーしました。
+コピー前後のサイズは3,998,870,575 bytes、SHA-256は上表の値で完全一致し、
+既存ファイルの上書きはありません。記録はGit管理外の
+`build/verification/dropbox-v132-copy.json` に保存しました。
+Dropboxクラウド同期完了と新しい共有URLは未確認です。README等はこの配布情報を
+案内し、確認済みの共有URLが取得できるまでZIPの直接リンクは掲載しません。
 
 v1.3.1の同名差し替えは行いません。v1.3.2の配置・参照先更新後に、旧v1.3.1を
 broken buildとして通常の配布対象から外し、元のファイル名とハッシュを保存します。
@@ -148,7 +156,7 @@ version 14.50.35719.0、Microsoftの埋め込み署名Validです。SHA-256:
 | dist／ZIP化対象の監査 | `6d987d8c…ca18758` | `18414685…d7775b2` |
 | ZIP内 | 同一 | 同一 |
 | 別フォルダへの展開後 | 同一 | 同一 |
-| Dropbox配布先ZIP内 | 同一 | 未コピー |
+| Dropbox配布先ZIP内 | 同一 | ZIP全体のSHA-256が元ZIPと一致 |
 
 完全なhashは上記本文と、Git管理外の`build/verification-132/final-integrity.json`、
 `original-comparison.json`に保存しています。
