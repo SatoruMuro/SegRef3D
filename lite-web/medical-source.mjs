@@ -9,7 +9,7 @@ export function dicomMedicalSource(volume) {
     throw new Error("DICOM Modality must be CT or MR and consistent throughout the series.");
   }
   const { width, height, depth, frames, geometry } = volume;
-  if (volume.hasModalityLut) throw new Error("DICOM Modality LUT Sequence is not supported for Seg CT/MRI in Lite.");
+  if (volume.hasModalityLut) throw new Error("DICOM Modality LUT Sequence is not supported for SegCT/MRI in Lite.");
   const a = geometry.affine;
   const determinant = a[0][0] * (a[1][1] * a[2][2] - a[1][2] * a[2][1])
     - a[0][1] * (a[1][0] * a[2][2] - a[1][2] * a[2][0])

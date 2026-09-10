@@ -129,8 +129,8 @@ identifiable patient information into a third-party AI service.
 | Watch the basic workflow | [Tutorial video](https://youtu.be/JModwfnBTYU) |
 | Learn the complete desktop workflow | [Full SegRef3D tutorial](Tutorial/TutorialSegRef3DEN.md) |
 | Work with serial histology | [Registration / serial section guide](Tutorial/Registration.md) |
-| Use AI for arbitrary structures | [Seg Anything tutorial](Tutorial/TutorialSegOnWebEN.md) |
-| Segment supported CT/MRI anatomy | [Seg CT/MRI workflow](lite-web/README.md#seg-ctmri-workflow) |
+| Use AI for arbitrary structures | [SegAnything tutorial](Tutorial/TutorialSegOnWebEN.md) |
+| Segment supported CT/MRI anatomy | [SegCT/MRI workflow](lite-web/README.md#seg-ctmri-workflow) |
 | Choose NIfTI, TIFF, STL, or CSV output | [Lite export tutorial](Tutorial/TutorialSegRef3DLiteEN.md#11-choose-an-export) |
 | Install a Windows Local edition | [Local installation guide](Tutorial/LocalInstallation.md) |
 

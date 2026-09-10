@@ -57,10 +57,13 @@ try {
     const downloaded = page.waitForEvent("download");
     await page.locator("#instant3d-warning-continue").click();
     const download = await downloaded;
+    assert.match(download.suggestedFilename(), /_segct_mri_request\.zip$/);
     const requestPath = path.join(output, `${format}-${modality}-request.zip`);
     await download.saveAs(requestPath);
     const entries = await parseZip(new Blob([await readFile(requestPath)]));
     const manifest = JSON.parse(new TextDecoder().decode(entries.find(e=>e.name==='manifest.json').bytes));
+    assert.doesNotMatch(JSON.stringify(manifest), /instant3d|segonweb/i);
+    assert.ok(entries.every(e => !/instant3d|segonweb/i.test(e.name)));
     const source = readNiftiTrainingVolume(entries.find(e=>e.name.startsWith('image/')).bytes);
     assert.equal(manifest.source.modality, expected);
     assert.equal(manifest.objects[0].task, task);

@@ -1522,7 +1522,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         value = str(dataset_identity or "").strip()
         if not value:
             return "name:SegRef3D"
-        if value.startswith("name:") or value.startswith("segonweb:"):
+        if value.startswith("name:") or value.startswith(("seganything:", "segonweb:")):
             return value
         return os.path.normcase(os.path.abspath(value))
 
@@ -1806,7 +1806,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         self.sam2_disabled_reason = reason
         message = reason or (
             "Local SAM2 is not included in SegRef3D Local CPU. "
-            "Use Seg Anything or SegRef3D Local GPU for SAM-based segmentation."
+            "Use SegAnything or SegRef3D Local GPU for SAM-based segmentation."
         )
 
         for btn in self.local_sam2_execution_buttons():
@@ -1821,7 +1821,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         # Job preparation and ZIP exchange do not require local PyTorch/SAM2.
         for btn in self.segonweb_job_buttons():
             btn.setEnabled(True)
-            btn.setToolTip("Available without local SAM2 for the Seg Anything workflow.")
+            btn.setToolTip("Available without local SAM2 for the SegAnything workflow.")
 
         # Keep cloud/web AI routes available in the lightweight build.
         for btn in (self.btn_seg_on_web, self.btn_instant3d_workflow, self.btn_instant3dweb):
@@ -1841,7 +1841,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         edition = os.environ.get("SEGREF3D_EDITION", "").strip().lower()
         lite_reason = (
             "Local SAM2 is not included in SegRef3D Local CPU. "
-            "Use Seg Anything or SegRef3D Local GPU for SAM-based segmentation."
+            "Use SegAnything or SegRef3D Local GPU for SAM-based segmentation."
         )
         gpu_failure = (
             "Local SAM2 initialization failed. "
@@ -1922,7 +1922,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         webbrowser.open(
             "https://satorumuro.github.io/SegRef3D/ColabNotebooks/segonweb.html"
         )
-        self.label_status.setText("Opening Seg Anything in Google Colab...")
+        self.label_status.setText("Opening SegAnything in Google Colab...")
             
     def open_instant3dweb(self):
         import webbrowser
@@ -1936,13 +1936,13 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         webbrowser.open(
             "https://satorumuro.github.io/SegRef3D/ColabNotebooks/segctmri.html"
         )
-        self.label_status.setText("Opening Seg CT/MRI in Google Colab...")
+        self.label_status.setText("Opening SegCT/MRI in Google Colab...")
 
     def show_instant3d_workflow(self):
         try:
             catalog = load_instant3d_roi_catalog()
         except Instant3DBridgeError as exc:
-            QMessageBox.warning(self, "Seg CT/MRI", str(exc))
+            QMessageBox.warning(self, "SegCT/MRI", str(exc))
             return
         dialog = Instant3DWorkflowDialog(
             catalog,
@@ -1975,7 +1975,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         if not self.source_nifti_path or not os.path.isfile(self.source_nifti_path):
             QMessageBox.information(
                 self,
-                "Seg CT/MRI",
+                "SegCT/MRI",
                 self.source_volume_error or "Load a compatible CT/MRI DICOM series or NIfTI volume.",
             )
             return
@@ -1984,13 +1984,13 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             original_path = next(iter(self.dicom_source_paths.values()), original_path)
         suggested = os.path.join(
             os.path.dirname(original_path),
-            f"{self.output_file_stem()}_instant3d_request.zip",
+            f"{self.output_file_stem()}_segct_mri_request.zip",
         )
         output_path, _ = QFileDialog.getSaveFileName(
-            self, "Export Seg CT/MRI Request", suggested, "ZIP Files (*.zip)"
+            self, "Export SegCT/MRI Request", suggested, "ZIP Files (*.zip)"
         )
         if not output_path:
-            self.label_status.setText("Seg CT/MRI request export canceled.")
+            self.label_status.setText("SegCT/MRI request export canceled.")
             return
         if not output_path.lower().endswith(".zip"):
             output_path += ".zip"
@@ -2003,18 +2003,18 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         except Exception as exc:
             message = str(exc) if isinstance(exc, Instant3DBridgeError) else f"Request export failed: {exc}"
             self.label_status.setText(message)
-            QMessageBox.warning(self, "Seg CT/MRI Export", message)
+            QMessageBox.warning(self, "SegCT/MRI Export", message)
             return
         self.label_status.setText(
-            f"Seg CT/MRI request created: {len(manifest['objects'])} anatomical ROI(s)."
+            f"SegCT/MRI request created: {len(manifest['objects'])} anatomical ROI(s)."
         )
         box = QMessageBox(self)
-        box.setWindowTitle("Seg CT/MRI Request Created")
+        box.setWindowTitle("SegCT/MRI Request Created")
         box.setText(
-            "Request ZIP created.\n\nNext:\n1. Open Seg CT/MRI\n2. Upload the ZIP\n"
-            "3. Download instant3d_result.zip\n4. Import it here"
+            "Request ZIP created.\n\nNext:\n1. Open SegCT/MRI\n2. Upload the ZIP\n"
+            "3. Download segct_mri_result.zip\n4. Import it here"
         )
-        open_button = box.addButton("Open Seg CT/MRI", QMessageBox.ButtonRole.AcceptRole)
+        open_button = box.addButton("Open SegCT/MRI", QMessageBox.ButtonRole.AcceptRole)
         box.addButton("Close", QMessageBox.ButtonRole.RejectRole)
         box.exec()
         if box.clickedButton() is open_button:
@@ -2023,14 +2023,14 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
     def import_instant3dweb2_result(self):
         if not self.source_nifti_path or not os.path.isfile(self.source_nifti_path):
             QMessageBox.information(
-                self, "Seg CT/MRI", self.source_volume_error or "Load the original DICOM series or NIfTI volume before importing its result ZIP."
+                self, "SegCT/MRI", self.source_volume_error or "Load the original DICOM series or NIfTI volume before importing its result ZIP."
             )
             return
         zip_path, _ = QFileDialog.getOpenFileName(
-            self, "Import Seg CT/MRI Result", "", "ZIP Files (*.zip)"
+            self, "Import SegCT/MRI Result", "", "ZIP Files (*.zip)"
         )
         if not zip_path:
-            self.label_status.setText("Seg CT/MRI result import canceled.")
+            self.label_status.setText("SegCT/MRI result import canceled.")
             return
         try:
             manifest, labelmap_bytes = validate_instant3d_result_zip(zip_path, self.source_nifti_path)
@@ -2038,7 +2038,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         except Exception as exc:
             message = str(exc) if isinstance(exc, Instant3DBridgeError) else f"Result import failed: {exc}"
             self.label_status.setText(message)
-            QMessageBox.warning(self, "Seg CT/MRI Import", message)
+            QMessageBox.warning(self, "SegCT/MRI Import", message)
             return
 
         keys = list(self.image_paths.keys())
@@ -2047,7 +2047,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         ):
             message = "Result labelmap dimensions do not match the loaded image sequence."
             self.label_status.setText(message)
-            QMessageBox.warning(self, "Seg CT/MRI Import", message)
+            QMessageBox.warning(self, "SegCT/MRI Import", message)
             return
         object_ids = {int(item["object_id"]) for item in manifest["objects"]}
         conflicts = any(
@@ -2070,7 +2070,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             elif box.clickedButton() is merge_button:
                 mode = "merge"
             else:
-                self.label_status.setText("Seg CT/MRI result import canceled; masks were not changed.")
+                self.label_status.setText("SegCT/MRI result import canceled; masks were not changed.")
                 return
 
         changes = {}
@@ -2095,14 +2095,14 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         self._apply_object_names_to_checkboxes()
         imported = self._commit_mask_transaction(
             changes,
-            f"Imported Seg CT/MRI result: {len(object_ids)} object(s), {mode} mode.",
+            f"Imported SegCT/MRI result: {len(object_ids)} object(s), {mode} mode.",
         )
         if not imported:
-            self.label_status.setText("Seg CT/MRI result contained no mask changes.")
+            self.label_status.setText("SegCT/MRI result contained no mask changes.")
         if manifest.get("overlaps"):
             QMessageBox.warning(
                 self,
-                "Seg CT/MRI Overlap",
+                "SegCT/MRI Overlap",
                 "Overlapping ROI voxels were detected. The merged labelmap uses lower object IDs first; "
                 "individual binary NIfTI masks remain in the result ZIP.",
             )
@@ -3123,12 +3123,12 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
         output_path, _ = QFileDialog.getSaveFileName(
             self,
-            "Create Seg Anything Input ZIP",
-            os.path.join(os.getcwd(), f"{self.output_file_stem()}_segonweb_input.zip"),
+            "Create SegAnything Input ZIP",
+            os.path.join(os.getcwd(), f"{self.output_file_stem()}_seganything_request.zip"),
             "ZIP Archives (*.zip)",
         )
         if not output_path:
-            self.label_status.setText("Seg Anything export canceled.")
+            self.label_status.setText("SegAnything export canceled.")
             return
         if not output_path.lower().endswith(".zip"):
             output_path += ".zip"
@@ -3148,19 +3148,19 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
                 source=source,
             )
         except (SegmentationJobError, OSError, ValueError) as exc:
-            self.label_status.setText(f"⚠ Seg Anything export failed: {exc}")
-            QMessageBox.warning(self, "Seg Anything Export Failed", str(exc))
+            self.label_status.setText(f"⚠ SegAnything export failed: {exc}")
+            QMessageBox.warning(self, "SegAnything Export Failed", str(exc))
             return
 
         self.label_status.setText(
-            f"Exported Seg Anything job: {manifest['images']['count']} images, "
+            f"Exported SegAnything job: {manifest['images']['count']} images, "
             f"{len(manifest['objects'])} object(s)."
         )
         QMessageBox.information(
             self,
-            "Seg Anything Job Exported",
-            f"Seg Anything input ZIP was created:\n{output_path}\n\n"
-            "Open Seg Anything, run all cells, and upload this ZIP.",
+            "SegAnything Job Exported",
+            f"SegAnything input ZIP was created:\n{output_path}\n\n"
+            "Open SegAnything, run all cells, and upload this ZIP.",
         )
 
 
@@ -3175,7 +3175,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         expected_keys = manifest["images"]["order"]
         if current_keys != expected_keys:
             raise SegmentationJobError(
-                "Image order mismatch between the current project and the Seg Anything result."
+                "Image order mismatch between the current project and the SegAnything result."
             )
         expected_size = (manifest["images"]["width"], manifest["images"]["height"])
         manifest_files = manifest["images"]["files"]
@@ -3201,9 +3201,9 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         elif not self.source_dataset_name:
             self.source_dataset_name = "SegRef3D"
         self.reset_autosave_label_dir(
-            f"segonweb:{project_name or self.source_dataset_name}"
+            f"seganything:{project_name or self.source_dataset_name}"
         )
-        output_dir = self._reset_session_temp_dir("segonweb_result_images")
+        output_dir = self._reset_session_temp_dir("seganything_result_images")
 
         restored_paths = {}
         restored_sizes = {}
@@ -3230,12 +3230,12 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
     def import_segonweb_result(self):
         zip_path, _ = QFileDialog.getOpenFileName(
             self,
-            "Import Seg Anything Result",
+            "Import SegAnything Result",
             "",
             "ZIP Archives (*.zip)",
         )
         if not zip_path:
-            self.label_status.setText("Seg Anything result import canceled.")
+            self.label_status.setText("SegAnything result import canceled.")
             return
 
         try:
@@ -3260,19 +3260,19 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
                     reply = QMessageBox.question(
                         self,
                         "Replace Label Masks",
-                        "Importing this Seg Anything result will replace the current label masks. Continue?",
+                        "Importing this SegAnything result will replace the current label masks. Continue?",
                         QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
                         QMessageBox.StandardButton.Cancel,
                     )
                     if reply != QMessageBox.StandardButton.Yes:
-                        self.label_status.setText("Seg Anything result import canceled.")
+                        self.label_status.setText("SegAnything result import canceled.")
                         return
 
                 if not self.image_paths:
                     self._restore_result_images(archive, manifest)
         except (SegmentationJobError, OSError, ValueError, zipfile.BadZipFile) as exc:
-            self.label_status.setText(f"⚠ Seg Anything result import failed: {exc}")
-            QMessageBox.warning(self, "Seg Anything Result Import Failed", str(exc))
+            self.label_status.setText(f"⚠ SegAnything result import failed: {exc}")
+            QMessageBox.warning(self, "SegAnything Result Import Failed", str(exc))
             return
 
         self.label_masks = incoming_masks
@@ -3300,7 +3300,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         self.update_checkboxes_based_on_used_colors()
         self.display_current_image()
         self.label_status.setText(
-            f"Imported Seg Anything result: {len(self.label_masks)} masks, "
+            f"Imported SegAnything result: {len(self.label_masks)} masks, "
             f"{len(self.batch_object_data)} object(s). Autosaved to: {self.output_label_dir}"
         )
         
@@ -4265,7 +4265,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             self.source_nifti_fingerprint = fingerprint
             self.source_volume_error = None
         except Exception as exc:
-            self.source_volume_error = f"Seg CT/MRI unavailable: {exc}"
+            self.source_volume_error = f"SegCT/MRI unavailable: {exc}"
 
     def _load_nifti_volume(self, source_path):
         """Load a 3D NIfTI as editable axial slices while retaining its exact source geometry."""

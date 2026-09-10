@@ -8,7 +8,7 @@ async function readLiteWebFile(name) {
   return readFile(new URL(name, liteWebRoot), "utf8");
 }
 
-test("local-processing UI and Seg Anything confirmation are wired into the app", async () => {
+test("local-processing UI and SegAnything confirmation are wired into the app", async () => {
   const [html, app] = await Promise.all([
     readLiteWebFile("index.html"),
     readLiteWebFile("app.mjs"),
@@ -19,8 +19,8 @@ test("local-processing UI and Seg Anything confirmation are wired into the app",
   assert.match(html, /id="segonweb-warning-dialog"/);
   assert.match(html, /<title>SegRef3D Lite<\/title>/);
   assert.doesNotMatch(html, /SegRef3D Lite Web/);
-  assert.match(html, />Seg Anything</);
-  assert.match(html, />Seg CT\/MRI</);
+  assert.match(html, />SegAnything</);
+  assert.match(html, />SegCT\/MRI</);
   assert.match(html, /id="export-training"[^>]*>Training Data ZIP<\/button>/);
   assert.match(html, /Training ZIP[^<]*local[^<]*DICOM headers[^<]*identifiable/i);
   assert.match(html, /ColabNotebooks\/segctmri\.html/);
@@ -30,7 +30,7 @@ test("local-processing UI and Seg Anything confirmation are wired into the app",
   assert.match(html, /not an independent clinical diagnosis/i);
   assert.doesNotMatch(html, />Seg on Web</);
   assert.doesNotMatch(html, />Instant3DWeb2/);
-  assert.match(html, /segonweb_input\.zip.*working image sequence/s);
+  assert.match(html, /seganything_request\.zip.*working image sequence/s);
   assert.match(app, /elements\.segOnWeb\.addEventListener\("click"/);
   assert.match(app, /event\.preventDefault\(\);[\s\S]*elements\.segonwebWarningDialog\.showModal\(\)/);
   assert.match(app, /elements\.exportTraining\.addEventListener\("click", exportTrainingDataZip\)/);
@@ -45,34 +45,34 @@ test("offline cache uses the current UI asset generation", async () => {
     readLiteWebFile("service-worker.js"),
   ]);
 
-  assert.match(html, /styles\.css\?v=34/);
+  assert.match(html, /styles\.css\?v=35/);
   assert.match(html, /favicon\.ico/);
   assert.match(html, /apple-touch-icon\.png/);
   assert.match(html, /class="brand-icon" src="\.\/icon-192\.png"/);
-  assert.match(html, /app\.mjs\?v=48/);
-  assert.match(html, /<script type="module" src="\.\/app\.mjs\?v=48"><\/script>/);
+  assert.match(html, /app\.mjs\?v=49/);
+  assert.match(html, /<script type="module" src="\.\/app\.mjs\?v=49"><\/script>/);
   assert.match(html, /id="window-center"[^>]+min="-4096"[^>]+max="4095"/);
   assert.match(html, /id="window-width"[^>]+max="8192"/);
   assert.match(html, /TutorialSegRef3DLiteEN\.html/);
   assert.match(html, /AskAISegRef3D\.html/);
-  assert.match(worker, /segref3d-lite-web-v51/);
+  assert.match(worker, /segref3d-lite-web-v52/);
   assert.match(worker, /medical-geometry\.mjs\?v=3/);
   assert.match(worker, /mask-tools\.mjs\?v=20/);
-  assert.match(worker, /styles\.css\?v=34/);
+  assert.match(worker, /styles\.css\?v=35/);
   assert.match(worker, /favicon\.ico/);
   assert.match(worker, /apple-touch-icon\.png/);
   assert.match(worker, /icon-192\.png/);
   assert.match(worker, /icon-512\.png/);
-  assert.match(worker, /app\.mjs\?v=48/);
+  assert.match(worker, /app\.mjs\?v=49/);
   assert.match(worker, /image-tools\.mjs\?v=26/);
   assert.match(worker, /medical-io\.mjs\?v=25/);
-  assert.match(worker, /medical-source\.mjs\?v=1/);
+  assert.match(worker, /medical-source\.mjs\?v=2/);
   assert.match(worker, /dicom-codec\.mjs\?v=1/);
   assert.match(worker, /training-export\.mjs\?v=2/);
   assert.match(worker, /mask-sequence\.mjs\?v=1/);
   assert.match(worker, /custom-model\.mjs\?v=1/);
-  assert.match(worker, /workspace-ui\.mjs\?v=31/);
-  assert.match(worker, /instant3d-bridge\.mjs\?v=5/);
+  assert.match(worker, /workspace-ui\.mjs\?v=32/);
+  assert.match(worker, /instant3d-bridge\.mjs\?v=6/);
   assert.match(worker, /totalsegmentator_roi_catalog\.json/);
 });
 

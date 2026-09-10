@@ -75,7 +75,7 @@ test("Demos use the normal sequence pipeline and load assets only on demand", as
     readFile(new URL("../service-worker.js", import.meta.url), "utf8"),
   ]);
   assert.match(html, /Load Apple Demo/);
-  assert.match(html, /Load RabbitCT Demo/);
+  assert.match(html, /Load Rabbit CT Demo/);
   assert.match(html, /id="demo-calibration-guide"/);
   assert.match(html, /id="demo-reference-value">100 mm/);
   assert.ok(html.indexOf('id="reference-length"') < html.indexOf('id="spacing-z"'));

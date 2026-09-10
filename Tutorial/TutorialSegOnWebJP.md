@@ -1,6 +1,6 @@
-# Seg Anything：SegRef3D Job ワークフロー
+# SegAnything：SegRef3D Job ワークフロー
 
-Seg Anythingは、Google ColabのGPUを計算backendとして利用します。Box Prompt、Prompt Frame、Tracking Rangeの設定はすべてSegRef3Dで行い、別のGradio画面は使用しません。
+SegAnythingは、Google ColabのGPUを計算backendとして利用します。Box Prompt、Prompt Frame、Tracking Rangeの設定はすべてSegRef3Dで行い、別のGradio画面は使用しません。
 
 ## 1. SegRef3Dでobjectを設定
 
@@ -17,31 +17,31 @@ Seg Anythingは、Google ColabのGPUを計算backendとして利用します。B
 
 ## 2. Job ZIPを出力
 
-**AI Segmentation > Seg Anything**から**Create Input ZIP**を押し、`segonweb_input.zip`を保存します。ZIPには作業用JPG画像系列と`manifest.json`が入ります。
+**AI Segmentation > SegAnything**から**Create Input ZIP**を押し、`seganything_request.zip`を保存します。ZIPには作業用JPG画像系列と`manifest.json`が入ります。
 
-## 3. Seg Anythingを実行
+## 3. SegAnythingを実行
 
-1. SegRef3Dの**Seg Anything**を押すか、[Seg Anything](https://satorumuro.github.io/SegRef3D/ColabNotebooks/segonweb.html)を開きます。
+1. SegRef3Dの**SegAnything**を押すか、[SegAnything](https://satorumuro.github.io/SegRef3D/ColabNotebooks/segonweb.html)を開きます。
 2. Colabで**ランタイム > ランタイムのタイプを変更 > T4 GPU > 保存**を選びます。
 3. **ランタイム > すべてのセルを実行**を選びます。
-4. upload欄が表示されたら`segonweb_input.zip`を選びます。
+4. upload欄が表示されたら`seganything_request.zip`を選びます。
 5. 各objectのforward/backward trackingが終わるまでnotebookを開いたまま待ちます。
-6. **Segmentation complete**になると、独立した最後のcellから`segref3d_result.zip`のdownloadがbrowserで自動的に始まります。
+6. **Segmentation complete**になると、独立した最後のcellから`seganything_result.zip`のdownloadがbrowserで自動的に始まります。
 
 処理中は、現在のstep、object、frame、全体進捗が表示されます。
 
 ## 4. 結果ZIPを読み込み
 
 1. SegRef3Dへ戻ります。
-2. **AI Segmentation > Seg Anything > Import Result ZIP**を押します。
-3. `segref3d_result.zip`を選びます。
+2. **AI Segmentation > SegAnything > Import Result ZIP**を押します。
+3. `seganything_result.zip`を選びます。
 4. 既にlabel maskがある場合は、置換確認に同意します。
 
 SegRef3Dは画像系列とmaskを検証してから反映します。画像を開いていない場合は、result ZIP内のJPG系列も自動復元します。読み込んだmaskは新しい`[autosave]` label PNGフォルダへ直ちに保存されます。
 
 ### SegRef3D Liteでの操作
 
-ブラウザ版も同じmanifest/ZIP形式を使用します。**Seg Anything > Edit Setup**から**AI Tracking Setup**を開いたままmouse wheelまたはF/Rで画像を移動し、**Use current**で現在画像をTracking start/endとして取り込みます。**Add Box Prompt Here**ではcrosshair補助線を使ってBox Promptを設定できます。**Create Input ZIP**で出力し、Colabの結果を**Import AI Result**で復元します。jobの準備にはローカルSAM2やNVIDIA GPUは不要です。
+ブラウザ版も同じmanifest/ZIP形式を使用します。**SegAnything > Edit Setup**から**AI Tracking Setup**を開いたままmouse wheelまたはF/Rで画像を移動し、**Use current**で現在画像をTracking start/endとして取り込みます。**Add Box Prompt Here**ではcrosshair補助線を使ってBox Promptを設定できます。**Create Input ZIP**で出力し、Colabの結果を**Import AI Result**で復元します。jobの準備にはローカルSAM2やNVIDIA GPUは不要です。
 
 ## 5. 修正と3D構築
 

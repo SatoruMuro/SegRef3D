@@ -1,4 +1,4 @@
-"""Gradio-free SegOnWeb backend using the proven SAM2 video predictor API."""
+"""Gradio-free SegAnything backend using the proven SAM2 video predictor API."""
 
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ SAM2_REFERENCE = {
 
 
 class SegOnWebProcessingError(RuntimeError):
-    """Raised with a concise user-facing SegOnWeb processing error."""
+    """Raised with a concise user-facing SegAnything processing error."""
 
 
 def _emit(callback, **payload):
@@ -329,7 +329,7 @@ def process_segmentation_job(
 
     _emit(progress_callback, event="step", step=4, total_steps=4, message="Writing result ZIP")
     backend_info = {
-        "name": "SegOnWeb Colab",
+        "name": "SegAnything Colab",
         "device": device_name,
         **SAM2_REFERENCE,
     }

@@ -1,4 +1,4 @@
-"""Shared SegRef3D <-> SegOnWeb segmentation job archive support."""
+"""Shared SegRef3D <-> SegAnything segmentation job archive support."""
 
 from __future__ import annotations
 
@@ -276,7 +276,7 @@ def _jpeg_bytes(path: str) -> bytes:
 
 
 def create_job_zip(output_path: str, image_records: list[dict], objects: list[dict], *, app_version: str, source: dict | None = None) -> dict:
-    """Write a SegOnWeb input ZIP and return its validated manifest."""
+    """Write a SegAnything input ZIP and return its validated manifest."""
     _require(bool(image_records), "No images were provided.")
     expected_size: tuple[int, int] | None = None
     prepared = []

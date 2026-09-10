@@ -1,14 +1,14 @@
 # SegRef3D Segmentation Job Format
 
 `segref3d-segjob-1.0` is the shared interface between SegRef3D and the
-**Seg Anything** workflow. `SegOnWeb` remains the internal compatibility name
+**SegAnything** workflow. `SegAnything` remains the internal compatibility name
 used by existing archives, modules, and URLs.
 The schema implementation and validator live in `SegRef3D/segmentation_job.py`.
 
 ## Input ZIP
 
 ```text
-segonweb_input.zip
+seganything_request.zip
 |-- manifest.json
 `-- images/
     |-- 000001.jpg
@@ -77,7 +77,7 @@ is a backward-compatible extension of `segref3d-segjob-1.0` rather than a new fo
 ## Result ZIP
 
 ```text
-segref3d_result.zip
+seganything_result.zip
 |-- manifest.json
 |-- images/
 |   |-- 000001.jpg
@@ -95,7 +95,7 @@ The result manifest keeps the input image and object metadata, changes `kind` to
   "result": {
     "mask_format": "single-label-uint8-png",
     "overlap_policy": "later-object-overwrites-earlier-object",
-    "backend": {"name": "SegOnWeb Colab"},
+    "backend": {"name": "SegAnything Colab"},
     "masks": [
       {"index": 0, "key": "0001", "archive_path": "masks/mask0001.png"}
     ]

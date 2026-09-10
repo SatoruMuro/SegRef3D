@@ -75,9 +75,9 @@ class SegOnWebUiTests(unittest.TestCase):
 
     def _result_zip(self):
         images = self._images()
-        job_zip = Path(self.temp_dir.name) / "segonweb_input.zip"
+        job_zip = Path(self.temp_dir.name) / "seganything_request.zip"
         job_manifest = create_job_zip(str(job_zip), images, self._objects(), app_version="test")
-        result_zip = Path(self.temp_dir.name) / "segref3d_result.zip"
+        result_zip = Path(self.temp_dir.name) / "seganything_result.zip"
         mask_records = []
         with zipfile.ZipFile(job_zip) as source, zipfile.ZipFile(result_zip, "w") as output:
             for record in job_manifest["images"]["files"]:
@@ -128,7 +128,7 @@ class SegOnWebUiTests(unittest.TestCase):
                 self.window.export_for_segonweb()
 
         self.assertTrue(
-            save_dialog.call_args.args[2].endswith("Test Images_segonweb_input.zip")
+            save_dialog.call_args.args[2].endswith("Test Images_seganything_request.zip")
         )
 
         manifest = validate_job_zip(str(output_zip))
@@ -238,7 +238,7 @@ class SegOnWebUiTests(unittest.TestCase):
                 button_texts.append(widget.text())
         self.assertEqual(
             button_texts,
-            ["Batch Jobs", "Create Input ZIP", "Seg Anything", "Import Result ZIP"],
+            ["Batch Jobs", "Create Input ZIP", "SegAnything", "Import Result ZIP"],
         )
 
     def test_text_input_focus_bypasses_navigation_shortcuts(self):

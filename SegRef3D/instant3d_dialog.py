@@ -1,4 +1,4 @@
-"""Compact Seg CT/MRI workflow dialog for SegRef3D desktop."""
+"""Compact SegCT/MRI workflow dialog for SegRef3D desktop."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ class Instant3DWorkflowDialog(QDialog):
 
     def __init__(self, catalog: dict, mappings: list[dict], source_ready: bool, modality="CT", parent=None, source_kind="nifti", source_error=None):
         super().__init__(parent)
-        self.setWindowTitle("Seg CT/MRI")
+        self.setWindowTitle("SegCT/MRI")
         self.resize(620, 620)
         self.modality = str(modality or "CT").upper()
         self.full_catalog = catalog
@@ -104,7 +104,7 @@ class Instant3DWorkflowDialog(QDialog):
         self.import_button = QPushButton("Import Result ZIP")
         self.import_button.setEnabled(source_ready)
         self.import_button.clicked.connect(self.importRequested.emit)
-        self.open_button = QPushButton("Open Seg CT/MRI")
+        self.open_button = QPushButton("Open SegCT/MRI")
         self.open_button.clicked.connect(self.openColabRequested.emit)
         actions.addWidget(self.export_button)
         actions.addWidget(self.import_button)

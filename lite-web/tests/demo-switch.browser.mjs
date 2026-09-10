@@ -34,10 +34,49 @@ try {
   await context.route("**/*", route => route.request().url().startsWith(origin) ? route.continue() : route.abort());
   await page.goto(`${origin}/lite-web/`);
   await page.waitForFunction(() => !!globalThis.demoTest);
+  for (const width of [1600, 390]) {
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 1100 });
+    await page.reload();
+    await page.waitForFunction(() => !!globalThis.demoTest);
+    const layout = await page.locator('.demo-grid .demo-button').evaluateAll(buttons => buttons.map(button => {
+      const r = button.getBoundingClientRect();
+      return { width: r.width, height: r.height, x: r.x, y: r.y, icon: !!button.querySelector('svg'), name: button.querySelector('b').textContent };
+    }));
+    assert.equal(layout.length, 4);
+    assert.deepEqual(layout.map(b => b.name), ['Load Apple Demo', 'Load Rabbit CT Demo', 'Load Electron Microscopy Demo', 'Load Mouse Brain Demo']);
+    assert.ok(layout.every(b => b.icon && Math.abs(b.width - layout[0].width) < 1 && Math.abs(b.height - layout[0].height) < 1));
+    if (width > 600) { assert.equal(layout[0].y, layout[1].y); assert.equal(layout[2].y, layout[3].y); }
+    else { assert.ok(layout.every(b => b.x === layout[0].x)); }
+    assert.ok(await page.locator('.demo-intro a').count() >= 7);
+    assert.equal(await page.locator('.empty-actions button').count(), 2);
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    await page.screenshot({ path: path.join(output, `welcome-${width}.png`) });
+  }
+  await page.setViewportSize({ width: 1600, height: 1100 });
+  // Exercise each new welcome card, independently of the Open menu controls.
+  for (const [selector, id, count] of [
+    ['#load-demo', 'apple-kanzi-84', 20],
+    ['#load-rabbit-demo', 'rabbitct-reference-256', 256],
+    ['.demo-grid [data-demo-id="hela-em-demo"]', 'hela-em-demo', 150],
+    ['.demo-grid [data-demo-id="mouse-brain-demo"]', 'mouse-brain-demo', 132],
+  ]) {
+    const welcomeContext = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 1600, height: 1100 } });
+    await welcomeContext.route('**/*', route => route.request().url().startsWith(origin) ? route.continue() : route.abort());
+    const welcome = await welcomeContext.newPage();
+    welcome.on('pageerror', error => errors.push(error.message));
+    welcome.on('dialog', async dialog => { if (dialog.type() === 'alert') alerts.push(dialog.message()); await dialog.accept(); });
+    await welcome.goto(`${origin}/lite-web/`);
+    await welcome.waitForFunction(() => !!globalThis.demoTest);
+    await welcome.locator(selector).click();
+    await welcome.waitForFunction(id => demoTest.state.activeDemoDatasetId === id && !demoTest.state.loading, id, { timeout: 120000 });
+    assert.equal(await welcome.evaluate(() => demoTest.state.images.length), count);
+    await welcomeContext.close();
+  }
   for (const [id, button, count] of [
     ["apple-kanzi-84", "open-apple-demo", 20],
     ["hela-em-demo", "open-hela-em-demo", 150],
     ["mouse-brain-demo", "open-mouse-brain-demo", 132],
+    ["rabbitct-reference-256", "open-rabbit-demo", 256],
     ["hela-em-demo", "open-hela-em-demo", 150],
     ["apple-kanzi-84", "open-apple-demo", 20],
   ]) {

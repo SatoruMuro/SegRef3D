@@ -74,7 +74,7 @@ resized for this demo; the original data providers do not endorse SegRef3D.
 
 ### RabbitCT Demo
 
-Choose **Load RabbitCT Demo** to download and open the bundled 256 x 256 x 256 NIfTI volume on
+Choose **Load Rabbit CT Demo** to download and open the bundled 256 x 256 x 256 NIfTI volume on
 demand. X, Y, and Z spacing are preset to **1.0 mm**, so a calibration line is not required.
 Try Threshold or drawing tools on the skull or body contour, refine the mask, then open
 **Volume & 3D** to preview and export the reconstruction.
@@ -84,7 +84,7 @@ The RabbitCT demo is adapted from the
 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). The original `reference_256.vol`
 was converted to NIfTI and reoriented for SegRef3D Lite demo use; the original data providers
 do not endorse SegRef3D. The approximately 20 MB demo volume is fetched only when
-**Load RabbitCT Demo** is selected.
+**Load Rabbit CT Demo** is selected.
 
 ## Current features
 
@@ -111,10 +111,10 @@ do not endorse SegRef3D. The approximately 20 MB demo volume is fetched only whe
   future custom segmentation-model training
 - Use the Objects panel as the current-target selector, with visibility, rename, relabel, merge,
   and object-only clear actions
-- Configure one tracking range and multiple box-prompt keyframes per Seg Anything object
-- Export `<source-folder>_segonweb_input.zip` and import the complete `segref3d_result.zip` returned by Colab
+- Configure one tracking range and multiple box-prompt keyframes per SegAnything object
+- Export `<source-folder>_seganything_request.zip` and import the complete `seganything_result.zip` returned by Colab
 - Select open-license TotalSegmentator structures, map them to Obj 1-20, and exchange validated
-  `<source-folder>_instant3d_request.zip` / `instant3d_result.zip` archives with Seg CT/MRI
+  `<source-folder>_segct_mri_request.zip` / `segct_mri_result.zip` archives with SegCT/MRI
 - Plain wheel image navigation, Ctrl/Command+wheel zoom, Shift+wheel horizontal pan
 - Middle-button drag and WASD/arrow-key canvas pan
 - Label visibility controls
@@ -130,7 +130,7 @@ do not endorse SegRef3D. The approximately 20 MB demo volume is fetched only whe
 - Per-object Volume Statistics with voxel count, calibrated mm³/cm³, occupied range, and CSV export
 - Shared-mesh Three.js STL preview with rotate, pan, zoom, camera reset, visibility, and opacity
 - Project Check for dimensions, spacing, labels, isolated components, numbered-frame gaps, and
-  Seg Anything prompt/range validity
+  SegAnything prompt/range validity
 - Responsive desktop/mobile layout and offline cache
 
 ### Local processing and data flow
@@ -147,11 +147,11 @@ do not endorse SegRef3D. The approximately 20 MB demo volume is fetched only whe
   unchanged inside ZIP archives for import compatibility.
 - SegRef3D Lite does not operate an image-upload API, analytics pipeline, or telemetry service.
 
-Seg Anything and Seg CT/MRI are the explicit exceptions to this browser-local workflow. They are
-separate Google Colab workflows. Seg Anything provides SAM-based segmentation for user-specified
-structures. Seg CT/MRI provides automatic anatomical segmentation with TotalSegmentator.
-The generated `<source-folder>_segonweb_input.zip` includes the working image sequence and Seg Anything job
-settings. The Seg CT/MRI request ZIP includes the source NIfTI. The user explicitly uploads these
+SegAnything and SegCT/MRI are the explicit exceptions to this browser-local workflow. They are
+separate Google Colab workflows. SegAnything provides SAM-based segmentation for user-specified
+structures. SegCT/MRI provides automatic anatomical segmentation with TotalSegmentator.
+The generated `<source-folder>_seganything_request.zip` includes the working image sequence and SegAnything job
+settings. The SegCT/MRI request ZIP includes the source NIfTI. The user explicitly uploads these
 files to their own Google Colab runtime; SegRef3D does not operate an intermediate image-upload
 server. Institutional research-data or privacy rules may restrict uploading research or medical
 data to Google Colab, so users should confirm that this use is permitted before continuing.
@@ -279,7 +279,7 @@ compressed series is selected. URLs are resolved relative to `dicom-codec.mjs`, 
 repository base path is preserved. The service worker caches these same-origin files after first
 use; no DICOM bytes or metadata are uploaded.
 
-### Seg Anything workflow
+### SegAnything workflow
 
 Create Input ZIP uses the current image display, including DICOM window/level,
 brightness and contrast, to generate 8-bit working JPEGs for every slice. Masks,
@@ -292,12 +292,12 @@ entirely in the browser. See the [DICOM export verification and browser test com
 3. Define the tracking range for each object.
 4. Move to useful keyframes and add one or more box prompts with **Add Box Prompt Here**.
 5. Return to **AI Segmentation** and choose **Create Input ZIP**.
-6. Choose **Open Seg Anything**, run all Colab cells, and upload the ZIP in the first upload cell.
-7. Download the generated `segref3d_result.zip`.
+6. Choose **Open SegAnything**, run all Colab cells, and upload the ZIP in the first upload cell.
+7. Download the generated `seganything_result.zip`.
 8. Choose **AI Segmentation > Import AI Result** in SegRef3D Lite.
 9. Refine the returned masks, run **Tools > Check Project**, and export measurements or 3D data.
 
-Opening Seg Anything displays a confirmation before leaving the browser-local workflow. Creating
+Opening SegAnything displays a confirmation before leaving the browser-local workflow. Creating
 the input ZIP does not upload it: the upload occurs only when the user selects the ZIP in Google
 Colab. The ZIP contains the working image sequence, not only prompt coordinates or job metadata.
 
@@ -315,15 +315,15 @@ The result ZIP can restore its working JPG sequence when no images are loaded. W
 sequence is already open, SegRef3D Lite verifies frame count, order, dimensions, and filenames before
 replacing masks.
 
-### Seg CT/MRI workflow
+### SegCT/MRI workflow
 
 1. Load a CT NIfTI `.nii` or `.nii.gz` volume. SegRef3D Lite retains the original bytes and full affine.
-2. Open **AI Segmentation > Seg CT/MRI**.
+2. Open **AI Segmentation > SegCT/MRI**.
 3. Search the shared open-license ROI catalog and map each selected structure to Obj 1-20.
 4. Choose **Create Request ZIP** and confirm the Google Colab data-flow notice.
-5. Open [Seg CT/MRI](https://satorumuro.github.io/SegRef3D/ColabNotebooks/segctmri.html).
-6. Upload `<source-folder>_instant3d_request.zip` to your own Colab runtime and run the notebook.
-7. Download `instant3d_result.zip`, then choose **Import Result ZIP** in SegRef3D Lite.
+5. Open [SegCT/MRI](https://satorumuro.github.io/SegRef3D/ColabNotebooks/segctmri.html).
+6. Upload `<source-folder>_segct_mri_request.zip` to your own Colab runtime and run the notebook.
+7. Download `segct_mri_result.zip`, then choose **Import Result ZIP** in SegRef3D Lite.
 8. Select Replace or Merge when target objects already contain labels, then refine the masks.
 
 The request contains the exact source NIfTI, selected structures, Obj mappings, and a geometry
@@ -332,7 +332,7 @@ changing masks. The labelmap is converted back to the same editable slice order 
 transaction. Binary per-ROI NIfTI files remain the backend source of truth; where structures
 overlap in the combined single-label map, the lower Obj ID has priority and the overlap is reported.
 
-Seg CT/MRI uses TotalSegmentator in Google Colab; it does not run in the browser and is not
+SegCT/MRI uses TotalSegmentator in Google Colab; it does not run in the browser and is not
 bundled with SegRef3D Lite. The selectable catalog contains only supported open-license tasks. Users
 must confirm that uploading research or medical data to Google Colab is permitted by their
 institution. Results are algorithmic segmentations intended for review and refinement, not an
@@ -354,7 +354,7 @@ node --test "lite-web/tests/*.test.mjs"
 
 ## Browser limits
 
-SegRef3D Lite processing and export are browser-local. Seg Anything and Seg CT/MRI are separate and
+SegRef3D Lite processing and export are browser-local. SegAnything and SegCT/MRI are separate and
 require the user to explicitly upload their image-containing input ZIP to Google Colab. Very large TIFF stacks, all-frame
 cleanup, interpolation, and mesh generation can require substantial browser memory. SegRef3D Lite warns
 before unusually large TIFF imports and uses progress states and yielded processing for long

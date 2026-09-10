@@ -43,9 +43,9 @@ calibrationで得たX/Y spacingとZ spacingは、volume計測、NIfTI、3D Previ
 
 ## 4. AI Tracking Setupを開く
 
-上部の`Seg Anything`を押し、workflow画面を開きます。
+上部の`SegAnything`を押し、workflow画面を開きます。
 
-![Seg Anything workflow](images/SegRef3DLite/04-ai-segmentation-workflow.png)
+![SegAnything workflow](images/SegRef3DLite/04-ai-segmentation-workflow.png)
 
 `Edit Setup`を押すと`AI Tracking Setup`が開きます。ここでobject名、Tracking Range、Box Promptを登録します。
 
@@ -99,17 +99,17 @@ workflow summaryが`3 objects · 3 prompts configured`になれば、Colabへ渡
 
 ## 8. Create Input ZIP
 
-`AI Tracking Setup`を閉じ、Seg Anything workflowの`Create Input ZIP`を押します。Apple Demoでは次のfileがdownloadされます。
+`AI Tracking Setup`を閉じ、SegAnything workflowの`Create Input ZIP`を押します。Apple Demoでは次のfileがdownloadされます。
 
-`Apple Demo - Kanzi 84_segonweb_input.zip`
+`Apple Demo - Kanzi 84_seganything_request.zip`
 
 このZIPには、20枚の作業画像と、Apple／Stem／CoreのBox Prompt・Tracking Rangeがまとめられています。作成しただけでは外部へ送信されません。
 
-## 9. Google ColabでSeg Anythingを実行する
+## 9. Google ColabでSegAnythingを実行する
 
 ### 9-1. Colabを開く
 
-`Open Seg Anything`を押します。Google Colab利用の確認画面で内容を読み、続ける場合は`Continue to Seg Anything`を押します。[Seg Anythingを直接開く](https://satorumuro.github.io/SegRef3D/ColabNotebooks/segonweb.html)こともできます。
+`Open SegAnything`を押します。Google Colab利用の確認画面で内容を読み、続ける場合は`Continue to SegAnything`を押します。[SegAnythingを直接開く](https://satorumuro.github.io/SegRef3D/ColabNotebooks/segonweb.html)こともできます。
 
 ### 9-2. GPU runtimeを選ぶ
 
@@ -117,21 +117,21 @@ Colabで`ランタイム` → `ランタイムのタイプを変更`を開き、
 
 ### 9-3. 全cellを実行してInput ZIPをuploadする
 
-`ランタイム` → `すべてのセルを実行`を選びます。最初の実行cellにfile upload欄が表示されたら、先ほどの`*_segonweb_input.zip`を選びます。
+`ランタイム` → `すべてのセルを実行`を選びます。最初の実行cellにfile upload欄が表示されたら、先ほどの`*_seganything_request.zip`を選びます。
 
-![Upload the Seg Anything input ZIP in Colab](images/SegRef3DLite/11-colab-upload.png)
+![Upload the SegAnything input ZIP in Colab](images/SegRef3DLite/11-colab-upload.png)
 
 notebookはSAM2を準備し、3 objectsを順番にtrackingします。通常は数分程度ですが、Colabの混雑状況、割り当てGPU、runtimeによって変わります。処理中はnotebookを閉じないでください。
 
-処理が完了すると`Segmentation complete`と表示され、最後のcellから`segref3d_result.zip`のdownloadが自動的に始まります。始まらない場合は最後のdownload cellだけを再実行します。
+処理が完了すると`Segmentation complete`と表示され、最後のcellから`seganything_result.zip`のdownloadが自動的に始まります。始まらない場合は最後のdownload cellだけを再実行します。
 
-> **Data handling:** 通常のSegRef3D Lite操作は端末内で行われますが、Seg Anythingでは作業画像を含むInput ZIPをユーザー自身のGoogle Colab runtimeへuploadします。研究・医療データでは、所属施設のdata handling policyでGoogle Colabの利用が許可されていることを確認してください。画像がSegRef3D運営serverへ送信されるworkflowではありません。
+> **Data handling:** 通常のSegRef3D Lite操作は端末内で行われますが、SegAnythingでは作業画像を含むInput ZIPをユーザー自身のGoogle Colab runtimeへuploadします。研究・医療データでは、所属施設のdata handling policyでGoogle Colabの利用が許可されていることを確認してください。画像がSegRef3D運営serverへ送信されるworkflowではありません。
 
 ## 10. AI Resultを戻してmaskを修正する
 
 ### 10-1. Result ZIPをimportする
 
-SegRef3D Liteへ戻り、Seg Anything workflowの`Import AI Result`を押して`segref3d_result.zip`を選びます。既存maskがある場合は、現在のlabel masksを置き換えるか確認されます。
+SegRef3D Liteへ戻り、SegAnything workflowの`Import AI Result`を押して`seganything_result.zip`を選びます。既存maskがある場合は、現在のlabel masksを置き換えるか確認されます。
 
 ![Import AI Result](images/SegRef3DLite/12-import-ai-result.png)
 
@@ -206,7 +206,7 @@ Previewを閉じ、`Objects = Visible objects`のまま`Export STL`を押しま�
 
 ![Export Project ZIP](images/SegRef3DLite/21-project-zip.png)
 
-`Apple Demo - Kanzi 84_SegRef3D_Project_<timestamp>.zip`にはlabel masks、calibration、object名、表示設定、Seg Anything setupが保存されます。Source images自体は含まれません。
+`Apple Demo - Kanzi 84_SegRef3D_Project_<timestamp>.zip`にはlabel masks、calibration、object名、表示設定、SegAnything setupが保存されます。Source images自体は含まれません。
 
 再開するときは、先に`Load Apple Demo`で同じ画像を読み込み、`Load Masks` → `Replace` → `ZIP / Project ZIP`で保存済みZIPを開きます。browser autosaveだけに頼らず、**作業の最後にProject ZIPを保存してください。**
 
@@ -218,7 +218,7 @@ segmentationの修正が終わったら、上部の`Export` → `Training Data Z
 
 ## 12. その他の便利な機能
 
-SegRef3D Liteには、Threshold／RGB extraction、Mask Cleanup、mask interpolation、NIfTI Labelmap、TIFF、Label PNG、Overlay PNG、Volume Statistics CSVなどもあります。このGetting Started tutorialではAI workflowを中心に扱いました。詳細は[SegRef3D Lite documentation](../lite-web/README.md)と[Seg Anything詳細guide](TutorialSegOnWebJP.md)を参照してください。
+SegRef3D Liteには、Threshold／RGB extraction、Mask Cleanup、mask interpolation、NIfTI Labelmap、TIFF、Label PNG、Overlay PNG、Volume Statistics CSVなどもあります。このGetting Started tutorialではAI workflowを中心に扱いました。詳細は[SegRef3D Lite documentation](../lite-web/README.md)と[SegAnything詳細guide](TutorialSegOnWebJP.md)を参照してください。
 
 ## 13. このチュートリアルで行ったこと
 
@@ -243,4 +243,4 @@ Source dataset license: [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/
 
 ---
 
-[English version](TutorialSegRef3DLiteEN.md) · [Seg Anything詳細guide](TutorialSegOnWebJP.md) · [Registration](Registration.md)
+[English version](TutorialSegRef3DLiteEN.md) · [SegAnything詳細guide](TutorialSegOnWebJP.md) · [Registration](Registration.md)

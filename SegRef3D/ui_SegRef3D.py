@@ -286,9 +286,9 @@ class Ui_MainWindow:
         self.btn_run_tracking = QPushButton("Run Tracking")
         self.btn_local_sam2_add = QPushButton("Add")
         self.btn_run_sam2 = QPushButton("Run Seg")
-        self.btn_seg_on_web = QPushButton("Seg Anything")
-        self.btn_instant3dweb = QPushButton("Legacy Instant3DWeb")
-        self.btn_instant3d_workflow = QPushButton("Seg CT/MRI")
+        self.btn_seg_on_web = QPushButton("SegAnything")
+        self.btn_instant3dweb = QPushButton("Legacy SegCT/MRI")
+        self.btn_instant3d_workflow = QPushButton("SegCT/MRI")
         self.btn_seg_on_web.setToolTip("Prompt-based segmentation using SAM")
         self.btn_instant3d_workflow.setToolTip("Automatic anatomical segmentation with TotalSegmentator")
 
@@ -1211,7 +1211,7 @@ class Ui_MainWindow:
         ai_layout = tool_page("AI Segmentation")
         self.btn_add_object_prompt.setText("Add Current Prompt")
         self.prompt_setup_widget = group("Prompt Setup", [
-            QLabel("Define the box prompt and tracking range used by local SAM2 or Seg Anything."),
+            QLabel("Define the box prompt and tracking range used by local SAM2 or SegAnything."),
             row(self.btn_set_box_prompt, self.btn_clear_box),
             row(self.btn_set_tracking_start, self.btn_set_tracking_end),
             self.btn_add_object_prompt,
@@ -1227,10 +1227,10 @@ class Ui_MainWindow:
         self.btn_run_sam2.setProperty("primary", True)
         ai_layout.addWidget(self.local_sam2_widget)
         self.lite_sam2_widget = group("Local SAM2", [
-            QLabel("Not available in this build.\nUse Seg Anything for SAM-based segmentation."),
+            QLabel("Not available in this build.\nUse SegAnything for SAM-based segmentation."),
         ])
         ai_layout.addWidget(self.lite_sam2_widget)
-        self.segonweb_widget = group("Seg Anything", [
+        self.segonweb_widget = group("SegAnything", [
             QLabel("Prompt-based segmentation for structures you specify using SAM in Google Colab."),
             self.btn_manage_batch_jobs,
             self.btn_export_segonweb,
@@ -1238,7 +1238,7 @@ class Ui_MainWindow:
             self.btn_import_segonweb_result,
         ])
         ai_layout.addWidget(self.segonweb_widget)
-        self.instant3d_widget = group("Seg CT/MRI", [
+        self.instant3d_widget = group("SegCT/MRI", [
             QLabel("Automatically segment supported anatomical structures with TotalSegmentator in Google Colab."),
             self.btn_instant3d_workflow,
         ])
@@ -1314,7 +1314,7 @@ class Ui_MainWindow:
             row(self.label_stack_order, self.combo_stack_order),
             self.btn_instant3dweb,
         ]))
-        self.btn_instant3dweb.setText("Legacy Instant3DWeb")
+        self.btn_instant3dweb.setText("Legacy SegCT/MRI")
         self.btn_export_stl_colorwise.setProperty("primary", True)
         export_layout.addWidget(group("Data Export", [
             self.btn_export_nifti,

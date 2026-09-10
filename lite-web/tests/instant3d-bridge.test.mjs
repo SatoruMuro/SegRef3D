@@ -41,6 +41,8 @@ test("builds a browser-local Instant3D request with nonsequential object mapping
   assert.equal(manifest.source.orientation.length, 3);
   assert.deepEqual(entries.map((entry) => entry.name), ["manifest.json", "image/source.nii"]);
   assert.match(manifest.source.sha256, /^[0-9a-f]{64}$/);
+  assert.equal(manifest.schema, "segref3d-segct-mri-bridge");
+  assert.doesNotMatch(JSON.stringify(manifest), /instant3d|segonweb/i);
 });
 
 test("shared catalog exposes 24 searchable ribs and preserves their request identifiers", async () => {
@@ -139,4 +141,10 @@ test("rejects duplicate object IDs and source-mismatched results", () => {
     { name: "labelmap/labels.nii.gz", bytes },
   ];
   assert.throws(() => validateInstant3DResult(entries, source, catalog), /source checksum/);
+  resultManifest.source.sha256 = source.sha256;
+  for (const schema of ["segref3d-instant3d-bridge", "segref3d-segct-mri-bridge"]) {
+    resultManifest.schema = schema;
+    entries[0].bytes = new TextEncoder().encode(JSON.stringify(resultManifest));
+    assert.equal(validateInstant3DResult(entries, source, catalog).manifest.schema, schema);
+  }
 });

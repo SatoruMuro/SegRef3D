@@ -92,14 +92,18 @@ try {
         console.log("Baseline reproduced:", alerts.at(-1));
         break;
       }
-      const downloaded = page.waitForEvent("download", { predicate: (download) => download.suggestedFilename().endsWith("_segonweb_input.zip") });
+      const downloaded = page.waitForEvent("download", { predicate: (download) => download.suggestedFilename().endsWith("_seganything_request.zip") });
       await page.locator("#export-segonweb").click();
       const filename = path.join(output, `${kind}${adjusted ? "-adjusted" : ""}.zip`);
-      await (await downloaded).saveAs(filename);
+      const download = await downloaded;
+      assert.match(download.suggestedFilename(), /_seganything_request\.zip$/);
+      await download.saveAs(filename);
       await page.waitForFunction(() => !segjobTest.state.loading);
       const entries = await parseZip(new Blob([await readFile(filename)]));
       const manifest = JSON.parse(await entries.find((entry) => entry.name === "manifest.json").blob.text());
       assert.equal(manifest.format_version, "segref3d-segjob-1.0");
+      assert.doesNotMatch(JSON.stringify(manifest), /segonweb|instant3d/i);
+      assert.ok(entries.every(entry => !/segonweb|instant3d/i.test(entry.name)));
       assert.deepEqual([manifest.images.count, manifest.images.width, manifest.images.height], [15, 400, 400]);
       assert.equal(entries.filter((entry) => entry.name.startsWith("images/")).length, 15);
       const obj = manifest.objects[0];

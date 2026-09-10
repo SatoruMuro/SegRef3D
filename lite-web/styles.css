@@ -1108,27 +1108,42 @@ svg {
   font-size: 12px;
 }
 
-.demo-intro strong {
+.demo-intro h2 {
+  margin: 0 0 4px;
   color: var(--ink);
   font-size: 12px;
 }
 
-.microscopy-demos {
+.demo-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: 1fr;
   gap: 8px;
   margin: 6px 0;
 }
 
-.microscopy-demos .command-button {
+.empty-state .demo-grid .demo-button {
+  width: 100%;
+  min-width: 0;
+  min-height: 96px;
   height: auto;
-  padding: 10px;
+  padding: 12px;
+  justify-content: flex-start;
+  text-align: left;
   white-space: normal;
 }
 
-.microscopy-demos small {
+.demo-grid .demo-button svg {
+  flex: 0 0 20px;
+}
+
+.demo-grid small {
   display: block;
   margin-top: 4px;
+}
+
+@media (max-width: 600px) {
+  .demo-grid { grid-template-columns: minmax(0, 1fr); }
 }
 
 #open-menu .open-menu-panel .command-button span {

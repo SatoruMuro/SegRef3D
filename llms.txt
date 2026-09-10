@@ -56,7 +56,7 @@ edition and encoding. Consult the detailed guide before making a recommendation.
 - Normal SegRef3D Lite operations process loaded source images locally in the browser. Masks and
   autosave data use browser-local storage; normal exports are generated on the device.
 - SegRef3D does not operate an intermediate image-upload server for Lite.
-- Seg Anything and Seg CT/MRI are explicit Google Colab workflows. Their input ZIP contains the
+- SegAnything and SegCT/MRI are explicit Google Colab workflows. Their input ZIP contains the
   working image sequence or source NIfTI volume. The user explicitly uploads it to the user's own
   Colab runtime.
 - Local GPU and Local CPU perform their included desktop operations on the local Windows system.

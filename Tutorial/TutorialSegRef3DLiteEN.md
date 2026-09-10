@@ -43,9 +43,9 @@ The resulting X/Y spacing and Z spacing determine physical dimensions in volume 
 
 ## 4. Open AI Tracking Setup
 
-Select `Seg Anything` in the top bar to open the workflow.
+Select `SegAnything` in the top bar to open the workflow.
 
-![Seg Anything workflow](images/SegRef3DLite/04-ai-segmentation-workflow.png)
+![SegAnything workflow](images/SegRef3DLite/04-ai-segmentation-workflow.png)
 
 Select `Edit Setup` to open `AI Tracking Setup`. This is where you register object names, Tracking Ranges, and Box Prompts.
 
@@ -99,17 +99,17 @@ When the workflow summary reads `3 objects · 3 prompts configured`, the job is 
 
 ## 8. Create Input ZIP
 
-Close `AI Tracking Setup` and select `Create Input ZIP` in the Seg Anything workflow. The Apple Demo downloads:
+Close `AI Tracking Setup` and select `Create Input ZIP` in the SegAnything workflow. The Apple Demo downloads:
 
-`Apple Demo - Kanzi 84_segonweb_input.zip`
+`Apple Demo - Kanzi 84_seganything_request.zip`
 
 This ZIP contains the 20 working images and the Apple, Stem, and Core Box Prompts and Tracking Ranges. Creating the ZIP does not upload it anywhere.
 
-## 9. Run Seg Anything in Google Colab
+## 9. Run SegAnything in Google Colab
 
 ### 9-1. Open Colab
 
-Select `Open Seg Anything`. Read the Google Colab notice and, if you wish to continue, select `Continue to Seg Anything`. You can also [open Seg Anything directly](https://satorumuro.github.io/SegRef3D/ColabNotebooks/segonweb.html).
+Select `Open SegAnything`. Read the Google Colab notice and, if you wish to continue, select `Continue to SegAnything`. You can also [open SegAnything directly](https://satorumuro.github.io/SegRef3D/ColabNotebooks/segonweb.html).
 
 ### 9-2. Select a GPU runtime
 
@@ -117,21 +117,21 @@ In Colab, open `Runtime` → `Change runtime type`, select `T4 GPU` as the hardw
 
 ### 9-3. Run all cells and upload the Input ZIP
 
-Choose `Runtime` → `Run all`. When the file upload control appears in the first executable cell, select the `*_segonweb_input.zip` created above.
+Choose `Runtime` → `Run all`. When the file upload control appears in the first executable cell, select the `*_seganything_request.zip` created above.
 
-![Upload the Seg Anything input ZIP in Colab](images/SegRef3DLite/11-colab-upload.png)
+![Upload the SegAnything input ZIP in Colab](images/SegRef3DLite/11-colab-upload.png)
 
 The notebook prepares SAM2 and tracks the three objects in sequence. Processing commonly takes several minutes, but the time varies with Colab load, the assigned GPU, and the runtime. Leave the notebook open while it runs.
 
-When `Segmentation complete` appears, the final cell automatically starts downloading `segref3d_result.zip`. If the download does not start, run only the final download cell again.
+When `Segmentation complete` appears, the final cell automatically starts downloading `seganything_result.zip`. If the download does not start, run only the final download cell again.
 
-> **Data handling:** Normal SegRef3D Lite operations run on your device. Seg Anything is different: you explicitly upload the Input ZIP containing the working images to your own Google Colab runtime. Confirm that this is permitted by your institution's research-data and privacy policies before using research or medical data. This workflow does not upload images to a SegRef3D-operated server.
+> **Data handling:** Normal SegRef3D Lite operations run on your device. SegAnything is different: you explicitly upload the Input ZIP containing the working images to your own Google Colab runtime. Confirm that this is permitted by your institution's research-data and privacy policies before using research or medical data. This workflow does not upload images to a SegRef3D-operated server.
 
 ## 10. Return the AI Result and refine the masks
 
 ### 10-1. Import the Result ZIP
 
-Return to SegRef3D Lite, select `Import AI Result` in the Seg Anything workflow, and choose `segref3d_result.zip`. If the project already contains masks, SegRef3D asks before replacing the current label masks.
+Return to SegRef3D Lite, select `Import AI Result` in the SegAnything workflow, and choose `seganything_result.zip`. If the project already contains masks, SegRef3D asks before replacing the current label masks.
 
 ![Import AI Result](images/SegRef3DLite/12-import-ai-result.png)
 
@@ -206,7 +206,7 @@ Choose `Export` → `Project ZIP` in the top bar.
 
 ![Export Project ZIP](images/SegRef3DLite/21-project-zip.png)
 
-`Apple Demo - Kanzi 84_SegRef3D_Project_<timestamp>.zip` stores label masks, calibration, object names, display settings, and the Seg Anything setup. It does not include the source images.
+`Apple Demo - Kanzi 84_SegRef3D_Project_<timestamp>.zip` stores label masks, calibration, object names, display settings, and the SegAnything setup. It does not include the source images.
 
 To resume, first select `Load Apple Demo`, then use `Load Masks` → `Replace` → `ZIP / Project ZIP` to open the saved ZIP. Browser autosave is helpful, but **finish the session by saving a Project ZIP** as a portable work record.
 
@@ -218,7 +218,7 @@ Generation is browser-local and does not upload data to a SegRef3D server. DICOM
 
 ## 12. Other useful tools
 
-SegRef3D Lite also provides Threshold/RGB extraction, Mask Cleanup, mask interpolation, NIfTI Labelmap, TIFF, Label PNG, Overlay PNG, and Volume Statistics CSV. This getting-started tutorial focuses on the AI workflow. See the [SegRef3D Lite documentation](../lite-web/README.md) and the [detailed Seg Anything guide](TutorialSegOnWebEN.md) for additional options and troubleshooting.
+SegRef3D Lite also provides Threshold/RGB extraction, Mask Cleanup, mask interpolation, NIfTI Labelmap, TIFF, Label PNG, Overlay PNG, and Volume Statistics CSV. This getting-started tutorial focuses on the AI workflow. See the [SegRef3D Lite documentation](../lite-web/README.md) and the [detailed SegAnything guide](TutorialSegOnWebEN.md) for additional options and troubleshooting.
 
 ## 13. What you learned
 
@@ -243,4 +243,4 @@ Source dataset license: [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/
 
 ---
 
-[日本語版](TutorialSegRef3DLiteJP.md) · [Detailed Seg Anything guide](TutorialSegOnWebEN.md) · [Registration](Registration.md)
+[日本語版](TutorialSegRef3DLiteJP.md) · [Detailed SegAnything guide](TutorialSegOnWebEN.md) · [Registration](Registration.md)

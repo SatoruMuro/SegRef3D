@@ -54,9 +54,9 @@ class Instant3DDesktopUiTests(unittest.TestCase):
         np.testing.assert_allclose(self.window.source_nifti_fingerprint["affine"], self.affine)
 
     def test_external_ai_entry_names_are_distinct_and_legacy_is_preserved(self):
-        self.assertEqual(self.window.btn_seg_on_web.text(), "Seg Anything")
-        self.assertEqual(self.window.btn_instant3d_workflow.text(), "Seg CT/MRI")
-        self.assertEqual(self.window.btn_instant3dweb.text(), "Legacy Instant3DWeb")
+        self.assertEqual(self.window.btn_seg_on_web.text(), "SegAnything")
+        self.assertEqual(self.window.btn_instant3d_workflow.text(), "SegCT/MRI")
+        self.assertEqual(self.window.btn_instant3dweb.text(), "Legacy SegCT/MRI")
         self.assertIn("SAM", self.window.btn_seg_on_web.toolTip())
         self.assertIn("TotalSegmentator", self.window.btn_instant3d_workflow.toolTip())
 
@@ -71,7 +71,7 @@ class Instant3DDesktopUiTests(unittest.TestCase):
         labelmap[4, 2, 1] = 2
         label_path = Path(self.temp.name) / "labels.nii.gz"
         nib.save(nib.Nifti1Image(labelmap, self.affine), label_path)
-        result = Path(self.temp.name) / "instant3d_result.zip"
+        result = Path(self.temp.name) / "segct_mri_result.zip"
         with zipfile.ZipFile(result, "w") as archive:
             archive.writestr("manifest.json", json.dumps(manifest))
             archive.write(label_path, "labelmap/labels.nii.gz")

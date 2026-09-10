@@ -53,7 +53,7 @@ class SegmentationJobTests(unittest.TestCase):
         self.temp_dir.cleanup()
 
     def _job_zip(self):
-        path = self.root / "segonweb_input.zip"
+        path = self.root / "seganything_request.zip"
         manifest = create_job_zip(str(path), self.images, self.objects, app_version="test")
         return path, manifest
 
@@ -127,7 +127,7 @@ class SegmentationJobTests(unittest.TestCase):
     def test_result_round_trip(self):
         job_path, job_manifest = self._job_zip()
         mask_records = []
-        result_path = self.root / "segref3d_result.zip"
+        result_path = self.root / "seganything_result.zip"
         with zipfile.ZipFile(job_path, "r") as job_archive, zipfile.ZipFile(result_path, "w") as result_archive:
             for image_record in job_manifest["images"]["files"]:
                 result_archive.writestr(image_record["archive_path"], job_archive.read(image_record["archive_path"]))

@@ -1,4 +1,4 @@
-# Seg Anything DICOM Job ZIP修正・検証記録
+# SegAnything DICOM Job ZIP修正・検証記録
 
 以下は初期修正時点の記録。その後のmain反映・Lite本番公開・正式Windows ZIPと公開後検証は [v1.3.1配布情報](RELEASE_1_3_1.md) を参照。
 

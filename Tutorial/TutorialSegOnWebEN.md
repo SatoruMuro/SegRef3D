@@ -1,6 +1,6 @@
-# Seg Anything: SegRef3D Job Workflow
+# SegAnything: SegRef3D Job Workflow
 
-Seg Anything uses a Google Colab GPU as a computation backend. All prompt configuration
+SegAnything uses a Google Colab GPU as a computation backend. All prompt configuration
 is performed in SegRef3D; there is no separate Gradio interface.
 
 ## 1. Configure Objects In SegRef3D
@@ -19,27 +19,27 @@ Tracking Ranges, and box coordinates. Prompt Frame must be inside its Tracking R
 
 ## 2. Export The Job
 
-Under **AI Segmentation > Seg Anything**, choose **Create Input ZIP** and save
-`segonweb_input.zip`. It contains the working JPG sequence and `manifest.json`.
+Under **AI Segmentation > SegAnything**, choose **Create Input ZIP** and save
+`seganything_request.zip`. It contains the working JPG sequence and `manifest.json`.
 
-## 3. Run Seg Anything
+## 3. Run SegAnything
 
-1. Choose **Seg Anything** in SegRef3D, or open
-   [Seg Anything](https://satorumuro.github.io/SegRef3D/ColabNotebooks/segonweb.html).
+1. Choose **SegAnything** in SegRef3D, or open
+   [SegAnything](https://satorumuro.github.io/SegRef3D/ColabNotebooks/segonweb.html).
 2. In Colab, select **Runtime > Change runtime type > T4 GPU > Save**.
 3. Select **Runtime > Run all**.
-4. Upload `segonweb_input.zip` when the upload control appears.
+4. Upload `seganything_request.zip` when the upload control appears.
 5. Leave the notebook open while it processes every object forward and backward.
 6. At **Segmentation complete**, the separate final cell automatically starts downloading
-   `segref3d_result.zip` through the browser.
+   `seganything_result.zip` through the browser.
 
 The progress display shows the current step, object, frame, and overall progress.
 
 ## 4. Import The Result
 
 1. Return to SegRef3D.
-2. Under **AI Segmentation > Seg Anything**, choose **Import Result ZIP**.
-3. Select `segref3d_result.zip`.
+2. Under **AI Segmentation > SegAnything**, choose **Import Result ZIP**.
+3. Select `seganything_result.zip`.
 4. Confirm replacement if the current project already contains label masks.
 
 SegRef3D validates the image sequence and masks before applying them. If no images
@@ -48,7 +48,7 @@ Imported masks are immediately written to a new `[autosave]` label PNG folder.
 
 ### SegRef3D Lite controls
 
-The browser app uses the same manifest and ZIP formats. Open **Seg Anything > Edit Setup**
+The browser app uses the same manifest and ZIP formats. Open **SegAnything > Edit Setup**
 to enter **AI Tracking Setup**, set each object's prompt and range, choose **Create Input ZIP**,
 then restore the Colab output with **Import AI Result**. Keep **AI Tracking Setup** open while
 navigating with the mouse wheel or F/R, then use **Use current** to capture Tracking start and

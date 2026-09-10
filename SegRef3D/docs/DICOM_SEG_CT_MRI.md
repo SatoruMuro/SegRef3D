@@ -1,9 +1,9 @@
-# DICOM medical sources for Seg CT/MRI
+# DICOM medical sources for SegCT/MRI
 
 ## Cause and implementation
 
 Lite previously created `state.sourceVolume` only for NIfTI input. Its DICOM
-decoder already retained scalar pixels and patient geometry, but the Seg CT/MRI
+decoder already retained scalar pixels and patient geometry, but the SegCT/MRI
 catalog, export, and import never received that source. Local GPU had a separate
 Python implementation gated on `source_nifti_path`; its DICOM loader never set it.
 The shared catalog, request modality, schema, and Colab backend were also CT-only.
@@ -59,7 +59,7 @@ The Colab backend accepts both CT and MRI and dispatches the requested tasks.
   it expected `{mask}` records. This error is fixed as part of the import path.
 
 Invalid patient geometry, nonregular positions, incompatible dimensions, missing
-scalar values, or unsupported modality explain why Seg CT/MRI is unavailable.
+scalar values, or unsupported modality explain why SegCT/MRI is unavailable.
 The display path and other image/mask tools remain usable. Enhanced/multiframe
 DICOM requiring per-frame geometry is rejected for this bridge. Lite rejects
 Modality LUT Sequence rather than exporting incorrect rescale-only intensities.
@@ -67,9 +67,9 @@ Modality LUT Sequence rather than exporting incorrect rescale-only intensities.
 ## Verification (2026-09-10)
 
 - Lite: 126 Node tests passed, including existing DICOM compression, display,
-  geometry, Seg Anything/training export, mask tools, and ZIP tests.
+  geometry, SegAnything/training export, mask tools, and ZIP tests.
 - Desktop/shared backend: 90 tests plus 26 subtests passed across medical source,
-  Seg CT/MRI UI/bridge/catalog, geometry/UI, Seg Anything/UI, mask sequence,
+  SegCT/MRI UI/bridge/catalog, geometry/UI, SegAnything/UI, mask sequence,
   mask editing, and session storage.
 - Local's SimpleITK fallback can reuse an already decoded scalar volume after
   checking its grid against DICOM metadata; values are not rescaled a second time.

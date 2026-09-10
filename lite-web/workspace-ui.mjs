@@ -197,11 +197,11 @@ export function upgradeWorkspaceLayout() {
   const separator = document.createElement("hr");
   openPanel.append(separator);
   const appleDemo = commandButton("open-apple-demo", "Apple Demo", "i-image");
-  const rabbitDemo = commandButton("open-rabbit-demo", "RabbitCT Demo", "i-box");
+  const rabbitDemo = commandButton("open-rabbit-demo", "Rabbit CT Demo", "i-box");
   openPanel.append(appleDemo, rabbitDemo);
   for (const [id, title] of [
-    ["hela-em-demo", "Electron microscopy"],
-    ["mouse-brain-demo", "Mouse brain — Light microscopy"],
+    ["hela-em-demo", "Electron Microscopy Demo"],
+    ["mouse-brain-demo", "Mouse Brain Demo"],
   ]) {
     const demo = commandButton(`open-${id}`, title, "i-image");
     demo.dataset.demoId = id;
@@ -252,7 +252,7 @@ export function upgradeWorkspaceLayout() {
   tabs.setAttribute("aria-label", "Tool categories");
   tabs.append(
     toolTab("draw", "Draw & Refine", "Drawing mode, mask operation, transfer, and Auto Apply"),
-    toolTab("ai", "AI Segmentation", "Seg Anything and Seg CT/MRI workflows using Google Colab"),
+    toolTab("ai", "AI Segmentation", "SegAnything and SegCT/MRI workflows using Google Colab"),
     toolTab("display", "Display", "Window/level, brightness, and contrast"),
     toolTab("extract", "Extract", "Threshold and RGB extraction"),
     toolTab("cleanup", "Mask Cleanup", "Cleanup scope and signed-distance interpolation"),

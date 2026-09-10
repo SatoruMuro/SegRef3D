@@ -7,6 +7,20 @@ NOTEBOOK = Path(__file__).resolve().parents[1] / "SegOnWebJob_v1_0.ipynb"
 
 
 class SegOnWebNotebookTests(unittest.TestCase):
+    def test_notebook_paths_stay_stable_and_display_names_are_current(self):
+        for filename, title in (
+            ('SegOnWebJob_v1_0.ipynb', '# SegAnything'),
+            ('SAM2GUIforImgSeqv4_8.ipynb', '## SegAnything for SegRef3D'),
+            ('Instant3DWeb2.ipynb', '# SegCT/MRI'),
+            ('Instant3Dweb_v1_4.ipynb', 'SegCT/MRI'),
+        ):
+            with self.subTest(filename=filename):
+                notebook = json.loads((NOTEBOOK.parent / filename).read_text(encoding='utf-8'))
+                sources = '\n'.join(''.join(cell['source']) for cell in notebook['cells'])
+                self.assertIn(title, sources)
+                self.assertNotIn('## Seg on Web', sources)
+                self.assertNotIn('# Instant3D', sources)
+
     def test_notebook_is_gradio_free_and_python_cells_parse(self):
         notebook = json.loads(NOTEBOOK.read_text(encoding="utf-8"))
         sources = []
@@ -28,7 +42,7 @@ class SegOnWebNotebookTests(unittest.TestCase):
         self.assertNotIn("gradio_interface", combined)
         self.assertIn("process_segmentation_job", combined)
         self.assertIn("files.upload", combined)
-        self.assertIn("segref3d_result.zip", combined)
+        self.assertIn("seganything_result.zip", combined)
         self.assertIn("2b90b9f5ceec907a1c18123530e92e794ad901a4", combined)
         self.assertIn("files.upload", sources[0])
         self.assertEqual(combined.count("files.upload"), 1)

@@ -57,7 +57,7 @@ class Instant3DBridgeTests(unittest.TestCase):
         self.temp.cleanup()
 
     def request(self):
-        path = self.root / "instant3d_request.zip"
+        path = self.root / "segct_mri_request.zip"
         manifest = create_request_zip(path, self.source, OBJECTS)
         return path, manifest
 
@@ -166,7 +166,7 @@ class Instant3DBridgeTests(unittest.TestCase):
             "source": manifest["source"], "objects": OBJECTS,
             "software": {}, "warnings": [], "overlaps": [],
         }
-        result = self.root / "instant3d_result.zip"
+        result = self.root / "segct_mri_result.zip"
         with zipfile.ZipFile(result, "w") as archive:
             archive.writestr("manifest.json", json.dumps(result_manifest))
             archive.write(label_path, "labelmap/labels.nii.gz")

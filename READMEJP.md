@@ -127,8 +127,8 @@ Local版はZIP全体を展開して`SegRef3D.exe`を実行します。driver、f
 | 基本workflowを動画で見る | [操作紹介動画](https://youtu.be/JModwfnBTYU) |
 | desktop版の全体workflowを学ぶ | [SegRef3D詳細チュートリアル](Tutorial/TutorialSegRef3DJP.md) |
 | 連続組織切片を扱う | [Registration／連続切片guide](Tutorial/Registration.md) |
-| 任意構造をAIでsegmentする | [Seg Anythingチュートリアル](Tutorial/TutorialSegOnWebJP.md) |
-| 対応CT/MRI解剖構造をsegmentする | [Seg CT/MRI workflow](lite-web/README.md#seg-ctmri-workflow) |
+| 任意構造をAIでsegmentする | [SegAnythingチュートリアル](Tutorial/TutorialSegOnWebJP.md) |
+| 対応CT/MRI解剖構造をsegmentする | [SegCT/MRI workflow](lite-web/README.md#seg-ctmri-workflow) |
 | NIfTI／TIFF／STL／CSV出力を選ぶ | [Lite出力チュートリアル](Tutorial/TutorialSegRef3DLiteJP.md#11-どの形式を保存するか) |
 | Windows Local版をinstallする | [Local版インストールガイド](Tutorial/LocalInstallation.md) |
 

@@ -44,7 +44,7 @@ After I answer, recommend:
 - important validation and data-handling cautions.
 
 Clearly distinguish normal SegRef3D Lite browser-local processing, SegRef3D Local GPU,
-SegRef3D Local CPU, and the explicit Google Colab upload used by Seg Anything or Seg CT/MRI.
+SegRef3D Local CPU, and the explicit Google Colab upload used by SegAnything or SegCT/MRI.
 Do not invent features, do not assume clinical validation, and do not ask me to upload or paste
 research images or identifiable patient data. Ask for descriptions and metadata only.
 ```
@@ -74,7 +74,7 @@ Desired output:
 - [Detailed AI-readable knowledge base](../llms-full.txt)
 - [SegRef3D Lite basic tutorial](TutorialSegRef3DLiteEN.md)
 - [Registration guidance](Registration.md)
-- [Seg Anything tutorial](TutorialSegOnWebEN.md)
+- [SegAnything tutorial](TutorialSegOnWebEN.md)
 - [SegRef3D repository README](../README.md)
 
 ---
@@ -112,7 +112,7 @@ https://github.com/SatoruMuro/SegRef3D
 適切なsegmentation方法、推奨export形式、検証上・データ取扱上の注意を提案してください。
 
 通常のSegRef3D Liteのbrowser-local処理、SegRef3D Local GPU、SegRef3D Local CPU、
-Seg Anything／Seg CT/MRIでユーザーが明示的に行うGoogle Colab uploadを区別してください。
+SegAnything／SegCT/MRIでユーザーが明示的に行うGoogle Colab uploadを区別してください。
 未実装機能を推測せず、臨床的妥当性を仮定せず、研究画像や患者識別情報のuploadを求めないでください。
 画像そのものではなく、説明とmetadataだけを質問してください。
 ```

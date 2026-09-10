@@ -54,8 +54,8 @@ SEGREF3D_EDITION=local-cpu
 
 so the executable will not attempt to import SAM2 or torch at startup.
 
-Local SAM2 buttons are disabled with an explanation. `Seg Anything`, `Seg CT/MRI`, and
-`Legacy Instant3DWeb` remain enabled.
+Local SAM2 buttons are disabled with an explanation. `SegAnything`, `SegCT/MRI`, and
+`Legacy SegCT/MRI` remain enabled.
 
 Before distribution, extract each ZIP into a fresh directory and run
 `SegRef3D.exe --startup-smoke-test`. Also run `SegRef3D.exe --gpu-check` for

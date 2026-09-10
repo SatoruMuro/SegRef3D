@@ -1,6 +1,7 @@
 import { safeArchivePath } from "./segmentation-job.mjs?v=25";
 
-export const INSTANT3D_SCHEMA = "segref3d-instant3d-bridge";
+export const INSTANT3D_SCHEMA = "segref3d-segct-mri-bridge";
+const LEGACY_SCHEMA = "segref3d-instant3d-bridge";
 export const INSTANT3D_SCHEMA_VERSION = "1.0";
 export const INSTANT3D_LABELMAP = "labelmap/labels.nii.gz";
 
@@ -122,7 +123,7 @@ export async function sha256Hex(bytes) {
 }
 
 export async function createInstant3DRequest({ source, objects, catalog, fast = false }) {
-  requireValue(source?.format === "nifti" && source.bytes, "Seg CT/MRI requires a compatible CT/MRI DICOM series or NIfTI volume.");
+  requireValue(source?.format === "nifti" && source.bytes, "SegCT/MRI requires a compatible CT/MRI DICOM series or NIfTI volume.");
   requireValue(catalog?.schema_version === INSTANT3D_SCHEMA_VERSION, "The ROI catalog is unavailable or unsupported.");
   const normalizedObjects = validateInstant3DObjects(objects, catalog);
   const modality = source.modality || "CT";
@@ -178,7 +179,7 @@ export function geometryMismatches(expected, actual, { includeChecksum = true } 
 export function validateInstant3DResult(entries, currentSource, catalog) {
   const byName = new Map();
   for (const entry of entries) {
-    const name = safeArchivePath(entry.name, "Instant3D ZIP member");
+    const name = safeArchivePath(entry.name, "SegCT/MRI ZIP member");
     byName.set(name, entry);
   }
   const manifestEntry = byName.get("manifest.json");
@@ -189,14 +190,14 @@ export function validateInstant3DResult(entries, currentSource, catalog) {
   } catch (error) {
     throw new Error(`manifest.json could not be read: ${error.message}`);
   }
-  requireValue(manifest.schema === INSTANT3D_SCHEMA && manifest.schema_version === INSTANT3D_SCHEMA_VERSION,
-    "This ZIP uses an unsupported Seg CT/MRI bridge schema.");
-  requireValue(manifest.status === "success", "Instant3D result status is not success.");
+  requireValue([INSTANT3D_SCHEMA, LEGACY_SCHEMA].includes(manifest.schema) && manifest.schema_version === INSTANT3D_SCHEMA_VERSION,
+    "This ZIP uses an unsupported SegCT/MRI bridge schema.");
+  requireValue(manifest.status === "success", "SegCT/MRI result status is not success.");
   manifest.objects = validateInstant3DObjects(manifest.objects, catalog);
   requireValue(currentSource?.format === "nifti", "Load the original DICOM series or NIfTI volume before importing its result.");
   const mismatches = geometryMismatches(manifest.source, currentSource);
   requireValue(mismatches.length === 0,
-    `Seg CT/MRI result does not match the loaded volume: ${mismatches.join(", ")}.`);
+    `SegCT/MRI result does not match the loaded volume: ${mismatches.join(", ")}.`);
   const labelmap = byName.get(INSTANT3D_LABELMAP);
   requireValue(labelmap, `${INSTANT3D_LABELMAP} is missing from the result ZIP.`);
   return { manifest, labelmap, entriesByName: byName };

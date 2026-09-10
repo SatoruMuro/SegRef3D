@@ -88,8 +88,8 @@ class SegOnWebBackendTests(unittest.TestCase):
                 path = root / f"source{index + 1}.jpg"
                 Image.new("RGB", (32, 24), "black").save(path, "JPEG")
                 images.append({"key": f"{index + 1:04d}", "path": str(path)})
-            input_zip = root / "segonweb_input.zip"
-            result_zip = root / "segref3d_result.zip"
+            input_zip = root / "seganything_request.zip"
+            result_zip = root / "seganything_result.zip"
             create_job_zip(
                 str(input_zip),
                 images,
@@ -111,15 +111,32 @@ class SegOnWebBackendTests(unittest.TestCase):
                 device_name="fake",
             )
             manifest = validate_result_zip(str(result_zip))
+            import json
+            self.assertNotRegex(json.dumps(manifest).lower(), r"segonweb|instant3d")
             import zipfile
 
             prompt_record = manifest["result"]["masks"][1]
             with zipfile.ZipFile(result_zip) as archive:
+                self.assertFalse(any('segonweb' in name.lower() for name in archive.namelist()))
                 with archive.open(prompt_record["archive_path"]) as mask_file:
                     with Image.open(mask_file) as image:
                         prompt_mask = np.array(image)
             self.assertEqual(prompt_mask[6, 5], 1)
             self.assertEqual(prompt_mask[4, 5], 0)
+
+    def test_legacy_input_filename_and_old_single_prompt_remain_supported(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            image = root / 'image.png'
+            Image.new('RGB', (32, 24)).save(image)
+            request = root / 'segonweb_input.zip'
+            create_job_zip(str(request), [{'key': '1', 'path': str(image), 'original_filename': 'image.png'}],
+                           [dict(id=1, name='Target', prompt_frame=0, box=[4, 5, 12, 14], tracking_start=0, tracking_end=0)],
+                           app_version='legacy')
+            result = root / 'seganything_result.zip'
+            process_segmentation_job(str(request), FakePredictor(), work_dir=str(root / 'work'),
+                                     output_zip=str(result), device_name='fake')
+            self.assertEqual(len(validate_result_zip(str(result))['result']['masks']), 1)
 
     def test_multiple_objects_and_partial_ranges(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -147,8 +164,8 @@ class SegOnWebBackendTests(unittest.TestCase):
                     "tracking_end": 4,
                 },
             ]
-            input_zip = root / "segonweb_input.zip"
-            result_zip = root / "segref3d_result.zip"
+            input_zip = root / "seganything_request.zip"
+            result_zip = root / "seganything_result.zip"
             create_job_zip(str(input_zip), images, objects, app_version="test")
             process_segmentation_job(
                 str(input_zip),
@@ -194,8 +211,8 @@ class SegOnWebBackendTests(unittest.TestCase):
                 "tracking_end": 9,
                 "prompts": prompts,
             }]
-            input_zip = root / "segonweb_input.zip"
-            result_zip = root / "segref3d_result.zip"
+            input_zip = root / "seganything_request.zip"
+            result_zip = root / "seganything_result.zip"
             manifest = create_job_zip(str(input_zip), images, objects, app_version="test")
             self.assertEqual([prompt["frame"] for prompt in manifest["objects"][0]["prompts"]], [2, 5, 8])
 

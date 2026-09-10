@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "source": "TotalSegmentator open-task catalog used by Seg CT/MRI",
+  "source": "TotalSegmentator open-task catalog used by SegCT/MRI",
   "groups": [
     {"id":"ribs_all","display_name":"Ribs, all","task":"total","members":["rib_left_1","rib_left_2","rib_left_3","rib_left_4","rib_left_5","rib_left_6","rib_left_7","rib_left_8","rib_left_9","rib_left_10","rib_left_11","rib_left_12","rib_right_1","rib_right_2","rib_right_3","rib_right_4","rib_right_5","rib_right_6","rib_right_7","rib_right_8","rib_right_9","rib_right_10","rib_right_11","rib_right_12"],"modality":["CT"],"license_required":false,"category":"Bone","synonyms":["rib","ribs","all ribs"]},
     {"id":"ribs_left","display_name":"Ribs, left","task":"total","members":["rib_left_1","rib_left_2","rib_left_3","rib_left_4","rib_left_5","rib_left_6","rib_left_7","rib_left_8","rib_left_9","rib_left_10","rib_left_11","rib_left_12"],"modality":["CT"],"license_required":false,"category":"Bone","synonyms":["rib","ribs","left ribs"]},

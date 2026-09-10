@@ -1,4 +1,4 @@
-"""Gradio-free TotalSegmentator backend for the Seg CT/MRI workflow."""
+"""Gradio-free TotalSegmentator backend for the SegCT/MRI workflow."""
 
 from __future__ import annotations
 
@@ -77,7 +77,7 @@ def validate_installed_rois(objects: list[dict]) -> None:
     for item in objects:
         if item["task"] in LICENSED_TASKS:
             raise Instant3DProcessingError(
-                "The requested structure requires an Academic license and is not supported by Seg CT/MRI v1."
+                "The requested structure requires an Academic license and is not supported by SegCT/MRI v1."
             )
         grouped[item["task"]].append(item["roi"])
     for task, rois in grouped.items():
@@ -213,16 +213,16 @@ def _write_volumes(objects: list[dict], roi_masks: dict[tuple[int, str, str], np
             })
 
 
-def process_request(request_zip: str | Path, output_zip: str | Path = "/content/instant3d_result.zip") -> Path:
+def process_request(request_zip: str | Path, output_zip: str | Path = "/content/segct_mri_result.zip") -> Path:
     Instant3DBridgeError, geometry_mismatches, nifti_fingerprint, validate_request_zip = _bridge_modules()
     try:
-        with tempfile.TemporaryDirectory(prefix="instant3dweb2-") as temporary:
+        with tempfile.TemporaryDirectory(prefix="segct-mri-") as temporary:
             work = Path(temporary)
             manifest, source_path = validate_request_zip(request_zip, work / "request")
             if source_path is None:
                 raise Instant3DProcessingError("The request source was not extracted.")
             if manifest["source"].get("modality") not in ("CT", "MRI"):
-                raise Instant3DProcessingError("Seg CT/MRI requires a CT or MRI medical volume.")
+                raise Instant3DProcessingError("SegCT/MRI requires a CT or MRI medical volume.")
             validate_installed_rois(manifest["objects"])
             source = nib.load(str(source_path))
             task_groups = defaultdict(list)
@@ -283,7 +283,7 @@ def process_request(request_zip: str | Path, output_zip: str | Path = "/content/
                 "objects": result_objects,
                 "result": {"labelmap": "labelmap/labels.nii.gz", "label_png": label_records},
                 "software": {
-                    "instant3dweb2": INSTANT3DWEB2_VERSION,
+                    "segct_mri": INSTANT3DWEB2_VERSION,
                     "totalsegmentator": importlib.metadata.version("TotalSegmentator"),
                     "python": platform.python_version(),
                     "torch": torch_version,
@@ -300,7 +300,7 @@ def process_request(request_zip: str | Path, output_zip: str | Path = "/content/
                 for path in sorted(result_root.rglob("*")):
                     if path.is_file():
                         archive.write(path, path.relative_to(result_root).as_posix())
-            print(f"Seg CT/MRI result created: {output_path}")
+            print(f"SegCT/MRI result created: {output_path}")
             return output_path
     except (Instant3DBridgeError, Instant3DProcessingError):
         raise
@@ -309,6 +309,6 @@ def process_request(request_zip: str | Path, output_zip: str | Path = "/content/
     except OSError as exc:
         if "space" in str(exc).lower() or getattr(exc, "errno", None) == 28:
             raise Instant3DProcessingError("The Colab runtime ran out of disk space.") from exc
-        raise Instant3DProcessingError(f"Seg CT/MRI file operation failed: {exc}") from exc
+        raise Instant3DProcessingError(f"SegCT/MRI file operation failed: {exc}") from exc
     except Exception as exc:
-        raise Instant3DProcessingError(f"Seg CT/MRI processing failed: {exc}") from exc
+        raise Instant3DProcessingError(f"SegCT/MRI processing failed: {exc}") from exc

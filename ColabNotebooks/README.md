@@ -37,17 +37,17 @@ CPU units: `python -m unittest discover -s ColabNotebooks/tests -p "test_inferre
 Mechanical CPU/T4 path: `tests/run_inferref3d_smoke.py` (add `--gpu` for CUDA/AMP). Format details:
 [`TRAINREF3D_INFERENCE_FORMAT.md`](../docs/TRAINREF3D_INFERENCE_FORMAT.md).
 
-## Seg Anything
+## SegAnything
 
-Use `SegOnWebJob_v1_0.ipynb` for the Gradio-free Seg Anything workflow.
+Use `SegOnWebJob_v1_0.ipynb` for the Gradio-free SegAnything workflow.
 The public redirect is `segonweb.html`.
 
 1. Configure **AI Tracking Setup** objects in SegRef3D Lite or Batch Tracking in SegRef3D Local.
-2. Export `segonweb_input.zip`.
+2. Export `seganything_request.zip`.
 3. Open the notebook and select a T4 GPU.
 4. Run all cells and upload the input ZIP in the first executable cell.
 5. Leave the notebook running while setup and SAM2 processing continue.
-6. The final, separate download cell automatically starts the `segref3d_result.zip` download.
+6. The final, separate download cell automatically starts the `seganything_result.zip` download.
 7. Import the downloaded ZIP into SegRef3D.
 
 `segonweb_backend.py` contains the ZIP-to-SAM2 orchestration. It intentionally uses
@@ -84,20 +84,24 @@ The shared archive schema is documented in
 `SegRef3D/docs/SEGONWEB_JOB_FORMAT.md` and implemented by
 `SegRef3D/segmentation_job.py`.
 
-## Seg CT/MRI
+## SegCT/MRI
 
-Use `Instant3DWeb2.ipynb` for the Gradio-free CT structure workflow. The public launcher is
+Use `Instant3DWeb2.ipynb` for the Gradio-free CT/MRI structure workflow. The public launcher is
 `segctmri.html`. The former `instant3dweb2.html` URL remains as a compatibility redirect.
 `instant3dweb2_backend.py` contains request validation, task grouping,
 TotalSegmentator invocation, geometry-aware output handling, and result ZIP generation.
 
-1. Create `instant3d_request.zip` in SegRef3D Local or SegRef3D Lite.
-2. Open the Seg CT/MRI launcher and select a T4 GPU runtime when available.
-3. Upload the request ZIP in the first executable upload cell.
-4. Run validation before TotalSegmentator is installed or invoked.
-5. Run the grouped open-license tasks and create `instant3d_result.zip`.
-6. Use the separate final cell to start the browser download automatically.
-7. Import the result into the same source NIfTI volume in SegRef3D.
+1. Create `segct_mri_request.zip` in SegRef3D Local or SegRef3D Lite.
+2. Open the SegCT/MRI launcher and select a T4 GPU runtime when available.
+3. Choose **Runtime > Run all** and upload the request ZIP in the first executable cell.
+4. The upload cell checks the ZIP/manifest/source and keeps it in a separate temporary directory.
+   Setup then installs dependencies; full source/geometry validation runs before inference.
+5. The grouped open-license tasks run and create `segct_mri_result.zip`; the final cell starts its download.
+6. Import the result into the same DICOM series or NIfTI volume in SegRef3D.
+
+Source-prefixed and older request ZIP filenames remain accepted. New exports use the
+current product names; legacy protocol identifiers are accepted for compatibility.
+See the [naming and verification record](../SegRef3D/docs/DEMO_COLAB_NAMING.md).
 
 The backend rejects unsafe ZIP paths, malformed manifests, unsupported ROI/task combinations,
 duplicate Obj mappings, and license-restricted tasks. It preserves binary ROI NIfTI outputs as

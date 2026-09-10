@@ -53,14 +53,14 @@ staining, and spacing assumptions directly affect quantitative output.
 ### Serial electron microscopy
 
 Typical route: begin with an aligned and ordered stack, verify voxel scale, then use manual drawing,
-threshold/RGB extraction where appropriate, imported masks, or Seg Anything. Large EM stacks can
+threshold/RGB extraction where appropriate, imported masks, or SegAnything. Large EM stacks can
 exceed browser memory; test a representative subset before choosing Lite or a local build.
 
 ### CT, MRI, or micro-CT
 
 Typical route: load DICOM or NIfTI, inspect imported dimensions and physical geometry, segment or
 refine labels, review masks in multiple planes or downstream software as appropriate, calculate
-volume, and export NIfTI Labelmap or STL. Seg CT/MRI is an optional TotalSegmentator/Google Colab
+volume, and export NIfTI Labelmap or STL. SegCT/MRI is an optional TotalSegmentator/Google Colab
 route for supported anatomy from a compatible CT NIfTI source; available structures depend on the
 bundled open-license catalog.
 
@@ -177,22 +177,22 @@ Use this order:
 Threshold and RGB extraction are not universal AI segmentation. Their suitability depends on image
 contrast, staining, artifacts, and the target structure. Review the resulting masks.
 
-### Seg Anything
+### SegAnything
 
-Seg Anything is for arbitrary user-specified structures. In Lite, the user defines object tracking
-ranges and one or more box-prompt keyframes, creates `<source-folder>_segonweb_input.zip`, explicitly
+SegAnything is for arbitrary user-specified structures. In Lite, the user defines object tracking
+ranges and one or more box-prompt keyframes, creates `<source-folder>_seganything_request.zip`, explicitly
 uploads that ZIP to the user's Google Colab runtime, runs the SAM-based workflow, downloads
-`segref3d_result.zip`, and imports it into SegRef3D for refinement. The input ZIP includes the
+`seganything_result.zip`, and imports it into SegRef3D for refinement. The input ZIP includes the
 working image sequence, not only prompt coordinates.
 
 Local GPU can perform its included SAM2 segmentation and tracking locally instead. Local CPU does
 not include local SAM2.
 
-### Seg CT/MRI
+### SegCT/MRI
 
-Seg CT/MRI is for supported known anatomical structures from a compatible CT NIfTI volume. The user
-selects structures, creates `<source-folder>_instant3d_request.zip`, explicitly uploads the ZIP to
-the user's Google Colab runtime, runs TotalSegmentator, downloads `instant3d_result.zip`, and imports
+SegCT/MRI is for supported known anatomical structures from a compatible CT NIfTI volume. The user
+selects structures, creates `<source-folder>_segct_mri_request.zip`, explicitly uploads the ZIP to
+the user's Google Colab runtime, runs TotalSegmentator, downloads `segct_mri_result.zip`, and imports
 the validated result. The request ZIP contains the exact source NIfTI and settings. This route is
 not a general arbitrary-structure segmenter and does not imply clinical validation.
 
@@ -260,7 +260,7 @@ API, analytics pipeline, or telemetry service in its current implementation.
 
 ### Explicit external workflows
 
-Seg Anything and Seg CT/MRI use Google Colab. Their input ZIPs contain working images or a source
+SegAnything and SegCT/MRI use Google Colab. Their input ZIPs contain working images or a source
 NIfTI volume. Creating a ZIP does not upload it, but selecting it in Colab explicitly sends it to
 the user's Colab runtime. SegRef3D does not operate an intermediate image-upload server.
 
@@ -322,5 +322,5 @@ series consistency still require review.
 - Basic tutorial: https://satorumuro.github.io/SegRef3D/Tutorial/TutorialSegRef3DLiteEN.html
 - Japanese basic tutorial: https://satorumuro.github.io/SegRef3D/Tutorial/TutorialSegRef3DLiteJP.html
 - Registration: https://github.com/SatoruMuro/SegRef3D/blob/main/Tutorial/Registration.md
-- Seg Anything tutorial: https://satorumuro.github.io/SegRef3D/Tutorial/TutorialSegOnWebEN.html
+- SegAnything tutorial: https://satorumuro.github.io/SegRef3D/Tutorial/TutorialSegOnWebEN.html
 - Short AI overview: https://satorumuro.github.io/SegRef3D/llms.txt

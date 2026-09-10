@@ -1,11 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://satorumuro.github.io/SegRef3D/schemas/instant3d_result.schema.json",
-  "title": "SegRef3D Seg CT/MRI result",
+  "title": "SegRef3D SegCT/MRI result",
   "type": "object",
   "required": ["schema", "schema_version", "request_id", "status", "source", "objects", "software", "warnings", "overlaps"],
   "properties": {
-    "schema": {"const": "segref3d-instant3d-bridge"},
+    "schema": {"enum": ["segref3d-segct-mri-bridge", "segref3d-instant3d-bridge"]},
     "schema_version": {"const": "1.0"},
     "request_id": {"type": "string", "minLength": 8},
     "status": {"const": "success"},

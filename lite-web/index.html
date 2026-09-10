@@ -12,7 +12,7 @@
     <link rel="icon" href="./favicon.ico" sizes="any" />
     <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
     <link rel="manifest" href="./manifest.webmanifest" />
-    <link rel="stylesheet" href="./styles.css?v=34" />
+    <link rel="stylesheet" href="./styles.css?v=35" />
   </head>
   <body>
     <svg class="svg-defs" aria-hidden="true">
@@ -246,7 +246,7 @@
             <svg><use href="#i-sliders"></use></svg><span>Tools</span>
           </button>
           <button id="segonweb-workflow" class="command-button" type="button" title="Prompt-based segmentation using SAM">
-            <svg><use href="#i-box"></use></svg><span>Seg Anything</span>
+            <svg><use href="#i-box"></use></svg><span>SegAnything</span>
           </button>
           <details id="export-menu" class="toolbar-menu">
             <summary class="command-button"><svg><use href="#i-download"></use></svg><span>Export</span></summary>
@@ -282,23 +282,25 @@
                 <svg><use href="#i-folder"></use></svg><span>Load Images</span>
               </button>
               <button id="empty-volume" class="command-button" type="button">Load Volume</button>
-              <button id="load-demo" class="command-button demo-button" type="button">
-                <svg><use href="#i-image"></use></svg><span>Load Apple Demo</span>
-              </button>
-              <button id="load-rabbit-demo" class="command-button demo-button" type="button">
-                <svg><use href="#i-box"></use></svg><span>Load RabbitCT Demo</span>
-              </button>
             </div>
             <div class="demo-intro">
-              <strong>Try SegRef3D without preparing your own data</strong>
-              <span><b>Apple:</b> Serial images → calibration → segmentation → 3D · about 5.6 MB</span>
-              <span><b>RabbitCT:</b> NIfTI → threshold → cleanup → 3D · about 20 MB</span>
-              <div class="microscopy-demos">
+              <h2 id="demo-datasets-heading">Try a demo dataset</h2>
+              <div class="demo-grid" role="group" aria-labelledby="demo-datasets-heading">
+                <button id="load-demo" class="command-button demo-button" type="button">
+                  <svg aria-hidden="true"><use href="#i-image"></use></svg>
+                  <span><b>Load Apple Demo</b><small>Serial images → calibration → segmentation → 3D · about 5.6 MB</small></span>
+                </button>
+                <button id="load-rabbit-demo" class="command-button demo-button" type="button">
+                  <svg aria-hidden="true"><use href="#i-box"></use></svg>
+                  <span><b>Load Rabbit CT Demo</b><small>NIfTI → threshold → cleanup → 3D · about 20 MB</small></span>
+                </button>
                 <button class="command-button demo-button" type="button" data-demo-id="hela-em-demo">
-                  <span><b>Electron microscopy</b><small>HeLa cells · 150 slices · 512 × 512 · 25.4 MB</small></span>
+                  <svg aria-hidden="true"><use href="#i-image"></use></svg>
+                  <span><b>Load Electron Microscopy Demo</b><small>HeLa cells · 150 slices · 512 × 512 · 25.4 MB</small></span>
                 </button>
                 <button class="command-button demo-button" type="button" data-demo-id="mouse-brain-demo">
-                  <span><b>Mouse brain — Light microscopy</b><small>Serial sections · 132 slices · 707 × 553 · 51.5 MB</small></span>
+                  <svg aria-hidden="true"><use href="#i-image"></use></svg>
+                  <span><b>Load Mouse Brain Demo</b><small>Light microscopy · serial sections · 132 slices · 707 × 553 · 51.5 MB</small></span>
                 </button>
               </div>
               <small>
@@ -391,7 +393,7 @@
           <p>Training ZIP is local and excludes DICOM headers, but image data and user-entered object names may still be identifiable.</p>
         </div>
         <div class="local-file-assurance dialog-exception">
-          <strong>Exceptions: Seg Anything and Seg CT/MRI</strong>
+          <strong>Exceptions: SegAnything and SegCT/MRI</strong>
           <span>These AI workflows use Google Colab. You must explicitly upload their generated input ZIP, including working images or the source NIfTI, to your own Google Colab runtime.</span>
         </div>
         <section class="dialog-language-block" lang="ja" aria-labelledby="local-processing-ja-title">
@@ -399,7 +401,7 @@
           <p>SegRef3D Lite に読み込んだ画像は、通常ブラウザ内で処理され、元画像が SegRef3D のサーバーへ自動的にアップロードされることはありません。</p>
           <p>マスクや自動保存データもブラウザ内に保存され、Exportしたファイルは端末へ直接保存されます。</p>
           <p>Training ZIPはbrowser内で生成されDICOM headerを含みませんが、画像自体やユーザーが入力したobject名には識別情報が残る可能性があります。</p>
-          <p><strong>例外：Seg Anything／Seg CT/MRI</strong><br />これらのAI機能は Google Colab を使用します。作成された入力ZIP（作業用画像または元NIfTIを含む）は、ユーザー自身が Google Colab ランタイムへ明示的にアップロードします。</p>
+          <p><strong>例外：SegAnything／SegCT/MRI</strong><br />これらのAI機能は Google Colab を使用します。作成された入力ZIP（作業用画像または元NIfTIを含む）は、ユーザー自身が Google Colab ランタイムへ明示的にアップロードします。</p>
         </section>
         <div class="local-file-dialog-actions compact-dialog-actions">
           <button id="local-processing-close" class="command-button accent" type="button">Close</button>
@@ -566,10 +568,10 @@
         <header class="tools-dialog-header">
           <div>
             <span class="dialog-kicker">AI SEGMENTATION WORKFLOW</span>
-            <h2 id="segonweb-workflow-title">Seg Anything</h2>
+            <h2 id="segonweb-workflow-title">SegAnything</h2>
             <span>Prompt-based segmentation for structures you specify using SAM</span>
           </div>
-          <button id="segonweb-workflow-close" class="icon-button" type="button" title="Close Seg Anything workflow">
+          <button id="segonweb-workflow-close" class="icon-button" type="button" title="Close SegAnything workflow">
             <svg><use href="#i-close"></use></svg>
           </button>
         </header>
@@ -582,14 +584,14 @@
           </li>
           <li>
             <span class="workflow-step-number">2</span>
-            <div><strong>Create Input ZIP</strong><span><code>&lt;source-folder&gt;_segonweb_input.zip</code> includes the working image sequence and Seg Anything job settings. It stays local until you upload it in Colab.</span></div>
+            <div><strong>Create Input ZIP</strong><span><code>&lt;source-folder&gt;_seganything_request.zip</code> includes the working image sequence and SegAnything job settings. It stays local until you upload it in Colab.</span></div>
             <button id="export-segonweb" class="command-button" type="button" disabled>Create Input ZIP</button>
           </li>
           <li>
             <span class="workflow-step-number">3</span>
             <div><strong>Run SAM2</strong><span>Open the Colab backend and upload the input ZIP.</span></div>
-            <a id="seg-on-web" class="command-button" href="https://satorumuro.github.io/SegRef3D/ColabNotebooks/segonweb.html" target="_blank" rel="noopener noreferrer" aria-label="Open Seg Anything">
-              <svg><use href="#i-external"></use></svg><span>Open Seg Anything</span>
+            <a id="seg-on-web" class="command-button" href="https://satorumuro.github.io/SegRef3D/ColabNotebooks/segonweb.html" target="_blank" rel="noopener noreferrer" aria-label="Open SegAnything">
+              <svg><use href="#i-external"></use></svg><span>Open SegAnything</span>
             </a>
           </li>
           <li>
@@ -600,7 +602,7 @@
         </ol>
         <section class="instant3d-workflow" aria-labelledby="instant3d-title">
           <div class="tool-section-heading">
-            <strong id="instant3d-title">Seg CT/MRI</strong>
+            <strong id="instant3d-title">SegCT/MRI</strong>
             <span>Automatic anatomical segmentation with TotalSegmentator</span>
           </div>
           <div id="instant3d-source-status" class="workflow-summary">Load a compatible CT/MRI DICOM series or NIfTI volume to begin.</div>
@@ -625,10 +627,10 @@
           <label class="checkbox-row"><input id="instant3d-fast" type="checkbox" />Fast mode (lower-resolution model)</label>
           <div class="instant3d-actions">
             <button id="instant3d-export" class="command-button accent" type="button" disabled>Create Request ZIP</button>
-            <a id="instant3d-open" class="command-button" href="https://satorumuro.github.io/SegRef3D/ColabNotebooks/segctmri.html" target="_blank" rel="noopener noreferrer">Open Seg CT/MRI</a>
+            <a id="instant3d-open" class="command-button" href="https://satorumuro.github.io/SegRef3D/ColabNotebooks/segctmri.html" target="_blank" rel="noopener noreferrer">Open SegCT/MRI</a>
             <button id="instant3d-import" class="command-button" type="button" disabled>Import Result ZIP</button>
           </div>
-          <p class="instant3d-privacy"><code>&lt;source-folder&gt;_instant3d_request.zip</code> contains the source NIfTI volume and job settings. It stays in your browser until you explicitly upload it to your own Google Colab runtime.</p>
+          <p class="instant3d-privacy"><code>&lt;source-folder&gt;_segct_mri_request.zip</code> contains the source NIfTI volume and job settings. It stays in your browser until you explicitly upload it to your own Google Colab runtime.</p>
           <input id="instant3d-result-input" class="visually-hidden" type="file" accept="application/zip,.zip" />
         </section>
         <section class="instant3d-workflow custom-model-workflow" aria-labelledby="custom-model-title">
@@ -659,7 +661,7 @@
 
     <dialog id="instant3d-warning-dialog" class="local-file-dialog information-dialog" aria-labelledby="instant3d-warning-title">
       <div class="local-file-dialog-content">
-        <div class="local-file-dialog-heading"><span class="local-file-dialog-icon cloud-dialog-icon"><svg><use href="#i-external"></use></svg></span><div><span class="dialog-kicker cloud-dialog-kicker">PROCESSING LOCATION CHANGES</span><h2 id="instant3d-warning-title">Seg CT/MRI uses Google Colab</h2></div></div>
+        <div class="local-file-dialog-heading"><span class="local-file-dialog-icon cloud-dialog-icon"><svg><use href="#i-external"></use></svg></span><div><span class="dialog-kicker cloud-dialog-kicker">PROCESSING LOCATION CHANGES</span><h2 id="instant3d-warning-title">SegCT/MRI uses Google Colab</h2></div></div>
         <div class="local-file-dialog-copy">
           <p>The exported request ZIP contains the source NIfTI volume and selected structure settings.</p>
           <p>You must explicitly upload it to your own Google Colab runtime for TotalSegmentator processing. It is not uploaded to a SegRef3D-operated server.</p>
@@ -705,12 +707,12 @@
           </span>
           <div>
             <span class="dialog-kicker cloud-dialog-kicker">PROCESSING LOCATION CHANGES</span>
-            <h2 id="segonweb-warning-title">Seg Anything uses Google Colab</h2>
+            <h2 id="segonweb-warning-title">SegAnything uses Google Colab</h2>
           </div>
         </div>
         <div class="local-file-dialog-copy">
           <p>SegRef3D Lite normally processes images locally in your browser.</p>
-          <p>Seg Anything is different: <code>&lt;source-folder&gt;_segonweb_input.zip</code> contains the working image sequence and must be uploaded to your Google Colab runtime for SAM-based processing.</p>
+          <p>SegAnything is different: <code>&lt;source-folder&gt;_seganything_request.zip</code> contains the working image sequence and must be uploaded to your Google Colab runtime for SAM-based processing.</p>
           <p>Your images are not uploaded to a SegRef3D-operated server.</p>
         </div>
         <div class="local-file-assurance cloud-assurance">
@@ -718,8 +720,8 @@
           <span>Make sure uploading research or medical data to Google Colab is permitted under your institution's research data and privacy policies.</span>
         </div>
         <section class="dialog-language-block" lang="ja" aria-labelledby="segonweb-warning-ja-title">
-          <h3 id="segonweb-warning-ja-title">Seg Anything は Google Colab を使用します</h3>
-          <p>SegRef3D Liteでは通常、画像はブラウザ内で処理されます。ただし Seg Anything では、作業画像を含む入力ZIPをユーザー自身の Google Colab ランタイムへアップロードする必要があります。</p>
+          <h3 id="segonweb-warning-ja-title">SegAnything は Google Colab を使用します</h3>
+          <p>SegRef3D Liteでは通常、画像はブラウザ内で処理されます。ただし SegAnything では、作業画像を含む入力ZIPをユーザー自身の Google Colab ランタイムへアップロードする必要があります。</p>
           <p>画像が SegRef3D の運営するサーバーへアップロードされることはありません。研究データ・医用画像を使用する場合は、所属機関の規定上、Google Colabへのアップロードが許可されていることを確認してください。</p>
         </section>
         <div class="local-file-dialog-actions">
@@ -730,7 +732,7 @@
             href="#"
             target="_blank"
             rel="noopener noreferrer"
-          >Continue to Seg Anything</a>
+          >Continue to SegAnything</a>
         </div>
       </div>
     </dialog>
@@ -1152,6 +1154,6 @@
         if (status) status.textContent = `Application operation failed: ${message}`;
       });
     </script>
-    <script type="module" src="./app.mjs?v=48"></script>
+    <script type="module" src="./app.mjs?v=49"></script>
   </body>
 </html>

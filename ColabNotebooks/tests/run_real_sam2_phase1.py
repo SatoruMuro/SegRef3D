@@ -116,7 +116,7 @@ def main():
             "tracking_start": 1,
             "tracking_end": 4,
         }
-        input_zip = root / "segonweb_input.zip"
+        input_zip = root / "seganything_request.zip"
         create_job_zip(str(input_zip), image_records, [obj], app_version="phase1-test")
         manifest, extracted_images = safe_extract_job_images(str(input_zip), str(root / "reference_input"))
 
@@ -126,7 +126,7 @@ def main():
             obj,
             root / "reference_reversed",
         )
-        result_zip = root / "segref3d_result.zip"
+        result_zip = root / "seganything_result.zip"
         process_segmentation_job(
             str(input_zip),
             predictor,

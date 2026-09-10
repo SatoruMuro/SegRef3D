@@ -10,7 +10,7 @@ recorded in `release-info.json`.
 - Fixed WinError 193 at startup caused by ARM64-host runtime DLLs in the x64 bundle.
 - Bundled verified native x64 Microsoft runtime DLLs and removed explicit ctypes preloads.
 - Added architecture checks before packaging and after extraction; failed startup diagnostics now fail verification.
-- Enabled Seg CT/MRI for compatible DICOM-derived volumes, preserving patient geometry.
+- Enabled SegCT/MRI for compatible DICOM-derived volumes, preserving patient geometry.
 - Retained the Auto Erase and Box Prompt fixes from v1.3.1.
 
 ## Known issue: Windows 11 Smart App Control

@@ -1,4 +1,4 @@
-"""Canonical medical sources for Seg CT/MRI, independent of the input format."""
+"""Canonical medical sources for SegCT/MRI, independent of the input format."""
 from pathlib import Path
 
 import nibabel as nib
@@ -24,7 +24,7 @@ def dicom_source_to_nifti(ordered_paths, output_path, *, scalar_volume=None, sca
     if modalities not in ({"CT"}, {"MR"}):
         raise Instant3DBridgeError("DICOM Modality must be CT or MR and consistent throughout the series.")
     if len({str(getattr(ds, "SeriesInstanceUID", "")) for ds in datasets}) != 1:
-        raise Instant3DBridgeError("Load one DICOM series for Seg CT/MRI.")
+        raise Instant3DBridgeError("Load one DICOM series for SegCT/MRI.")
     if any(int(getattr(ds, "NumberOfFrames", 1)) != 1 or int(getattr(ds, "SamplesPerPixel", 1)) != 1 for ds in datasets):
         raise Instant3DBridgeError("DICOM requires scalar slices; multi-frame input needs per-frame patient geometry.")
     if len(datasets) == 1:
