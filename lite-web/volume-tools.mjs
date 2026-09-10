@@ -79,7 +79,7 @@ function headerMatches(row, expected) {
   return expected.every((value, index) => row?.[index]?.trim().toLowerCase() === value);
 }
 
-export function createVolInfoCsv({ width, height, depth, spacing, origin = [0, 0, 0], affine = null, sourceKind = null }) {
+export function createVolInfoCsv({ width, height, depth, spacing, origin = [0, 0, 0], affine = null, sourceKind = null, physicalSpacing = null }) {
   const dimensions = [width, height, depth].map(Number);
   if (dimensions.some((value) => !Number.isInteger(value) || value < 1)) {
     throw new Error("VolInfo dimensions must be positive integers.");
@@ -99,6 +99,7 @@ export function createVolInfoCsv({ width, height, depth, spacing, origin = [0, 0
     matrix.forEach((row, index) => rows.push([`IJK to RAS Row ${index + 1}`], row));
     if (sourceKind) rows.push(["Geometry Source"], [sourceKind]);
   }
+  if (physicalSpacing) rows.push(["Physical Spacing Provenance"], [JSON.stringify(physicalSpacing)]);
   return `${rows.map((row) => row.map(csvCell).join(",")).join("\r\n")}\r\n`;
 }
 
@@ -156,6 +157,8 @@ export function parseVolInfoCsv(text) {
     origin,
   };
   if (affineRows.length === 4) result.affine = normalizeAffine(affineRows);
+  const provenanceRow = rows.findIndex(row => headerMatches(row, ["physical spacing provenance"]));
+  if (provenanceRow >= 0) result.physicalSpacing = JSON.parse(rows[provenanceRow + 1]?.[0] || "null");
   return result;
 }
 

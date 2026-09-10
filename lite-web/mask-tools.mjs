@@ -1,4 +1,4 @@
-import { signedDistanceForLabel } from "./volume-tools.mjs?v=17";
+import { signedDistanceForLabel } from "./volume-tools.mjs?v=18";
 
 function validateMasks(masks, width, height) {
   if (!Array.isArray(masks) || masks.length === 0) throw new Error("The label volume is empty.");
@@ -110,7 +110,7 @@ export async function volumeStatisticsAsync(
 export function createVolumeStatisticsCsv(statistics) {
   const header = [
     "object_id", "object_name", "voxel_count", "volume_mm3", "volume_cm3",
-    "first_frame", "last_frame", "occupied_slices",
+    "first_frame", "last_frame", "occupied_slices", "volume_um3", "physical_spacing_status", "xy_source", "z_source", "reference_width_mm",
   ];
   const lines = [header.join(",")];
   for (const row of statistics.rows) {
@@ -118,11 +118,16 @@ export function createVolumeStatisticsCsv(statistics) {
       row.objectId,
       csvCell(row.objectName),
       row.voxelCount,
-      row.volumeMm3 === null ? "" : row.volumeMm3.toFixed(6).replace(/\.?0+$/, ""),
-      row.volumeCm3 === null ? "" : row.volumeCm3.toFixed(9).replace(/\.?0+$/, ""),
+      row.volumeMm3 === null ? "" : String(row.volumeMm3),
+      row.volumeCm3 === null ? "" : String(row.volumeCm3),
       row.firstFrame,
       row.lastFrame,
       row.occupiedSlices,
+      row.volumeMm3 === null ? "" : String(row.volumeMm3 * 1e9),
+      !statistics.calibrated ? "requiresCalibration" : statistics.physicalSpacing?.z === "estimated" || statistics.physicalSpacing?.referenceApproximate ? "estimated" : "known",
+      statistics.physicalSpacing?.xy || "",
+      statistics.physicalSpacing?.z || "",
+      statistics.physicalSpacing?.referenceLengthMm || "",
     ].join(","));
   }
   return `${lines.join("\r\n")}\r\n`;

@@ -125,7 +125,7 @@ function enhanceCalibrationPanel(panel) {
   spatial.className = "spatial-information";
   spatial.innerHTML = `
     <span>SPATIAL INFORMATION</span>
-    <strong id="spatial-information-value">1 × 1 × 1 mm</strong>
+    <strong id="spatial-information-value">Unknown — calibration required</strong>
     <small id="spatial-information-source">Default spacing</small>
   `;
   const details = document.createElement("details");

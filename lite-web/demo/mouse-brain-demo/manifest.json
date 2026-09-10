@@ -1,6 +1,6 @@
 {
   "id": "mouse-brain-demo",
-  "revision": 1,
+  "revision": 2,
   "dataset": "Mouse brain light microscopy / Mouse Brain Architecture Project",
   "type": "serial light microscopy sections",
   "specimen": "mouse brain",
@@ -1222,5 +1222,16 @@
       "bytes": 93938,
       "sha256": "586e29408a8414fba333e528770d4dc2b6db6bef0a9255306d05fa8c7aaf58d6"
     }
-  ]
+  ],
+  "initialFrameIndex": 54,
+  "initialFrameSelectionNote": "Slice 55 (image0109.png): selected by visual comparison of the supplied sequence; broad coronal forebrain with both lateral boundaries clearly visible and uncropped.",
+  "referenceCalibrationWidthMm": 11.4,
+  "referenceCalibrationWidthType": "approximate adult mouse brain reference; not measured in this specimen",
+  "estimatedSliceSpacingMm": 0.1,
+  "estimatedSliceSpacingSource": "132 supplied images spanning approximate whole-brain anterior–posterior coverage; 13.2 mm adult reference extent / 132. Not source metadata or original histological section thickness.",
+  "physicalSpacingStatus": "requiresCalibration",
+  "physicalSpacingProvenance": {
+    "xy": "user calibration required using approximate reference",
+    "z": "estimated effective demo interval"
+  }
 }
