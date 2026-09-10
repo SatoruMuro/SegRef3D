@@ -44,8 +44,13 @@ numbers; there are no additional gaps in this step-2 sequence. Natural and lexic
 sorting agree for these zero-padded names. Contact sheets of all images show progressive
 anatomy without an obvious reversal or abrupt ordering jump. Original section shifts,
 tissue tears and slide artifacts remain. This review does not establish that every original
-section is present. Pixel and slice spacing are unknown; the app's default spacing is only
-a placeholder. Calibrate and, where necessary, register sections before physical measurements.
+section is present. Source physical spacing metadata were not supplied. The demo starts
+at slice 55 (`image0109.png`), visually selected for broad, clear left/right brain margins.
+X/Y are calibrated by the user against an **approximate 11.4 mm adult mouse brain reference
+width**, not a measurement of this BAP specimen. Z is an **estimated 0.10 mm (100 µm) effective
+interval**: approximate 13.2 mm whole-brain AP coverage / 132 supplied images. It is not
+source metadata or original histological section thickness. Physical volume remains unavailable
+until XY calibration, and subsequent volumes are approximate. Register sections where necessary.
 
 **Scientific citation (BAP):** Bohland JW et al. (2009).
 *A Proposal for a Coordinated Effort for the Determination of Brainwide Neuroanatomical

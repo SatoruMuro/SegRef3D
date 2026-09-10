@@ -1055,7 +1055,7 @@
             </div>
             <div class="table-scroll">
               <table class="data-table">
-                <thead><tr><th>Object</th><th>Voxels</th><th>mm³</th><th>cm³</th><th>Frames</th><th>Slices</th></tr></thead>
+                <thead><tr><th>Object</th><th>Voxels</th><th id="volume-statistics-unit">mm³</th><th>cm³</th><th>Frames</th><th>Slices</th></tr></thead>
                 <tbody id="volume-statistics-rows"></tbody>
               </table>
             </div>
@@ -1154,6 +1154,6 @@
         if (status) status.textContent = `Application operation failed: ${message}`;
       });
     </script>
-    <script type="module" src="./app.mjs?v=50"></script>
+    <script type="module" src="./app.mjs?v=51"></script>
   </body>
 </html>

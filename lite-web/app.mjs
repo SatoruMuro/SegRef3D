@@ -1,3 +1,4 @@
+import { physicalSpacingState, measurementSpacing, spacingStatus, formatSpacing, spatialInformation, physicalSpacingNote, applyReferenceCalibration, restorePhysicalSpacing, formatVolumeNumber, statisticsDisplayUnit } from "./physical-spacing.mjs?v=1";
 import { dicomMedicalSource } from "./medical-source.mjs?v=2";
 import {
   LABEL_COLORS,
@@ -41,7 +42,7 @@ import {
   transformGeometryForPreparedImage,
   upsampleGeometryAlongK,
 } from "./medical-geometry.mjs?v=3";
-import { demoDatasetById } from "./demo-datasets.mjs?v=5";
+import { demoDatasetById } from "./demo-datasets.mjs?v=6";
 import { clearProjectMasks, loadMask, saveMask } from "./storage.mjs?v=26";
 import { createZip, parseZip } from "./zip.mjs?v=25";
 import {
@@ -76,7 +77,7 @@ import {
   interpolateMultiLabelVolume,
   marchingTetrahedra,
   parseVolInfoCsv,
-} from "./volume-tools.mjs?v=17";
+} from "./volume-tools.mjs?v=18";
 import {
   applyMaskVolumeChanges,
   buildMaskVolumeChanges,
@@ -90,8 +91,8 @@ import {
   relabelVolume,
   volumeStatistics,
   volumeStatisticsAsync,
-} from "./mask-tools.mjs?v=20";
-import { upgradeWorkspaceLayout } from "./workspace-ui.mjs?v=32";
+} from "./mask-tools.mjs?v=21";
+import { upgradeWorkspaceLayout } from "./workspace-ui.mjs?v=33";
 import {
   createTrainingCaseEntries,
   createTrainingCaseId,
@@ -430,6 +431,7 @@ const state = {
   volumeOrigin: [0, 0, 0],
   volumeGeometry: null,
   volumeInfoSource: "Default spacing",
+  physicalSpacing: physicalSpacingState(),
   calibrationMode: false,
   calibrationPoints: [],
   calibrationHoverPoint: null,
@@ -1091,7 +1093,7 @@ function updateImageUi() {
       }`
     : "No image loaded";
   elements.projectDetails.textContent = image
-    ? `${state.images.length} slices · ${image.width} × ${image.height} · ${Number(state.calibration.xSpacing).toPrecision(4)} × ${Number(state.calibration.ySpacing).toPrecision(4)} × ${Number(state.calibration.zSpacing).toPrecision(4)} mm`
+    ? `${state.images.length} slices · ${image.width} × ${image.height} · ${spatialInformation(state.calibration, state.physicalSpacing)}`
     : "Open images or a volume to begin";
   elements.projectHealth.disabled = !image;
   if (image) {
@@ -2010,7 +2012,7 @@ function syncDemoCalibrationGuide() {
   elements.demoSpacingNote.textContent = guide.detail;
   elements.demoNextStep.textContent = guide.nextStep;
   elements.demoNextStep.hidden =
-    guide.revealNextStepAfterCalibration && state.volumeInfoSource !== "Reference line calibration";
+    guide.revealNextStepAfterCalibration && state.physicalSpacing.xy !== "user-calibrated";
   elements.demoAttributionPrefix.textContent = dataset.attribution.uiPrefix;
   elements.demoSourceLink.href = dataset.attribution.doiUrl;
   elements.demoSourceLink.textContent = dataset.attribution.sourceLabel || "the cited Zenodo dataset";
@@ -2029,15 +2031,18 @@ function syncCalibrationControls() {
 
 function syncSpatialInformation() {
   if (!elements.spatialInformationValue) return;
-  const values = [
-    state.calibration.xSpacing,
-    state.calibration.ySpacing,
-    state.calibration.zSpacing,
-  ].map((value) => Number(value).toPrecision(4));
-  elements.spatialInformationValue.textContent = `${values.join(" × ")} mm`;
-  elements.spatialInformationSource.textContent = state.volumeInfoSource;
-  if (elements.manualCalibration && activeDemoDataset()?.id === "apple-kanzi-84") {
-    elements.manualCalibration.open = true;
+  elements.spatialInformationValue.textContent = spatialInformation(state.calibration, state.physicalSpacing);
+  elements.spatialInformationSource.textContent = state.physicalSpacing.referenceApproximate ? physicalSpacingNote(state.physicalSpacing) : `${state.volumeInfoSource} · ${physicalSpacingNote(state.physicalSpacing)}`;
+  if (elements.manualCalibration && activeDemoDataset()?.calibration) elements.manualCalibration.open = true;
+  const referenceOnly = Boolean(state.physicalSpacing.requiresReferenceCalibration);
+  for (const input of [elements.spacingX, elements.spacingY, elements.spacingZ, elements.referenceLength]) {
+    input.readOnly = referenceOnly;
+  }
+  if (referenceOnly && state.physicalSpacing.xy === "unknown") {
+    elements.spacingX.value = elements.spacingY.value = "";
+    elements.spacingX.placeholder = elements.spacingY.placeholder = "Calibration required";
+  } else {
+    elements.spacingX.placeholder = elements.spacingY.placeholder = "";
   }
 }
 
@@ -2078,6 +2083,10 @@ function initializeCalibrationFromImages() {
     zSpacing: Number.isFinite(zSpacing) && zSpacing > 0 ? zSpacing : 1,
     referenceLength: 10,
   };
+  state.physicalSpacing = physicalSpacingState(
+    [xSpacing, ySpacing].every(v => Number.isFinite(v) && v > 0) ? "metadata" : "unknown",
+    Number.isFinite(zSpacing) && zSpacing > 0 ? "metadata" : "unknown",
+  );
   const sourceOrigin = state.volumeGeometry?.origin || image?.volumeOrigin;
   state.volumeOrigin = [0, 1, 2].map((index) => {
     const value = Number(sourceOrigin?.[index]);
@@ -2122,6 +2131,7 @@ function currentVolInfo() {
     origin: geometry.origin,
     affine: geometry.affine,
     sourceKind: geometry.sourceKind,
+    physicalSpacing: { ...state.physicalSpacing },
     geometry,
   };
 }
@@ -2136,7 +2146,7 @@ function syncVolInfoSummary() {
     const info = currentVolInfo();
     elements.volInfoSummary.textContent =
       `${info.width} × ${info.height} × ${info.depth} · spacing ` +
-      `${info.spacing.map((value) => Number(value).toPrecision(6)).join(" × ")} mm · ` +
+      `${spatialInformation(state.calibration, state.physicalSpacing)} · ` +
       `origin ${info.origin.map((value) => Number(value).toPrecision(6)).join(", ")} · ` +
       state.volumeInfoSource;
   } catch (error) {
@@ -2147,6 +2157,7 @@ function syncVolInfoSummary() {
 function exportVolInfoCsv({ automatic = false } = {}) {
   try {
     updateCalibrationFromControls();
+    requireReferenceDemoCalibration();
     const info = currentVolInfo();
     const filename = `${outputFileStem()}_volinf.csv`;
     downloadBlob(
@@ -2198,6 +2209,7 @@ async function importVolInfoCsv(file) {
     };
     state.volumeOrigin = [...state.volumeGeometry.origin];
     state.volumeInfoSource = file.name;
+    state.physicalSpacing = restorePhysicalSpacing(imported.physicalSpacing, physicalSpacingState("manual", "manual"));
     syncCalibrationControls();
     syncVolInfoSummary();
     setStatus(
@@ -2261,30 +2273,36 @@ function statisticsForCurrentVolume() {
   if (state.images.some((image) => image.width !== width || image.height !== height)) {
     throw new Error("Volume statistics require equal frame dimensions.");
   }
-  const spacing = state.volumeInfoSource === "Default spacing"
-    ? null
-    : [state.calibration.xSpacing, state.calibration.ySpacing, state.calibration.zSpacing];
-  return volumeStatistics(state.images.map((image) => image.mask), width, height, spacing, state.objectNames);
+  const spacing = measurementSpacing(state.calibration, state.physicalSpacing);
+  return { ...volumeStatistics(state.images.map((image) => image.mask), width, height, spacing, state.objectNames), physicalSpacing: { ...state.physicalSpacing } };
 }
 
 function renderVolumeStatisticsRows(statistics) {
   elements.volumeStatisticsRows.replaceChildren();
   elements.volumeStatisticsCalibration.textContent = statistics.calibrated
-    ? `Spacing ${statistics.spacing.map((value) => Number(value).toPrecision(4)).join(" × ")} mm`
+    ? `Spacing ${formatSpacing(statistics.spacing)} · ${spacingStatus(state.physicalSpacing) === "estimated" ? "Approximate / estimated calibration" : physicalSpacingNote(state.physicalSpacing)}`
     : "Volume calibration required";
+  const display = statisticsDisplayUnit(statistics.rows);
+  document.querySelector("#volume-statistics-unit").textContent = display.unit;
   for (const row of statistics.rows) {
     const tableRow = document.createElement("tr");
     const values = [
       `Obj ${row.objectId}: ${row.objectName}`,
       row.voxelCount.toLocaleString(),
-      row.volumeMm3 === null ? "—" : row.volumeMm3.toLocaleString(undefined, { maximumFractionDigits: 4 }),
-      row.volumeCm3 === null ? "—" : row.volumeCm3.toLocaleString(undefined, { maximumFractionDigits: 6 }),
+      formatVolumeNumber(row.volumeMm3 === null ? null : row.volumeMm3 * display.factor),
+      formatVolumeNumber(row.volumeCm3, 6),
       `${row.firstFrame}-${row.lastFrame}`,
       row.occupiedSlices,
     ];
-    for (const value of values) {
+    for (const [column, value] of values.entries()) {
       const cell = document.createElement("td");
       cell.textContent = String(value);
+      // Keep the physical value readable without horizontal table scrolling.
+      if (column === 0 && row.volumeMm3 !== null) {
+        const readableVolume = document.createElement("small");
+        readableVolume.textContent = `${formatVolumeNumber(row.volumeMm3 * display.factor)} ${display.unit}${spacingStatus(state.physicalSpacing) === "estimated" ? " (estimated)" : ""}`;
+        cell.append(document.createElement("br"), readableVolume);
+      }
       tableRow.append(cell);
     }
     elements.volumeStatisticsRows.append(tableRow);
@@ -2317,9 +2335,7 @@ async function renderVolumeStatistics() {
     if (state.images.some((image) => image.width !== width || image.height !== height)) {
       throw new Error("Volume statistics require equal frame dimensions.");
     }
-    const spacing = state.volumeInfoSource === "Default spacing"
-      ? null
-      : [state.calibration.xSpacing, state.calibration.ySpacing, state.calibration.zSpacing];
+    const spacing = measurementSpacing(state.calibration, state.physicalSpacing);
     const statistics = await volumeStatisticsAsync(
       state.images.map((image) => image.mask),
       width,
@@ -2337,6 +2353,7 @@ async function renderVolumeStatistics() {
       },
     );
     if (!statistics || generation !== state.volumeStatisticsGeneration) return;
+    statistics.physicalSpacing = { ...state.physicalSpacing };
     renderVolumeStatisticsRows(statistics);
   } catch (error) {
     if (generation !== state.volumeStatisticsGeneration) return;
@@ -2430,9 +2447,7 @@ async function clearManagedObject() {
 }
 
 function runProjectCheck() {
-  const spacing = state.volumeInfoSource === "Default spacing"
-    ? null
-    : [state.calibration.xSpacing, state.calibration.ySpacing, state.calibration.zSpacing];
+  const spacing = measurementSpacing(state.calibration, state.physicalSpacing);
   const findings = checkProject({
     images: state.images,
     spacing,
@@ -2635,6 +2650,12 @@ async function exportSequence(kind) {
   }
 }
 
+function requireReferenceDemoCalibration() {
+  if (state.physicalSpacing.requiresReferenceCalibration && !measurementSpacing(state.calibration, state.physicalSpacing)) {
+    throw new Error("Volume calibration required. Draw the reference line before exporting physical geometry.");
+  }
+}
+
 function labelVolumeGeometry() {
   if (state.images.length === 0) throw new Error("No images are loaded.");
   const width = state.images[0].width;
@@ -2663,6 +2684,7 @@ async function exportLabelVolume(format, factor = 1) {
   closeToolsDockOnNarrow();
   setLoading(true, `Exporting ${format.toUpperCase()}`, "Preparing label volume");
   try {
+    if (format === "nifti") requireReferenceDemoCalibration();
     logMaskExportMapping(`${format.toUpperCase()} label volume`);
     const { masks, width, height, geometry } = labelVolumeGeometry();
     let exportMasks = masks;
@@ -2720,6 +2742,7 @@ async function exportTrainingDataZip() {
 
   setLoading(true, "Preparing training data…", "Validating geometry…");
   try {
+    requireReferenceDemoCalibration();
     logMaskExportMapping("Training Data ZIP");
     const { masks, width, height, geometry } = labelVolumeGeometry();
     const hasForeground = masks.some((mask) => mask.some((value) => value !== 0));
@@ -2749,7 +2772,7 @@ async function exportTrainingDataZip() {
       geometry,
       objectNames: state.objectNames,
       intensityPolicy: prepared.intensityPolicy,
-      warnings: prepared.warnings || [],
+      warnings: [...(prepared.warnings || []), ...(spacingStatus(state.physicalSpacing) === "estimated" ? [physicalSpacingNote(state.physicalSpacing)] : [])],
     });
     prepared.channels.length = 0;
     elements.loadingDetail.textContent = "Creating ZIP…";
@@ -2849,6 +2872,11 @@ function renderStlPreviewControls(meshes) {
   const heading = document.createElement("strong");
   heading.textContent = "Objects";
   elements.stlPreviewObjects.append(heading);
+  const scaleNote = document.createElement("small");
+  scaleNote.textContent = measurementSpacing(state.calibration, state.physicalSpacing)
+    ? physicalSpacingNote(state.physicalSpacing)
+    : "Uncalibrated preview — placeholder grid, not physical measurements. Volume calibration required.";
+  elements.stlPreviewObjects.append(scaleNote);
   for (const mesh of meshes) {
     const row = document.createElement("div");
     row.className = "stl-preview-object-row";
@@ -2911,6 +2939,7 @@ async function exportStlMeshes() {
   closeToolsDockOnNarrow();
   setLoading(true, "Exporting STL", "Preparing label volume");
   try {
+    requireReferenceDemoCalibration();
     const meshes = await buildStlMeshData((message) => {
       elements.loadingDetail.textContent = message;
     });
@@ -3266,6 +3295,7 @@ function applyProjectSettings(settings = {}) {
       ? settings.volumeInfoSource.slice(0, 120)
       : "Project ZIP";
   }
+  state.physicalSpacing = restorePhysicalSpacing(settings.physicalSpacing, state.physicalSpacing, settings.volumeInfoSource);
   syncDisplayControls();
   syncCalibrationControls();
   syncVolInfoSummary();
@@ -3480,6 +3510,7 @@ async function exportProjectZip() {
         calibration: { ...state.calibration },
         volumeOrigin: state.volumeOrigin.slice(),
         volumeInfoSource: state.volumeInfoSource,
+        physicalSpacing: { ...state.physicalSpacing },
         objectNames: state.objectNames.slice(1),
         segmentationJobs: state.segmentationJobs.map(cloneSegmentationJob),
       },
@@ -4304,6 +4335,14 @@ async function prepareImageSequence(
       state.calibration.ySpacing = ySpacing;
       state.calibration.zSpacing = zSpacing;
     }
+    state.physicalSpacing = demoDataset.voxelSpacingMm
+      ? physicalSpacingState("metadata", "metadata")
+      : physicalSpacingState("unknown", demoDataset.calibration?.sliceSpacingMm ? "estimated" : "unknown", {
+          ...(demoDataset.calibration?.requiresReferenceCalibration ? {
+            requiresReferenceCalibration: true, referenceApproximate: true,
+            referenceLengthMm: demoDataset.calibration.referenceLengthMm,
+          } : {}),
+        });
     state.volumeInfoSource = demoDataset.volumeInfoSource || "Default spacing";
     syncCalibrationControls();
     syncVolInfoSummary();
@@ -4931,6 +4970,9 @@ function handlePointerDown(event) {
         const spacing = state.calibration.referenceLength / pixelLength;
         state.calibration.xSpacing = spacing;
         state.calibration.ySpacing = spacing;
+        const calibrated = applyReferenceCalibration(state.calibration, state.physicalSpacing, pixelLength);
+        state.calibration = calibrated.calibration;
+        state.physicalSpacing = calibrated.physicalSpacing;
         state.volumeInfoSource = "Reference line calibration";
         image.calibrationLine = [start, end];
         syncCalibrationControls();
@@ -5431,7 +5473,13 @@ function bindEvents() {
   ]) {
     input.addEventListener("change", () => {
       updateCalibrationFromControls();
-      state.volumeInfoSource = "Manual settings";
+      if (!state.physicalSpacing.requiresReferenceCalibration && input !== elements.referenceLength) {
+        state.physicalSpacing = { ...state.physicalSpacing,
+          ...(input === elements.spacingZ ? { z: "manual" } : { xy: "manual" }),
+        };
+        state.volumeInfoSource = "Manual settings";
+      }
+      syncSpatialInformation();
       syncVolInfoSummary();
     });
   }

@@ -52,7 +52,7 @@ def main():
                            "sourceBytes": len(original), "sourceSha256": sha256(original),
                            "bytes": len(encoded), "sha256": sha256(encoded)})
     manifest = {
-        "id": "mouse-brain-demo", "revision": 1,
+        "id": "mouse-brain-demo", "revision": 2,
         "dataset": "Mouse brain light microscopy / Mouse Brain Architecture Project",
         "type": "serial light microscopy sections", "specimen": "mouse brain",
         "source": "Brain Architecture Project (BAP)",
@@ -68,6 +68,15 @@ def main():
         "citationUrl": "https://doi.org/10.1371/journal.pcbi.1000334",
         "imageSize": [707, 553], "format": "PNG", "colorMode": "RGB", "bitDepth": 8,
         "sourceColorMode": "RGBA", "slices": len(frames), "voxelSpacingMm": None,
+        'initialFrameIndex': 54,
+        'initialFrameSelectionNote': 'Slice 55 (image0109.png): selected by visual comparison of the supplied sequence; broad coronal forebrain with both lateral boundaries clearly visible and uncropped.',
+        'referenceCalibrationWidthMm': 11.4,
+        'referenceCalibrationWidthType': 'approximate adult mouse brain reference; not measured in this specimen',
+        'estimatedSliceSpacingMm': 0.1,
+        'estimatedSliceSpacingSource': '132 supplied images spanning approximate whole-brain anterior–posterior coverage; 13.2 mm adult reference extent / 132. Not source metadata or original histological section thickness.',
+        'physicalSpacingStatus': 'requiresCalibration',
+        'physicalSpacingProvenance': {'xy': 'user calibration required using approximate reference', 'z': 'estimated effective demo interval'},
+
         "order": "Natural numeric order of original filenames, 1 through 263 in steps of 2. All 132 supplied files retained. Even-numbered files were absent in the supplied set; no additional gaps in its step-2 sequence.",
         "continuityReview": "Contact sheets of all supplied images show progressive anatomy without an obvious order reversal. Original section shifts, tears and slide artifacts remain; images are not registered. This does not establish physical section spacing or that every original section is present.",
         "adaptation": "Removed only the fully opaque alpha channel; optimized lossless PNG compression. RGB pixels and 707 x 553 dimensions are unchanged. No resize, crop, rotation, registration, contrast adjustment or additional slice selection.",

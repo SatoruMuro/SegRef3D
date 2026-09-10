@@ -81,7 +81,7 @@ test("Demos use the normal sequence pipeline and load assets only on demand", as
   assert.ok(html.indexOf('id="reference-length"') < html.indexOf('id="spacing-z"'));
   assert.match(app, /decodeNiftiSources\(file\)/);
   assert.match(app, /prepareImageSequence\([\s\S]*preserveDimensions: true, demoDataset: dataset/);
-  assert.match(worker, /demo-datasets\.mjs\?v=5/);
+  assert.match(worker, /demo-datasets\.mjs\?v=6/);
   assert.doesNotMatch(worker, /APPLE_DEMO_FILES|\.\/demo\//);
   assert.doesNotMatch(worker, /RabbitCT_reference_256_corrected/);
   for (const id of ["hela-em-demo", "mouse-brain-demo"]) {
@@ -133,7 +133,12 @@ for (const [id, count, dimensions, colorType, budget] of [
       assert.equal(manifest.datasetId, null);
       assert.equal(manifest.brainId, null);
       assert.equal(manifest.experimentId, null);
-      assert.match(dataset.volumeInfoSource, /Unknown physical spacing/);
+      assert.equal(dataset.estimatedSliceSpacingMm, 0.1);
+      assert.equal(dataset.referenceCalibrationWidthMm, 11.4);
+      assert.equal(dataset.initialFrameIndex, 54);
+      assert.equal(manifest.initialFrameIndex, dataset.initialFrameIndex);
+      assert.equal(manifest.estimatedSliceSpacingMm, dataset.estimatedSliceSpacingMm);
+      assert.equal(manifest.referenceCalibrationWidthMm, dataset.referenceCalibrationWidthMm);
       assert.match(manifest.adaptation, /No resize, crop, rotation/);
     }
   });

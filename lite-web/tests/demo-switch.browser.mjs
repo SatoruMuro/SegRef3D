@@ -17,7 +17,7 @@ const server = createServer(async (request, response) => {
     const relative = path.relative(root, filename);
     if (relative.startsWith("..") || path.isAbsolute(relative)) throw new Error("Outside test root");
     let body = await readFile(filename);
-    if (urlPath === "/lite-web/app.mjs") body = `${body}\nglobalThis.demoTest = { state, render };\n`;
+    if (urlPath === "/lite-web/app.mjs") body = `${body}\nglobalThis.demoTest = { state, render, statisticsForCurrentVolume };\n`;
     response.writeHead(200, { "Content-Type": mime[path.extname(filename)] || "application/octet-stream" });
     response.end(body);
   } catch { response.writeHead(404); response.end(); }
@@ -95,6 +95,73 @@ try {
     assert.deepEqual(actual.display, actual.defaults);
     await page.screenshot({ path: path.join(output, `${results.length}-${id}.png`) });
     results.push(actual);
+    const physical = await page.evaluate(() => ({ ...demoTest.state.physicalSpacing }));
+    if (id === "hela-em-demo") {
+      assert.equal(physical.xy, "metadata");
+      assert.equal(physical.z, "metadata");
+      await page.locator('[data-tool-tab="calibration"]').click();
+      assert.equal(await page.locator('#spatial-information-value').textContent(), '39.06 × 39.06 × 100 nm');
+      await page.evaluate(() => { demoTest.state.images[0].mask.fill(1,0,10000); demoTest.render(); });
+      await page.locator('[data-tool-tab="volume"]').click();
+      await page.waitForFunction(() => document.querySelector('#volume-statistics-unit').textContent === 'µm³');
+      const stats = await page.evaluate(() => demoTest.statisticsForCurrentVolume());
+      assert.equal(stats.rows[0].volumeMm3, 10000*0.0000390625*0.0000390625*0.0001);
+      assert.match(await page.locator('#volume-statistics-rows').textContent(), /1.5259/);
+      await page.screenshot({path:path.join(output,`hela-volume-${results.length}.png`)});
+    } else if (id === "mouse-brain-demo") {
+      assert.equal(physical.xy, 'unknown'); assert.equal(physical.z, 'estimated');
+      assert.equal(await page.evaluate(() => demoTest.state.index),54);
+      assert.equal(await page.locator('#demo-calibration-title').textContent(),'Mouse Brain Calibration');
+      assert.equal(await page.locator('#demo-reference-value').textContent(),'11.4 mm (approx.)');
+      assert.match(await page.locator('#spatial-information-value').textContent(), /Unknown.*100 µm.*estimated/);
+      assert.equal(await page.locator('#spacing-x').inputValue(),'');
+      assert.equal(await page.locator('#spacing-z').getAttribute('readonly'),'');
+      await page.evaluate(() => { demoTest.state.images[54].mask.fill(1,0,10000); demoTest.render(); });
+      await page.locator('[data-tool-tab="volume"]').click();
+      await page.waitForFunction(() => document.querySelector('#volume-statistics-calibration').textContent === 'Volume calibration required');
+      assert.equal(await page.evaluate(() => demoTest.statisticsForCurrentVolume().rows[0].volumeMm3),null);
+      assert.match(await page.locator('#volume-statistics-rows').textContent(),/—/);
+      await page.screenshot({path:path.join(output,'mouse-before-calibration.png')});
+      const projectDownload = page.waitForEvent('download');
+      await page.locator('#export-menu summary').click();
+      await page.locator('#export-project').click();
+      const project = await projectDownload;
+      const projectPath = path.join(output,'uncalibrated-mouse-project.zip');
+      await project.saveAs(projectPath);
+      await page.evaluate(() => { demoTest.state.physicalSpacing = {xy:'manual',z:'manual'}; });
+      await page.locator('#mask-zip-input').setInputFiles(projectPath);
+      await page.waitForFunction(() => demoTest.state.physicalSpacing.xy === 'unknown');
+      assert.equal(await page.evaluate(() => demoTest.statisticsForCurrentVolume().rows[0].volumeMm3),null);
+
+      await page.locator('[data-tool-tab="calibration"]').click();
+      await page.locator('#draw-calibration').click();
+      const points = await page.evaluate(() => {
+        const r=document.querySelector('canvas').getBoundingClientRect(), v=demoTest.state.viewport;
+        return [35,650].map(x => ({x:r.x+v.panX+x*v.zoom,y:r.y+v.panY+250*v.zoom}));
+      });
+      for (const point of points) await page.mouse.click(point.x,point.y);
+      await page.waitForFunction(() => demoTest.state.physicalSpacing.xy === 'user-calibrated');
+      const after = await page.evaluate(() => ({calibration:demoTest.state.calibration,line:demoTest.state.images[54].calibrationLine,stats:demoTest.statisticsForCurrentVolume()}));
+      const pixelLength = Math.hypot(after.line[1].x-after.line[0].x, after.line[1].y-after.line[0].y);
+      assert.ok(Math.abs(pixelLength-615)<2);
+      assert.equal(after.calibration.xSpacing,11.4/pixelLength);
+      assert.equal(after.calibration.ySpacing,after.calibration.xSpacing);
+      assert.equal(after.calibration.zSpacing,0.1);
+      assert.equal(after.stats.rows[0].volumeMm3,10000*(after.calibration.xSpacing*after.calibration.ySpacing*0.1));
+      assert.equal(await page.locator('#demo-next-step').isVisible(),true);
+      await page.locator('[data-tool-tab="volume"]').click();
+      await page.waitForFunction(() => document.querySelector('#volume-statistics-unit').textContent === 'mm³');
+      await page.waitForFunction(() => document.querySelector('#volume-statistics-calibration').textContent.includes('estimated'));
+      assert.match(await page.locator('#volume-statistics-calibration').textContent(),/estimated/);
+      await page.screenshot({path:path.join(output,'mouse-after-calibration.png')});
+    } else if (id === 'apple-kanzi-84') {
+      assert.equal(physical.xy,'unknown');
+      assert.equal(await page.evaluate(() => demoTest.state.calibration.referenceLength),100);
+      assert.equal(await page.evaluate(() => demoTest.state.calibration.zSpacing),4);
+    } else {
+      assert.equal(physical.xy,'metadata'); assert.equal(physical.z,'metadata');
+      assert.equal(await page.evaluate(() => demoTest.state.calibration.zSpacing),1);
+    }
     // Seed unsaved edits and display settings to exercise reset on the next real load.
     await page.evaluate(() => {
       demoTest.state.images[0].mask[0] = 7;

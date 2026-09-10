@@ -45,8 +45,14 @@ demos open in the usual image tools with slice navigation, threshold/drawing, ed
 and export. Selecting either microscopy demo starts a fresh stack with empty masks; export
 your work before switching. Local user images keep their normal autosave behavior.
 
-Mouse brain physical spacing is unknown: default values are placeholders and need calibration
-before physical measurements. Original section shifts and tissue artifacts remain; registration
+Mouse brain opens at slice 55 for reference-line calibration: **11.4 mm (approx.)** adult
+brain width, not a measurement of this specimen. X/Y remain unknown until calibration;
+Z is **0.10 mm / 100 µm estimated** from demo coverage, not source metadata or original
+section thickness. Volume Statistics show voxel counts and no physical volumes before
+calibration. Afterwards, volumes use calibrated X/Y and estimated Z. HeLa keeps its source-derived
+39.0625 × 39.0625 × 100 nm spacing; small volumes display in µm³. CSV retains mm³/cm³,
+adds µm³ and spacing provenance, and preserves numeric precision.
+Original section shifts and tissue artifacts remain; registration
 may be required for quantitative 3D analysis. See
 [demo data licenses, source citations, ordering and modifications](demo/DEMO_DATA_LICENSES.md).
 CC BY-SA 4.0 applies to the BAP-derived assets and adaptations; SegRef3D software remains Apache-2.0.
