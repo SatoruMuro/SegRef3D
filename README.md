@@ -157,7 +157,8 @@ The long-term remedy is code signing that covers bundled native binaries; see th
 [signing and release design](SegRef3D/docs/WINDOWS_SIGNING.md).
 The separate v1.3.1 WinError 193 issue was caused by ARM64 runtime DLLs in the x64
 bundle. v1.3.2 uses verified Microsoft x64 runtimes and rejects architecture mismatches.
-Native x64 startup, VTK and NVIDIA SAM2 checks remain post-release verification items.
+The v1.3.2 release has since been verified on Windows with an NVIDIA GPU; see the
+[release notes](SegRef3D/docs/RELEASE_1_3_2.md) for the reported checks and the separate SAC limitation.
 
 Disabling Smart App Control is not a requirement to use SegRef3D. Treat any such
 change only as diagnosis or a temporary workaround for the current release,

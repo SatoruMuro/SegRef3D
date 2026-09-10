@@ -153,7 +153,8 @@ Local版はZIP全体を展開して`SegRef3D.exe`を実行します。driver、f
 恒久対策は内部バイナリを含む配布物のコード署名です。[署名・リリース設計](SegRef3D/docs/WINDOWS_SIGNING.md)を参照してください。
 v1.3.1のWinError 193は、x64配布物へのARM64 runtime DLL混入による別の問題です。
 v1.3.2ではMicrosoft公式x64 runtimeを使用し、architecture不一致を拒否する検査を追加しました。
-x64実機での起動・VTK・NVIDIA SAM2の確認は配布後の確認事項として残っています。
+v1.3.2はWindows＋NVIDIA GPU実機で動作確認済みです。確認範囲と、別問題であるSACの既知事項は
+[Release notes](SegRef3D/docs/RELEASE_1_3_2.md)に記載しています。
 
 Smart App Controlの無効化は利用条件ではありません。無効化を検討する場合も、原因切り分けや現行版の暫定回避として扱い、管理者と端末のセキュリティ方針を確認してください。
 
