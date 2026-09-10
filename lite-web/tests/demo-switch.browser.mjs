@@ -147,6 +147,8 @@ try {
       assert.equal(after.calibration.xSpacing,11.4/pixelLength);
       assert.equal(after.calibration.ySpacing,after.calibration.xSpacing);
       assert.equal(after.calibration.zSpacing,0.1);
+      assert.match(await page.locator('#project-details').textContent(), /calibrated from 11\.4 mm reference/);
+      assert.doesNotMatch(await page.locator('#project-details').textContent(), /calibration required/);
       assert.equal(after.stats.rows[0].volumeMm3,10000*(after.calibration.xSpacing*after.calibration.ySpacing*0.1));
       assert.equal(await page.locator('#demo-next-step').isVisible(),true);
       await page.locator('[data-tool-tab="volume"]').click();

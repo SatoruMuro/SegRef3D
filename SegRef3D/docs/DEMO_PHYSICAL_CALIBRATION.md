@@ -81,3 +81,9 @@ quantitative analysis; this demo calibration does not establish specimen accurac
   checks retained.
 - All demo image SHA-256 checks pass. No Local source, inference algorithm,
   DICOM geometry, image bytes, licensing or published Windows ZIP was changed.
+- Public Pages verification: HeLa spacing displays in nm and 100,040 labeled
+  voxels display as 15.2649 µm³. Mouse starts on slice 55 with unknown XY and
+  estimated Z; 294,434 test voxels have no physical volume until a real reference
+  line is drawn. A 622.65 px line gives XY approximately 0.0183088 mm and
+  9.8697 mm³ (estimated), with Z unchanged. These are functional test masks,
+  not anatomical measurements. Calibration also refreshes the header spacing.
