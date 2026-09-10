@@ -5,7 +5,7 @@
 SegRef3Dは、連続画像や3D volumeから、構造のsegmentation、mask修正、校正済み体積の計測、
 3Dモデルの再構築を行う研究者向けオープンソースplatformです。
 
-[**SegRef3D Liteを開く**][lite] · [**Local GPU v1.3.2の配布情報**][gpu-download] ·
+[**SegRef3D Liteを開く**][lite] · [**Local GPU v1.3.2をダウンロード**][gpu-download] ·
 [基本操作](Tutorial/TutorialSegRef3DLiteJP.md) · [AIに相談](Tutorial/AskAISegRef3D.md) ·
 [English](README.md)
 
@@ -94,7 +94,7 @@ AI支援segmentationは、ローカルまたは任意のColab workflowで利用�
 | 版 | 適している環境 | 開始 |
 | --- | --- | --- |
 | **SegRef3D Lite** | 大多数のユーザー；Windows／macOS／Linux；install不要 | [**browserで開く**][lite] |
-| **SegRef3D Local GPU v1.3.2** | Windows + 対応NVIDIA CUDA GPU；ローカルSAM2 | [**配布情報**][gpu-download] |
+| **SegRef3D Local GPU v1.3.2** | Windows + 対応NVIDIA CUDA GPU；ローカルSAM2 | [**ZIPをダウンロード**][gpu-download] |
 | **SegRef3D Local CPU v1.2.6** | Windows CPU-only／offline desktopのlegacy workflow | [**ZIPをダウンロード**][cpu-download] |
 
 Windows desktop版が必要でなければ、まず**SegRef3D Lite**を使用してください。同梱SAM2をローカル実行
@@ -102,7 +102,12 @@ Windows desktop版が必要でなければ、まず**SegRef3D Lite**を使用し
 
 Local GPU v1.3.2では、Local SAM2によるBox Prompt segmentationとmulti-frame trackingを利用できます。
 PyTorch 2.11.0+cu128（CUDA 12.8）を採用し、RTX 50-series／Blackwell `sm_120`に対応しています。
-RTX 5080 Laptop GPUでの実機確認は旧版のGPU runtimeについての記録です。今回のv1.3.2 ZIPでの実GPU SAM2検証は後日行います。対応するNVIDIA CUDA GPUが必要です。
+SegRef3D Local GPU v1.3.2はWindows＋NVIDIA GPU実機で主要ワークフローを確認済みです。
+Click描画中・描画後のセクション切り替え、DICOMデータでのSegCT/MRI構造物候補表示も正常に動作しています。
+利用には対応するNVIDIA CUDA GPUが必要です。
+
+[**SegRef3D Local GPU v1.3.2 for Windowsをダウンロード**][gpu-download] ·
+[Release notes](SegRef3D/docs/RELEASE_1_3_2.md)
 
 Local v1.3.0は、Interpolate Between Frames、slice補間1x／5x／10xを使うPreview 3D・STL export、
 PNG／legacy SVG mask import、Label PNG／colored SVG mask export、session単位のautosave storageにも対応します。
@@ -148,7 +153,8 @@ Local版はZIP全体を展開して`SegRef3D.exe`を実行します。driver、f
 恒久対策は内部バイナリを含む配布物のコード署名です。[署名・リリース設計](SegRef3D/docs/WINDOWS_SIGNING.md)を参照してください。
 v1.3.1のWinError 193は、x64配布物へのARM64 runtime DLL混入による別の問題です。
 v1.3.2ではMicrosoft公式x64 runtimeを使用し、architecture不一致を拒否する検査を追加しました。
-x64実機での起動・VTK・NVIDIA SAM2の確認は配布後の確認事項として残っています。
+v1.3.2はWindows＋NVIDIA GPU実機で動作確認済みです。確認範囲と、別問題であるSACの既知事項は
+[Release notes](SegRef3D/docs/RELEASE_1_3_2.md)に記載しています。
 
 Smart App Controlの無効化は利用条件ではありません。無効化を検討する場合も、原因切り分けや現行版の暫定回避として扱い、管理者と端末のセキュリティ方針を確認してください。
 
@@ -170,5 +176,5 @@ SegRef3Dは[Satoru Muro](https://github.com/SatoruMuro)が開発し、
 [Apache License 2.0](LICENSE)で公開しています。
 
 [lite]: https://satorumuro.github.io/SegRef3D/lite-web/
-[gpu-download]: SegRef3D/docs/RELEASE_1_3_2.md
+[gpu-download]: https://www.dropbox.com/scl/fi/zi5lsn48wi880s20tp2ne/SegRef3D-Local-GPU-v1.3.2-Windows.zip?rlkey=kp6ekr6oc00k5wl7gcgcljl8j&st=5s4gf7ik&dl=1
 [cpu-download]: https://www.dropbox.com/scl/fi/05evqq67tokxvo37ixw87/SegRef3D-Local-CPU-v1.2.6-Windows.zip?rlkey=mz1kvdlkxmmffipp411xc1kux&st=nwh3k3rn&dl=1

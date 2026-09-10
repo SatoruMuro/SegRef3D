@@ -5,7 +5,7 @@
 SegRef3D helps researchers segment structures, refine masks, measure calibrated volumes, and
 reconstruct 3D models from serial images and volumetric data.
 
-[**Open SegRef3D Lite**][lite] · [**Local GPU v1.3.2 release information**][gpu-download] ·
+[**Open SegRef3D Lite**][lite] · [**Download Local GPU v1.3.2**][gpu-download] ·
 [Tutorial](Tutorial/TutorialSegRef3DLiteEN.md) · [Ask AI](Tutorial/AskAISegRef3D.md) ·
 [日本語](READMEJP.md)
 
@@ -92,7 +92,7 @@ be refined in SegRef3D before quantitative analysis or 3D export.
 | Version | Best for | Start |
 | --- | --- | --- |
 | **SegRef3D Lite** | Most users; Windows, macOS, or Linux; no installation | [**Open in browser**][lite] |
-| **SegRef3D Local GPU v1.3.2** | Windows + compatible NVIDIA CUDA GPU; local SAM2 | [**Release information**][gpu-download] |
+| **SegRef3D Local GPU v1.3.2** | Windows + compatible NVIDIA CUDA GPU; local SAM2 | [**Download ZIP**][gpu-download] |
 | **SegRef3D Local CPU v1.2.6** | Windows CPU-only/offline desktop legacy workflow | [**Download ZIP**][cpu-download] |
 
 Start with **SegRef3D Lite** unless you specifically need a Windows desktop build. Choose Local GPU
@@ -100,8 +100,12 @@ to run the included SAM2 workflow locally. Local CPU is a legacy/fallback option
 
 Local GPU v1.3.2 provides local SAM2 box-prompt segmentation and multi-frame tracking. It uses
 PyTorch 2.11.0+cu128 (CUDA 12.8) and supports RTX 50-series / Blackwell `sm_120`.
-The previous GPU runtime was verified on an RTX 5080 Laptop GPU; real-GPU SAM2
-validation of this v1.3.2 ZIP remains a follow-up. A compatible NVIDIA GPU is required.
+SegRef3D Local GPU v1.3.2 has been verified on Windows with an NVIDIA GPU, including
+its main workflows, section switching during and after Click drawing, and SegCT/MRI
+structure suggestions for DICOM data. A compatible NVIDIA GPU is required.
+
+[**Download SegRef3D Local GPU v1.3.2 for Windows**][gpu-download] ·
+[Release notes](SegRef3D/docs/RELEASE_1_3_2.md)
 
 Local v1.3.0 also includes Interpolate Between Frames; Preview 3D and STL export with 1x, 5x, or 10x
 slice interpolation; PNG and legacy SVG mask import; Label PNG and colored SVG mask export; and
@@ -153,7 +157,8 @@ The long-term remedy is code signing that covers bundled native binaries; see th
 [signing and release design](SegRef3D/docs/WINDOWS_SIGNING.md).
 The separate v1.3.1 WinError 193 issue was caused by ARM64 runtime DLLs in the x64
 bundle. v1.3.2 uses verified Microsoft x64 runtimes and rejects architecture mismatches.
-Native x64 startup, VTK and NVIDIA SAM2 checks remain post-release verification items.
+The v1.3.2 release has since been verified on Windows with an NVIDIA GPU; see the
+[release notes](SegRef3D/docs/RELEASE_1_3_2.md) for the reported checks and the separate SAC limitation.
 
 Disabling Smart App Control is not a requirement to use SegRef3D. Treat any such
 change only as diagnosis or a temporary workaround for the current release,
@@ -177,5 +182,5 @@ SegRef3D is developed by [Satoru Muro](https://github.com/SatoruMuro) and distri
 [Apache License 2.0](LICENSE).
 
 [lite]: https://satorumuro.github.io/SegRef3D/lite-web/
-[gpu-download]: SegRef3D/docs/RELEASE_1_3_2.md
+[gpu-download]: https://www.dropbox.com/scl/fi/zi5lsn48wi880s20tp2ne/SegRef3D-Local-GPU-v1.3.2-Windows.zip?rlkey=kp6ekr6oc00k5wl7gcgcljl8j&st=5s4gf7ik&dl=1
 [cpu-download]: https://www.dropbox.com/scl/fi/05evqq67tokxvo37ixw87/SegRef3D-Local-CPU-v1.2.6-Windows.zip?rlkey=mz1kvdlkxmmffipp411xc1kux&st=nwh3k3rn&dl=1

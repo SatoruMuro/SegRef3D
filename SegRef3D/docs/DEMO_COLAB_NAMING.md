@@ -3,6 +3,8 @@
 Verification date: 2026-09-10. Base: `1a0d10279aa848fbd67422f77c3c8dffc2ad06e3`.
 Branch: `codex/demo-colab-product-names`. This is a source change; the already
 distributed Local GPU v1.3.2 ZIP is not rebuilt or replaced by this work.
+Local desktop source changes are reserved for the next v1.3.3 build candidate.
+Web/Colab publication does not replace the existing Windows binary.
 
 ## Changes
 
@@ -11,8 +13,9 @@ distributed Local GPU v1.3.2 ZIP is not rebuilt or replaced by this work.
   desktop grid and one column at narrow widths. Descriptions, slice counts,
   sizes, credits, licenses, URLs and dataset loaders are retained.
 - The shared SegCT/MRI notebook now has four executable cells:
-  **Upload SegRef3D request ZIP → Setup SegCT/MRI → Validate request and run
-  segmentation → Download / Export results**. Run all pauses for the first
+  **Upload SegCT/MRI request ZIP → Setup SegCT/MRI → Run segmentation →
+  Generate / Download result ZIP**. Validation precedes inference within the
+  segmentation cell; its backend also creates the ZIP. Run all pauses for the first
   upload and then executes these cells in order.
 - Upload uses only standard-library validation before setup. It checks one ZIP,
   its manifest/schema and source member, saves it in a unique `/content`

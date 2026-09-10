@@ -1,11 +1,11 @@
-# SegRef3D Local GPU v1.3.2 配布情報
+# SegRef3D Local GPU v1.3.2 for Windows — Release notes
 
-v1.3.1で報告された起動直後のWinError 193について、原因の特定、修正、
-v1.3.2の再ビルドとZIP整合性検証まで完了しました。2026-09-10、リリース方針を
-変更し、原因修正・自動テスト・全PE architecture検査・CRC・SHA-256検証を根拠に、
-このZIPを正式配布版としました。x64／NVIDIA実機での確認は配布後に実施します。
-**完成ZIPからのGUI・VTK起動と実GPU推論は未確認**です。ARM64の作業端末では
-Smart App ControlがEXEをブロックしており、起動成功を確認したという意味ではありません。
+**SegRef3D Local GPU v1.3.2 for Windowsが正式最新版です。**
+Windows＋NVIDIA GPU環境での最終実機確認が完了したというユーザー報告を受け、
+確定済みZIPの正式ダウンロードリンクを公開しました。
+v1.3.1のWinError 193を修正した同じZIPを使用し、再生成・再圧縮・内容変更は行っていません。
+
+[**Download SegRef3D Local GPU v1.3.2 for Windows**](https://www.dropbox.com/scl/fi/zi5lsn48wi880s20tp2ne/SegRef3D-Local-GPU-v1.3.2-Windows.zip?rlkey=kp6ekr6oc00k5wl7gcgcljl8j&st=5s4gf7ik&dl=1)
 
 | 項目 | 内容 |
 |---|---|
@@ -22,8 +22,9 @@ Smart App ControlがEXEをブロックしており、起動成功を確認した
 コピー前後のサイズは3,998,870,575 bytes、SHA-256は上表の値で完全一致し、
 既存ファイルの上書きはありません。記録はGit管理外の
 `build/verification/dropbox-v132-copy.json` に保存しました。
-Dropboxクラウド同期完了と新しい共有URLは未確認です。README等はこの配布情報を
-案内し、確認済みの共有URLが取得できるまでZIPの直接リンクは掲載しません。
+正式配布元として指定されたDropbox共有URLを、README・インストールガイド・
+AI向け案内に共通で掲載しています。リンクはプレビューではなくダウンロードへ進む
+`dl=1` の指定を保持しています。
 
 v1.3.2の配置・参照先更新・Pages公開後、旧v1.3.1を通常の配布フォルダから
 `50_SegRef3D/backup/20260910/broken-build-v1.3.1/` へ退避しました。
@@ -34,19 +35,24 @@ v1.3.2の配置・参照先更新・Pages公開後、旧v1.3.1を通常の配布
 v1.3.2への案内を記載しました。既存Dropbox共有リンクの有無・失効は未確認であり、
 ローカル移動によって共有リンクが失効したとは扱いません。
 
-## 配布後の実機確認
+## 最終実機確認
 
-次の項目は自動テストやPE検査では代替できず、現時点では未確認です。
+Windows＋NVIDIA GPU環境で、今回の正式ZIPについて次の正常動作が報告されました。
 
-- 通常のx64 Windowsで完成ZIPを新規展開し、PowerShellから引数なしで起動する。
-- WinError 193／bootstrap errorの再発がなく、GUIが表示され継続動作する。
-- VTK importとpreview、DICOM読み込み・スライス移動・Window/Level。
-- NVIDIA CUDAでのSAM2推論・tracking、mask生成・保存。
-- Auto Erase、Draw、Box Promptとの反復切替と描画後の保存。
+- Local GPU版の起動・主要ワークフロー。
+- Click描画中のセクション切り替えで発生していたエラーの解消。
+- Click描画中・描画後のセクション切り替え。
+- Seg CT/MRIの構造物検索候補の表示。
+- DICOMデータでのSeg CT/MRI構造物候補の取得。
 
-今回はこれらを正式配布の事前条件から外しました。production certificateは未導入で、
-署名基盤を維持したunsignedリリースです。SACによるEXE／PYDのポリシーブロックと、
-runtime architecture不一致によるWinError 193は別問題です。SACの無効化を利用条件にはしません。
+以上はユーザーによる実機確認の報告です。GPU型番やVTK単体診断、個々の推論・
+tracking処理などの詳細ログは今回の報告には含まれていないため、個別の測定値や
+網羅的な検証結果は追加していません。下記のARM64端末での記録はビルド時点の履歴です。
+
+production certificateは未導入で、署名基盤を維持したunsignedリリースです。
+Smart App Control有効環境では、未署名の内部PYD等がWindows Code Integrityにより
+ブロックされる可能性があります。SACによるポリシーブロックと、runtime architecture
+不一致によるWinError 193は別問題です。SACの無効化を利用条件にはしません。
 
 ## 最新mainとの統合確認（2026-09-10）
 
@@ -178,9 +184,13 @@ version 14.50.35719.0、Microsoftの埋め込み署名Validです。SHA-256:
 既存のAuto Erase／Box Prompt修正は保持しています。
 
 署名方針は従来と同じunsignedです。runtime DLLのMicrosoft署名とアプリ全体の
-コード署名は区別します。SACの受け入れとNVIDIA GPU推論は別途確認が必要です。
+コード署名は区別します。Windows＋NVIDIA GPUでの現在の動作確認結果は上記のとおりです。
+SAC有効環境での受け入れは、引き続き別の既知事項として扱います。
 
-## 完成ZIPの検証結果と、起動を止めた別のポリシー
+## ビルド時点の完成ZIP検証とARM64端末でのポリシーブロック
+
+以下は2026-09-10のビルド端末での記録です。その後のWindows＋NVIDIA GPU実機確認は
+上記「最終実機確認」を参照してください。
 
 新しいZIPを`build/verification-132/final-extracted/`へ展開しました。
 全911 PEがMachine `0x8664`かつCHPEなしで、署名棚卸し時、dist、ZIP内、展開後の
@@ -212,11 +222,10 @@ runtime DLLやVTK PYDのロード段階には到達していません。WinError
 扱っていません。現在のユーザー／コンピューター証明書ストアには利用可能な
 コード署名証明書がなく、Windowsのセキュリティ設定は変更していません。
 
-このため、展開物からのVTK import、GUI表示、引数なし通常起動の成功は未確認です。
-ビルド前のVTK 9.7.0 import成功を、完成ZIPの起動成功へ読み替えていません。
-実行が許可されたx64 Windows端末、または正式コード署名を利用できる環境で
-残りの検証を完了する必要があります。この作業端末はARM64 Windowsで、
-NVIDIA GPUも利用できないため、native x64実機とGPU推論は未確認です。
+当時、このARM64作業端末では、展開物からのVTK import、GUI表示、通常起動を
+確認できませんでした。ビルド前のVTK 9.7.0 import成功は、その時点の完成ZIPの
+起動確認とは区別して記録しています。その後、Windows＋NVIDIA GPU実機で
+Local GPU版の正常動作と主要ワークフローの確認が完了しました。
 
 実施した自動テストはDesktop 139件、Lite 126件で全件成功しました。
 architecture検査ではx64正常、ARM64／ARM64EC／x86／CHPE／破損PEを確認し、

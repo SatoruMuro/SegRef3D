@@ -91,7 +91,16 @@ class SegCTMRINotebookTests(unittest.TestCase):
     def test_upload_is_first_setup_preserves_it_and_urls_stay_stable(self):
         cells = code_cells()
         self.assertEqual(len(cells), 4)
+        self.assertEqual([cell.splitlines()[0] for cell in cells], [
+            '#@title 1. Upload SegCT/MRI request ZIP',
+            '#@title 2. Setup SegCT/MRI',
+            '#@title 3. Run segmentation',
+            '#@title 4. Generate / Download result ZIP',
+        ])
         self.assertIn('files.upload()', cells[0])
+        self.assertNotIn('subprocess.run', cells[0])
+        self.assertNotIn('pip install', cells[0])
+        self.assertNotIn('git clone', cells[0])
         self.assertIn('subprocess.run', cells[1])
         self.assertIn('validate_request_zip', cells[2])
         self.assertIn('process_request', cells[2])
