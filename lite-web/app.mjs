@@ -1092,9 +1092,6 @@ function updateImageUi() {
         image.sourceFormat === "dicom" ? " · DICOM" : image.sourceFormat === "nifti" ? " · NIfTI" : image.sourceFormat === "tiff" ? " · TIFF" : ""
       }`
     : "No image loaded";
-  elements.projectDetails.textContent = image
-    ? `${state.images.length} slices · ${image.width} × ${image.height} · ${spatialInformation(state.calibration, state.physicalSpacing)}`
-    : "Open images or a volume to begin";
   elements.projectHealth.disabled = !image;
   if (image) {
     setStatus(`Editing ${image.name}. Wheel: images · Ctrl+wheel: zoom · middle drag: pan.`);
@@ -2030,6 +2027,10 @@ function syncCalibrationControls() {
 }
 
 function syncSpatialInformation() {
+  const image = state.images[state.index];
+  elements.projectDetails.textContent = image
+    ? `${state.images.length} slices · ${image.width} × ${image.height} · ${spatialInformation(state.calibration, state.physicalSpacing)}`
+    : "Open images or a volume to begin";
   if (!elements.spatialInformationValue) return;
   elements.spatialInformationValue.textContent = spatialInformation(state.calibration, state.physicalSpacing);
   elements.spatialInformationSource.textContent = state.physicalSpacing.referenceApproximate ? physicalSpacingNote(state.physicalSpacing) : `${state.volumeInfoSource} · ${physicalSpacingNote(state.physicalSpacing)}`;
