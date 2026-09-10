@@ -28,6 +28,19 @@ reconstruct 3D models from serial images and volumetric data.
 Serial physical sections may require [registration](Tutorial/Registration.md) before quantitative 3D
 analysis. Reliable pixel/voxel and slice spacing are essential for physical measurements.
 
+## Demo datasets
+
+SegRef3D Lite includes two microscopy image stacks that load directly in the browser:
+
+- **Electron microscopy:** HeLa cells, EMPIAR-10478 (CC0), 150 slices, 512 × 512, 25.4 MB.
+- **Mouse brain — Light microscopy:** Brain Architecture Project (BAP), 132 serial sections,
+  707 × 553, 51.5 MB, redistributed under CC BY-SA 4.0.
+
+Choose a demo on the start screen or in **Open**. Apple and RabbitCT demos also remain available.
+Demo images download only when selected. Your own images are processed locally during normal use.
+See [demo data licenses, citations and modifications](lite-web/demo/DEMO_DATA_LICENSES.md).
+These data licenses are separate from SegRef3D's Apache-2.0 software license.
+
 ## What do you want to do?
 
 - **Segment** a structure in serial images or a volume.

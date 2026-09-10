@@ -30,10 +30,26 @@ Objects | Image View | Tools
 
 ## Try SegRef3D without preparing your own data
 
-SegRef3D Lite includes two demos that use the same loading, mask-editing, and export pipelines as user data:
+SegRef3D Lite includes four demos that use the same loading, mask-editing, and export pipelines as user data:
 
 - **Apple Demo**: serial slice photographs and a calibration tutorial.
 - **RabbitCT Demo**: a volumetric CT tutorial with 1.0 mm isotropic voxel spacing.
+- **Electron microscopy**: HeLa cells, EMPIAR-10478 (CC0), 150 grayscale PNG slices,
+  512 × 512, 25.4 MB. Reuses the previously prepared ROI_1416-1932-171 demo unchanged.
+- **Mouse brain — Light microscopy**: BAP-derived serial histological sections (CC BY-SA 4.0),
+  132 RGB PNG slices, 707 × 553, 51.5 MB. Lossless optimization preserves every supplied RGB pixel.
+
+Select a demo on the start screen or in **Open**. Images download only after selection and
+are cached on demand; initial page loading does not download the image stacks. Both microscopy
+demos open in the usual image tools with slice navigation, threshold/drawing, editable masks,
+and export. Selecting either microscopy demo starts a fresh stack with empty masks; export
+your work before switching. Local user images keep their normal autosave behavior.
+
+Mouse brain physical spacing is unknown: default values are placeholders and need calibration
+before physical measurements. Original section shifts and tissue artifacts remain; registration
+may be required for quantitative 3D analysis. See
+[demo data licenses, source citations, ordering and modifications](demo/DEMO_DATA_LICENSES.md).
+CC BY-SA 4.0 applies to the BAP-derived assets and adaptations; SegRef3D software remains Apache-2.0.
 
 ### Apple Demo
 

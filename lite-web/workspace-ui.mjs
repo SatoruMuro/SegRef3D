@@ -199,6 +199,14 @@ export function upgradeWorkspaceLayout() {
   const appleDemo = commandButton("open-apple-demo", "Apple Demo", "i-image");
   const rabbitDemo = commandButton("open-rabbit-demo", "RabbitCT Demo", "i-box");
   openPanel.append(appleDemo, rabbitDemo);
+  for (const [id, title] of [
+    ["hela-em-demo", "Electron microscopy"],
+    ["mouse-brain-demo", "Mouse brain — Light microscopy"],
+  ]) {
+    const demo = commandButton(`open-${id}`, title, "i-image");
+    demo.dataset.demoId = id;
+    openPanel.append(demo);
+  }
 
   const undoAction = commandButton("undo-action", "Undo", "i-undo");
   const redoAction = commandButton("redo-action", "Redo", "i-redo");

@@ -40,7 +40,7 @@ import {
   transformGeometryForPreparedImage,
   upsampleGeometryAlongK,
 } from "./medical-geometry.mjs?v=3";
-import { demoDatasetById } from "./demo-datasets.mjs?v=4";
+import { demoDatasetById } from "./demo-datasets.mjs?v=5";
 import { clearProjectMasks, loadMask, saveMask } from "./storage.mjs?v=26";
 import { createZip, parseZip } from "./zip.mjs?v=25";
 import {
@@ -90,7 +90,7 @@ import {
   volumeStatistics,
   volumeStatisticsAsync,
 } from "./mask-tools.mjs?v=20";
-import { upgradeWorkspaceLayout } from "./workspace-ui.mjs?v=30";
+import { upgradeWorkspaceLayout } from "./workspace-ui.mjs?v=31";
 import {
   createTrainingCaseEntries,
   createTrainingCaseId,
@@ -1506,20 +1506,23 @@ function rasterizePaths(image, paths = image.paths) {
 
 async function autosave(image, message = "Autosaved in browser") {
   if (!state.projectId || !image) return;
+  const projectId = state.projectId;
+  const zIndex = state.images.indexOf(image);
   const snapshot = image.mask.slice();
   setSaveState("Saving…", "saving");
   state.saveQueue = state.saveQueue.then(async () => {
     try {
-      const zIndex = state.images.indexOf(image);
-      await saveMask(state.projectId, image.name, image.width, image.height, snapshot, {
+      await saveMask(projectId, image.name, image.width, image.height, snapshot, {
         zIndex,
         sliceOrder: MASK_SLICE_ORDER,
       });
-      setSaveState(message, "saved");
+      if (state.projectId === projectId) setSaveState(message, "saved");
     } catch (error) {
       console.error(error);
-      setSaveState("Autosave unavailable");
-      setStatus(`Browser autosave failed: ${error.message}`);
+      if (state.projectId === projectId) {
+        setSaveState("Autosave unavailable");
+        setStatus(`Browser autosave failed: ${error.message}`);
+      }
     }
   });
   return state.saveQueue;
@@ -1992,7 +1995,7 @@ function syncDemoCalibrationGuide() {
     targetPanel.prepend(elements.demoCalibrationGuide);
   }
   elements.demoCalibrationTitle.textContent = guide.title;
-  if (elements.demoGuideProgress) elements.demoGuideProgress.textContent = "Step 2 of 5";
+  if (elements.demoGuideProgress) elements.demoGuideProgress.textContent = guide.progressLabel || "Step 2 of 5";
   elements.demoCalibrationInstruction.textContent = guide.instruction;
   elements.demoPrimaryLabel.textContent = guide.primaryLabel;
   elements.demoReferenceValue.textContent = guide.primaryValue;
@@ -2005,7 +2008,7 @@ function syncDemoCalibrationGuide() {
     guide.revealNextStepAfterCalibration && state.volumeInfoSource !== "Reference line calibration";
   elements.demoAttributionPrefix.textContent = dataset.attribution.uiPrefix;
   elements.demoSourceLink.href = dataset.attribution.doiUrl;
-  elements.demoSourceLink.textContent = "the cited Zenodo dataset";
+  elements.demoSourceLink.textContent = dataset.attribution.sourceLabel || "the cited Zenodo dataset";
   elements.demoLicenseLink.href = dataset.attribution.licenseUrl;
   elements.demoLicenseLink.textContent = dataset.attribution.licenseName;
 }
@@ -4187,7 +4190,7 @@ async function prepareImageSequence(
           Number(sourceSpacing[1]) * (source.height / size.height),
         ]
       : null;
-    const restored = await loadMask(projectId, source.name, width, height, {
+    const restored = demoDataset?.restoreAutosave === false ? null : await loadMask(projectId, source.name, width, height, {
       zIndex: index,
       sliceOrder: MASK_SLICE_ORDER,
     }).catch(() => null);
@@ -4685,12 +4688,13 @@ async function loadImageSequenceDemo(dataset) {
       elements.loadingDetail.textContent = `Reading ${index + 1} / ${dataset.imagePaths.length}`;
       const image = await loadDemoImage(dataset.imagePaths[index]);
       sources.push({
-        name: `apple_${String(index + 1).padStart(4, "0")}.jpg`,
+        name: dataset.imagePaths[index].split("/").at(-1),
         width: image.naturalWidth,
         height: image.naturalHeight,
         sourceCanvas: imageElementToCanvas(image),
         sourceFormat: dataset.sourceFormat,
-        sliceSpacing: dataset.calibration.sliceSpacingMm,
+        pixelSpacing: dataset.voxelSpacingMm?.slice(0, 2),
+        sliceSpacing: dataset.voxelSpacingMm?.[2] ?? dataset.calibration?.sliceSpacingMm,
       });
       await new Promise((resolve) => setTimeout(resolve, 0));
     }
@@ -4709,9 +4713,9 @@ async function loadImageSequenceDemo(dataset) {
     if (!loaded) return;
     setSaveState(`${dataset.displayName} autosave active`, "saved");
     setStatus(
-      `${dataset.displayName} loaded: ${sources.length} slices. Calibrate the widest apple diameter using the ${dataset.calibration.referenceLengthMm} mm learning reference.`,
+      `${dataset.displayName} loaded: ${sources.length} slices. ${dataset.loadedInstruction || "Try Threshold or drawing tools."}`,
     );
-    showToast(`${dataset.displayName} ready · Start with Calibration`);
+    showToast(`${dataset.displayName} ready · ${dataset.readyHint || "Start with Calibration"}`);
     requestAnimationFrame(() => {
       fitCurrentImage();
       openImageTools(dataset.guide.toolTab);
@@ -5321,6 +5325,12 @@ function bindEvents() {
   elements.maskZipInput.addEventListener("change", () => importMaskZip(elements.maskZipInput.files[0]));
   elements.loadDemo.addEventListener("click", () => loadDemo("apple-kanzi-84"));
   elements.loadRabbitDemo.addEventListener("click", () => loadDemo("rabbitct-reference-256"));
+  for (const button of document.querySelectorAll("[data-demo-id]")) {
+    button.addEventListener("click", () => {
+      elements.openMenu.open = false;
+      loadDemo(button.dataset.demoId);
+    });
+  }
   elements.openAppleDemo.addEventListener("click", () => {
     elements.openMenu.open = false;
     elements.loadDemo.click();
