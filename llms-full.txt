@@ -316,7 +316,8 @@ series consistency still require review.
 
 - SegRef3D repository: https://github.com/SatoruMuro/SegRef3D
 - SegRef3D Lite: https://satorumuro.github.io/SegRef3D/lite-web/
-- SegRef3D Local GPU v1.3.2 for Windows (release information; distribution URL pending): https://github.com/SatoruMuro/SegRef3D/blob/main/SegRef3D/docs/RELEASE_1_3_2.md
+- Download SegRef3D Local GPU v1.3.2 for Windows: https://www.dropbox.com/scl/fi/zi5lsn48wi880s20tp2ne/SegRef3D-Local-GPU-v1.3.2-Windows.zip?rlkey=kp6ekr6oc00k5wl7gcgcljl8j&st=5s4gf7ik&dl=1
+- Local GPU v1.3.2 release notes: https://satorumuro.github.io/SegRef3D/SegRef3D/docs/RELEASE_1_3_2.html
 - SegRef3D Local CPU v1.2.6 for Windows: https://www.dropbox.com/scl/fi/05evqq67tokxvo37ixw87/SegRef3D-Local-CPU-v1.2.6-Windows.zip?rlkey=mz1kvdlkxmmffipp411xc1kux&st=nwh3k3rn&dl=1
 - Ask AI prompt: https://satorumuro.github.io/SegRef3D/Tutorial/AskAISegRef3D.html
 - Basic tutorial: https://satorumuro.github.io/SegRef3D/Tutorial/TutorialSegRef3DLiteEN.html
