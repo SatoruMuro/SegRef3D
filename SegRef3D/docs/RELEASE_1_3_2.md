@@ -42,6 +42,30 @@ broken buildとして通常の配布対象から外し、元のファイル名�
 署名基盤を維持したunsignedリリースです。SACによるEXE／PYDのポリシーブロックと、
 runtime architecture不一致によるWinError 193は別問題です。SACの無効化を利用条件にはしません。
 
+## 最新mainとの統合確認（2026-09-10）
+
+最新mainの `e579764`（Electron microscopy／Mouse brainデモ）を通常mergeで統合しました。
+競合したのは `lite-web/service-worker.js` と `lite-web/tests/ui-privacy.test.mjs` です。
+デモの必要時ロード、styles v34、workspace UI v31を保持し、DICOM用medical-sourceと
+instant3d bridge v5も保持しました。統合アプリをv48、offline cacheをv51に進め、
+両ブランチが使っていたv47／v50との混在を避けています。
+
+- 統合後のDesktop自動テスト139件、Lite自動テスト129件が成功しました。
+- EdgeでApple JPEG（20枚）、Electron microscopy（150枚）、Mouse brain（132枚）を
+  実際のOpenメニューから読み込み、5回の切替で未保存maskと表示設定が残留しないことを確認しました。
+  追加テストは `lite-web/tests/demo-switch.browser.mjs` です。
+- CT DICOM／MRI DICOMの構造物候補はそれぞれ81／50件。DICOM・NIfTIのCT／MRIで
+  Seg CT/MRI input ZIP、結果mask取り込み、Project ZIP保存・復元が成功しました。
+- DICOM MONOCHROME1／2、PNG／JPG／TIFFのCreate Input ZIPを表示調整前後の
+  10ケースで確認しました。各15枚・400×400 JPEG、manifest、range、prompt frame、
+  Box座標が正しく、Window/Level・brightness／contrastを反映し、mask／Boxを含みません。
+- LocalのDICOM対応とruntime修正はビルド元 `c350e71` と同一です。配布済みv1.3.2 ZIPは
+  再生成・再圧縮していません。
+
+ブラウザ検証はローカル配信した統合ソースを使用し、状態参照はテストサーバーだけで
+追加しています。公開アプリにテストAPIは含めません。結果はGit管理外の
+`build/verification/v132-*-browser/` と `v132-merge-*-tests.log` に保存しています。
+
 ## 根本原因はARM64ホストのruntime DLLの混入
 
 PyInstallerの`Analysis-00.toc`で、rootの`vcruntime140.dll`、`msvcp140.dll`、

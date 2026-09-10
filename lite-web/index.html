@@ -12,7 +12,7 @@
     <link rel="icon" href="./favicon.ico" sizes="any" />
     <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
     <link rel="manifest" href="./manifest.webmanifest" />
-    <link rel="stylesheet" href="./styles.css?v=33" />
+    <link rel="stylesheet" href="./styles.css?v=34" />
   </head>
   <body>
     <svg class="svg-defs" aria-hidden="true">
@@ -293,6 +293,21 @@
               <strong>Try SegRef3D without preparing your own data</strong>
               <span><b>Apple:</b> Serial images → calibration → segmentation → 3D · about 5.6 MB</span>
               <span><b>RabbitCT:</b> NIfTI → threshold → cleanup → 3D · about 20 MB</span>
+              <div class="microscopy-demos">
+                <button class="command-button demo-button" type="button" data-demo-id="hela-em-demo">
+                  <span><b>Electron microscopy</b><small>HeLa cells · 150 slices · 512 × 512 · 25.4 MB</small></span>
+                </button>
+                <button class="command-button demo-button" type="button" data-demo-id="mouse-brain-demo">
+                  <span><b>Mouse brain — Light microscopy</b><small>Serial sections · 132 slices · 707 × 553 · 51.5 MB</small></span>
+                </button>
+              </div>
+              <small>
+                Electron microscopy: <a href="https://doi.org/10.6019/EMPIAR-10478" target="_blank" rel="noopener noreferrer">EMPIAR-10478</a>,
+                <a href="https://creativecommons.org/publicdomain/zero/1.0/" target="_blank" rel="noopener noreferrer">CC0</a>.<br>
+                Mouse brain microscopy data: <a href="https://brainarchitecture.org/" target="_blank" rel="noopener noreferrer">Brain Architecture Project (BAP)</a>,
+                <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener noreferrer">CC BY-SA 4.0</a>.
+                <a href="./demo/DEMO_DATA_LICENSES.md" target="_blank" rel="noopener noreferrer">Data credits and modifications</a>
+              </small>
               <small>
                 Apple: <a href="https://doi.org/10.5281/zenodo.8167285" target="_blank" rel="noopener noreferrer">Zenodo</a>
                 · RabbitCT: <a href="https://zenodo.org/records/21267885" target="_blank" rel="noopener noreferrer">Zenodo</a>
@@ -1137,6 +1152,6 @@
         if (status) status.textContent = `Application operation failed: ${message}`;
       });
     </script>
-    <script type="module" src="./app.mjs?v=47"></script>
+    <script type="module" src="./app.mjs?v=48"></script>
   </body>
 </html>

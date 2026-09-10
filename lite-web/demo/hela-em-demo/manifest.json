@@ -1,0 +1,943 @@
+{
+  "id": "hela-em-demo",
+  "type": "serial electron microscopy (SBF-SEM)",
+  "source": "EMPIAR-10478",
+  "sourceUrl": "https://doi.org/10.6019/EMPIAR-10478",
+  "authors": "Peddie CP; Jones ML; Collinson LM",
+  "license": "CC0",
+  "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+  "roi": "ROI_1416-1932-171",
+  "sourceFile": "ROI_1416-1932-171.tiff",
+  "sourceSha256": "edd96fe8aa30c3a4094833a48403e7add3e2f513f1e4817897dbe9a71e468268",
+  "downloadUrl": "https://ftp.ebi.ac.uk/empiar/world_availability/10478/data/ROIs/ROI_1416-1932-171.tiff",
+  "originalSize": [
+    2000,
+    2000
+  ],
+  "imageSize": [
+    512,
+    512
+  ],
+  "format": "PNG",
+  "colorMode": "L",
+  "bitDepth": 8,
+  "voxelSpacingNm": [
+    39.0625,
+    39.0625,
+    100
+  ],
+  "sourceSlices": 300,
+  "sourceSliceSpacingNm": 50,
+  "frameSelection": {
+    "firstSourceFrame": 1,
+    "lastSourceFrame": 299,
+    "step": 2
+  },
+  "adaptation": "150 slices sampled every other frame from 300 TIFF slices (source frames 1, 3, ... 299); renumbered 1-150. Resized without cropping, alignment, or contrast adjustment. Effective Z spacing is 100 nm.",
+  "slices": 150,
+  "totalBytes": 25418095,
+  "resampling": "Pillow LANCZOS",
+  "pillowVersion": "12.3.0",
+  "frames": [
+    {
+      "file": "hela_0001.png",
+      "sourceFrame": 1,
+      "bytes": 169452,
+      "sha256": "4d116020da7977a4ff4e4c191474cf2613df5087da2bbbc9aa3fa51d71aab053"
+    },
+    {
+      "file": "hela_0002.png",
+      "sourceFrame": 3,
+      "bytes": 169230,
+      "sha256": "9d46a65963f238238317078822cfd55e31c20f495a9682ba5b484e51a3df0296"
+    },
+    {
+      "file": "hela_0003.png",
+      "sourceFrame": 5,
+      "bytes": 169345,
+      "sha256": "0e8de1f259b565bd7099e1bb47c6fbed541725836d28f5a8188109e12562ff90"
+    },
+    {
+      "file": "hela_0004.png",
+      "sourceFrame": 7,
+      "bytes": 168942,
+      "sha256": "0bd6bbdb387ee38d3aa708153472ed28423296548ae8b746fa8445051262224b"
+    },
+    {
+      "file": "hela_0005.png",
+      "sourceFrame": 9,
+      "bytes": 169371,
+      "sha256": "fcf9df5714a9090f708497cd3927cb25a7975959264de6af31a786256b343e84"
+    },
+    {
+      "file": "hela_0006.png",
+      "sourceFrame": 11,
+      "bytes": 169155,
+      "sha256": "3cb88f4c1e4385c2a6732c9b4a372b137ab176fd5fbf15ca8a16a591537fe59f"
+    },
+    {
+      "file": "hela_0007.png",
+      "sourceFrame": 13,
+      "bytes": 169451,
+      "sha256": "a8cf4148337df3cb36e5d0c22577640243166d98445f375dc41beaadfd7a6264"
+    },
+    {
+      "file": "hela_0008.png",
+      "sourceFrame": 15,
+      "bytes": 169545,
+      "sha256": "7ea1271b4bc7a9c3d851ce31a66b843f0d315bd6a130e4aa7dc0afdfbbed8463"
+    },
+    {
+      "file": "hela_0009.png",
+      "sourceFrame": 17,
+      "bytes": 169691,
+      "sha256": "f9298cd0c201c7f805cd0a8ab7fd20aacd17e4fe52b030f256ae2cb403a485eb"
+    },
+    {
+      "file": "hela_0010.png",
+      "sourceFrame": 19,
+      "bytes": 169740,
+      "sha256": "77eb05906685ffe10081ace3fb4f92fc596f71294467769ed07ce0c3049faec8"
+    },
+    {
+      "file": "hela_0011.png",
+      "sourceFrame": 21,
+      "bytes": 170133,
+      "sha256": "9bd6e1831855e107156d4774ddf138bdae0f2ede012563410be31ec0445652e6"
+    },
+    {
+      "file": "hela_0012.png",
+      "sourceFrame": 23,
+      "bytes": 170464,
+      "sha256": "185314d4795d88d5be1a581f7e6ab4bc0d392aaa575bb909f1aab73d72230f09"
+    },
+    {
+      "file": "hela_0013.png",
+      "sourceFrame": 25,
+      "bytes": 170667,
+      "sha256": "5dbe12c80bb4f61c5d4c4c5db91ca2a1cd0ae3507858675e002dd43a5addd49d"
+    },
+    {
+      "file": "hela_0014.png",
+      "sourceFrame": 27,
+      "bytes": 170751,
+      "sha256": "92657698c664df8e8a7cb7a0723baeedcc368ee0b5f41d4467906e3866ef69b8"
+    },
+    {
+      "file": "hela_0015.png",
+      "sourceFrame": 29,
+      "bytes": 170706,
+      "sha256": "caeb13a28ce568d800d6211847399693fa1053b6af29ce8316ed0087dcb4b10b"
+    },
+    {
+      "file": "hela_0016.png",
+      "sourceFrame": 31,
+      "bytes": 170876,
+      "sha256": "2eb5557f9dc323106c9af547761809054ace03670437318c6ef8e9719a096983"
+    },
+    {
+      "file": "hela_0017.png",
+      "sourceFrame": 33,
+      "bytes": 170720,
+      "sha256": "c5fb7bc6acca7c2a626d6abdecd2f2f07d4b52c9b4bfd471b1cd5b74da4db06a"
+    },
+    {
+      "file": "hela_0018.png",
+      "sourceFrame": 35,
+      "bytes": 170501,
+      "sha256": "d7cf977eff883a4bf1c8949d67e2f7286e8ba31ac2aedfcb36de805a42f230a0"
+    },
+    {
+      "file": "hela_0019.png",
+      "sourceFrame": 37,
+      "bytes": 170358,
+      "sha256": "270088cdd5fe8d318138c159224ab8acf815c001835f4c948d107bca4dd134bd"
+    },
+    {
+      "file": "hela_0020.png",
+      "sourceFrame": 39,
+      "bytes": 170127,
+      "sha256": "73885cb29a4d4a6143255c8b436082410447806e8557fa96f86d56d350ca5774"
+    },
+    {
+      "file": "hela_0021.png",
+      "sourceFrame": 41,
+      "bytes": 169942,
+      "sha256": "d136d0325954d95f2148e7d0ce95b80cc5e41acd41a29deb675f5f18eb182b44"
+    },
+    {
+      "file": "hela_0022.png",
+      "sourceFrame": 43,
+      "bytes": 169482,
+      "sha256": "1ab3eca61a12d01e47ac53f1314bfad7694ba2266210ec2468690f7bd5983a01"
+    },
+    {
+      "file": "hela_0023.png",
+      "sourceFrame": 45,
+      "bytes": 169538,
+      "sha256": "4fa9af993de0e64c8b14166aa0da4c8d19c8b951d8a18e6f0db25f374097d0cf"
+    },
+    {
+      "file": "hela_0024.png",
+      "sourceFrame": 47,
+      "bytes": 169486,
+      "sha256": "14aca65feb1370378fd8c757017e89e6941c51dad26551b4d1e6ce31dd589ead"
+    },
+    {
+      "file": "hela_0025.png",
+      "sourceFrame": 49,
+      "bytes": 169522,
+      "sha256": "117afe08f5d073622243d283e4b053f2e8968a17dccfa3f974c8549ba3fc701d"
+    },
+    {
+      "file": "hela_0026.png",
+      "sourceFrame": 51,
+      "bytes": 169554,
+      "sha256": "b9d9c620636130e88d839747459a8d1a7b0ab1788ac1c55f80bdc1f577b3358d"
+    },
+    {
+      "file": "hela_0027.png",
+      "sourceFrame": 53,
+      "bytes": 169584,
+      "sha256": "e5ac98f1ff56b4ea93270f667ec622b7c25ee75f8ca4047bc8cee33e6a7383fc"
+    },
+    {
+      "file": "hela_0028.png",
+      "sourceFrame": 55,
+      "bytes": 169819,
+      "sha256": "4367de7838daaeda12b702b8ecc789cfcf771b09636dd79f249098dd49481a23"
+    },
+    {
+      "file": "hela_0029.png",
+      "sourceFrame": 57,
+      "bytes": 169495,
+      "sha256": "5721f11d7ffe3e5f7c6535703306194af26dc9873cf554f746687a2c18b0bd60"
+    },
+    {
+      "file": "hela_0030.png",
+      "sourceFrame": 59,
+      "bytes": 169600,
+      "sha256": "c2b10be5293fda5dd327ce0ca236e7e82a87d5e8c912f9b0a585c798d2ce04c7"
+    },
+    {
+      "file": "hela_0031.png",
+      "sourceFrame": 61,
+      "bytes": 169964,
+      "sha256": "57afc742fb0ef1e4e2bfff11f61290d36c3c7d92caf92e5e458d2fab63b93fb1"
+    },
+    {
+      "file": "hela_0032.png",
+      "sourceFrame": 63,
+      "bytes": 170023,
+      "sha256": "c49d3eb5f26f27be3b1abcc5542abaab67571030c19024a42031726b87288e5e"
+    },
+    {
+      "file": "hela_0033.png",
+      "sourceFrame": 65,
+      "bytes": 169886,
+      "sha256": "24a280f16cd62d3abea3a721681b372771ea26c0f4ff759bbca0d0a28df4662a"
+    },
+    {
+      "file": "hela_0034.png",
+      "sourceFrame": 67,
+      "bytes": 169620,
+      "sha256": "d5eb6530cccdc87b3c9512d1b6c23690d2568b3fc31542b5629c77a4a61fd6df"
+    },
+    {
+      "file": "hela_0035.png",
+      "sourceFrame": 69,
+      "bytes": 169776,
+      "sha256": "304775f23fb4486d91026224f3dcf95f51335e196c8e5b884417c642034598fa"
+    },
+    {
+      "file": "hela_0036.png",
+      "sourceFrame": 71,
+      "bytes": 169827,
+      "sha256": "1245259e68207c9e5176d490ed10978b3d62d2c6cd262f84073321a8051d7194"
+    },
+    {
+      "file": "hela_0037.png",
+      "sourceFrame": 73,
+      "bytes": 169725,
+      "sha256": "d2f2eee0207d06749a56b9aa13301ac4f41142fe7d3890810996c94b5915b81a"
+    },
+    {
+      "file": "hela_0038.png",
+      "sourceFrame": 75,
+      "bytes": 169975,
+      "sha256": "4e56acd54529eea7fbacc84d0a8d8bbd06bbfe5e52cd19d7cd34f6ccbb45264c"
+    },
+    {
+      "file": "hela_0039.png",
+      "sourceFrame": 77,
+      "bytes": 169862,
+      "sha256": "d7033749ccc19fa3e032e3baacec446803b546c4503058116f55694fad54fbad"
+    },
+    {
+      "file": "hela_0040.png",
+      "sourceFrame": 79,
+      "bytes": 169601,
+      "sha256": "02a7790c3dc1783a8c3945d605fc45809105c8b68a25471ae823adcea95f9358"
+    },
+    {
+      "file": "hela_0041.png",
+      "sourceFrame": 81,
+      "bytes": 170186,
+      "sha256": "dcb2efb5a2acffc045022eced0930c2bd1ae0442a5c2aa04ca34d867bcffb33d"
+    },
+    {
+      "file": "hela_0042.png",
+      "sourceFrame": 83,
+      "bytes": 169569,
+      "sha256": "501165ec4149508d7acb2d6d93a7f72a0d9ba2f0847a0a00610c3a9308d680ea"
+    },
+    {
+      "file": "hela_0043.png",
+      "sourceFrame": 85,
+      "bytes": 170069,
+      "sha256": "d482358526887978fa8112f672512232c1c4db8bc937af6fcde00cf8413c9b67"
+    },
+    {
+      "file": "hela_0044.png",
+      "sourceFrame": 87,
+      "bytes": 169541,
+      "sha256": "082db17873e5e9eb4fb606ba993eaa6b380ce9d4c197b472b34d22f44cacbe51"
+    },
+    {
+      "file": "hela_0045.png",
+      "sourceFrame": 89,
+      "bytes": 170145,
+      "sha256": "7019485cb6c4f218b2c61b920f0c447521de2cac64afc67921d0c4f3c7a394e5"
+    },
+    {
+      "file": "hela_0046.png",
+      "sourceFrame": 91,
+      "bytes": 169585,
+      "sha256": "1d6a61ef803ce85b72eebff2d41b059e514c47d623e107b63464f5483c6bed43"
+    },
+    {
+      "file": "hela_0047.png",
+      "sourceFrame": 93,
+      "bytes": 170181,
+      "sha256": "b8a2974e0f0cd6616e1cd4717b08430525b5b7083c81568453f65fbbda29eb6d"
+    },
+    {
+      "file": "hela_0048.png",
+      "sourceFrame": 95,
+      "bytes": 169261,
+      "sha256": "7356dc6f53ac62059fda536e21b1bb22dda53adc4beb6a5d49128569ed61f484"
+    },
+    {
+      "file": "hela_0049.png",
+      "sourceFrame": 97,
+      "bytes": 169153,
+      "sha256": "6fe78eda0b4c4829c5c10caa2fd4972f2787a7aeeccfef80878af2bbbf6f0eae"
+    },
+    {
+      "file": "hela_0050.png",
+      "sourceFrame": 99,
+      "bytes": 169024,
+      "sha256": "63939feda369fd6d7eb03a4e6f4fc47487f0f6d0bff4ccd48e84f7af1e9d8951"
+    },
+    {
+      "file": "hela_0051.png",
+      "sourceFrame": 101,
+      "bytes": 168926,
+      "sha256": "497a78b016d34b86425e005e83a7ff5cdaeb3b4ed1d7288fcc19fd2d389a8653"
+    },
+    {
+      "file": "hela_0052.png",
+      "sourceFrame": 103,
+      "bytes": 169541,
+      "sha256": "6372cdcda9ea0ef107c028619fa14694cf20da358dde6c846af235d9059e059e"
+    },
+    {
+      "file": "hela_0053.png",
+      "sourceFrame": 105,
+      "bytes": 169426,
+      "sha256": "36bd8790c55030682f86603fe6bf4641f6972a8798971449d3b7213d82a1836e"
+    },
+    {
+      "file": "hela_0054.png",
+      "sourceFrame": 107,
+      "bytes": 169468,
+      "sha256": "e226ea207ef78b07d99bea942370665c0f2a88cde502d15a6ee5d32a5143dbd0"
+    },
+    {
+      "file": "hela_0055.png",
+      "sourceFrame": 109,
+      "bytes": 169006,
+      "sha256": "701df9987efb290f70f70f6d16352413c947912863e545ec00c99a467e351527"
+    },
+    {
+      "file": "hela_0056.png",
+      "sourceFrame": 111,
+      "bytes": 169166,
+      "sha256": "a75a5ddba40af08e1474fefdc6f7120af3f32920a4621f40a074d8aafb3d51e1"
+    },
+    {
+      "file": "hela_0057.png",
+      "sourceFrame": 113,
+      "bytes": 168928,
+      "sha256": "d18b3d7429c77219374e9916cf99a54e5fd3d106b8a8058483fdd23048a31c86"
+    },
+    {
+      "file": "hela_0058.png",
+      "sourceFrame": 115,
+      "bytes": 169185,
+      "sha256": "9c3da74bd357c17eb11d3db80918cc7e906a053ce9cd27427d507c6a589db3f4"
+    },
+    {
+      "file": "hela_0059.png",
+      "sourceFrame": 117,
+      "bytes": 169156,
+      "sha256": "a4218a4427019876236e0072f787a0b5913cc715e2ce910b9ac717f6ad7304b5"
+    },
+    {
+      "file": "hela_0060.png",
+      "sourceFrame": 119,
+      "bytes": 169758,
+      "sha256": "c3e30d55cb820c1c43ff58664e4f13c0cb8863cc280bfcb85647cbd74eb3c76c"
+    },
+    {
+      "file": "hela_0061.png",
+      "sourceFrame": 121,
+      "bytes": 168776,
+      "sha256": "53949e71669ff33a7e7d1849ef6cbfaa76ddf373371098eccc6723532cb324d4"
+    },
+    {
+      "file": "hela_0062.png",
+      "sourceFrame": 123,
+      "bytes": 168644,
+      "sha256": "13e810922890f1d2a27b661b77fe6a732ed403384238711a6710add737e8f658"
+    },
+    {
+      "file": "hela_0063.png",
+      "sourceFrame": 125,
+      "bytes": 169631,
+      "sha256": "caff9c498ce4b7a2c78653b49d52b3b12e7a22688790b722312d3046b19a840f"
+    },
+    {
+      "file": "hela_0064.png",
+      "sourceFrame": 127,
+      "bytes": 169429,
+      "sha256": "144cde58eecef7fa213905bfca9ad8e394e170835d6da4fca01ec693d5c68558"
+    },
+    {
+      "file": "hela_0065.png",
+      "sourceFrame": 129,
+      "bytes": 169469,
+      "sha256": "2f22c325977e93b516cfbed3e9db1779d2d17f11333280ed76ca11b87c8ce910"
+    },
+    {
+      "file": "hela_0066.png",
+      "sourceFrame": 131,
+      "bytes": 169194,
+      "sha256": "0db66ee726448a73c674cfcddf1030ddcd68cd4aa5c825c703a027163e40fb8c"
+    },
+    {
+      "file": "hela_0067.png",
+      "sourceFrame": 133,
+      "bytes": 168732,
+      "sha256": "c5be7f32d97cf26335543bc847f1aca242b58ee2c9ee0f39beb692c7422a7810"
+    },
+    {
+      "file": "hela_0068.png",
+      "sourceFrame": 135,
+      "bytes": 169205,
+      "sha256": "1beed69ae75c3734e658ddac199fe25905c8bf58e92c52cac591c809a63636b0"
+    },
+    {
+      "file": "hela_0069.png",
+      "sourceFrame": 137,
+      "bytes": 168967,
+      "sha256": "a4ffa84070eefce58d80529d861f594571145d8484994fcb3e4aa008125ae35b"
+    },
+    {
+      "file": "hela_0070.png",
+      "sourceFrame": 139,
+      "bytes": 168917,
+      "sha256": "0784776b9c8a4646f66a8d313f1a9f8a98ab9f74669929025e479f8d07a4529b"
+    },
+    {
+      "file": "hela_0071.png",
+      "sourceFrame": 141,
+      "bytes": 168726,
+      "sha256": "f1a93e14b18c242913011eb26a44fddca8befbe2536a87165c0db65e84edd835"
+    },
+    {
+      "file": "hela_0072.png",
+      "sourceFrame": 143,
+      "bytes": 168899,
+      "sha256": "c817a97a8e23363aceb174294666abcc90a2e899a5175adb48dbcf0b0adfdcb8"
+    },
+    {
+      "file": "hela_0073.png",
+      "sourceFrame": 145,
+      "bytes": 168841,
+      "sha256": "366ad86923c10c46d135f748ab5bfcce416d508a910a45bb4ea70ebb6443e3cb"
+    },
+    {
+      "file": "hela_0074.png",
+      "sourceFrame": 147,
+      "bytes": 168834,
+      "sha256": "90cf512f864e894b54dbe469474b8402452902619147a29aeced25f98706b5b7"
+    },
+    {
+      "file": "hela_0075.png",
+      "sourceFrame": 149,
+      "bytes": 168372,
+      "sha256": "52828a045ead196d254463d4846001582cb8f29a0bc826daf6bcf927faeb9a21"
+    },
+    {
+      "file": "hela_0076.png",
+      "sourceFrame": 151,
+      "bytes": 168200,
+      "sha256": "699fe93de6dd006592a1baf39788dc0e7d494c630ee605f1a2a81289f74691e4"
+    },
+    {
+      "file": "hela_0077.png",
+      "sourceFrame": 153,
+      "bytes": 168261,
+      "sha256": "3642ed3929040ed969080b5ab1fab1112cf0d1c9a576dab7452425aeef45f48b"
+    },
+    {
+      "file": "hela_0078.png",
+      "sourceFrame": 155,
+      "bytes": 168517,
+      "sha256": "dc98127ba26e28af88c2bbb47fddb56e8560aa9b4bdc47254d580a35f377c3b2"
+    },
+    {
+      "file": "hela_0079.png",
+      "sourceFrame": 157,
+      "bytes": 167795,
+      "sha256": "acc01d689bbdaaaebdf23a804238e2baa9654919b6cb37f00686ec9256c93557"
+    },
+    {
+      "file": "hela_0080.png",
+      "sourceFrame": 159,
+      "bytes": 167847,
+      "sha256": "2b54f1e1582ee709bb971c329335bb795dcd6d11a75d225d114485f027cbf89e"
+    },
+    {
+      "file": "hela_0081.png",
+      "sourceFrame": 161,
+      "bytes": 167881,
+      "sha256": "d0fc2a871b8fa8f4273565b7f7c1c775bfa48baf653fbfde775259c71d384d3d"
+    },
+    {
+      "file": "hela_0082.png",
+      "sourceFrame": 163,
+      "bytes": 167353,
+      "sha256": "3e607d3777387436829a8e5bb76efbfca24caef951a144f76847e39f23679893"
+    },
+    {
+      "file": "hela_0083.png",
+      "sourceFrame": 165,
+      "bytes": 167334,
+      "sha256": "ba9d27318b10b6306677486c5f5b63b84841c6858e7699e717640b60817b9b12"
+    },
+    {
+      "file": "hela_0084.png",
+      "sourceFrame": 167,
+      "bytes": 167551,
+      "sha256": "fd40ab16d6d8f0e50bb20ca33f4b505184ff7e5bf1df2bf15773cd96ee6aa7f4"
+    },
+    {
+      "file": "hela_0085.png",
+      "sourceFrame": 169,
+      "bytes": 167181,
+      "sha256": "cc8fa41b2ee1f7f6419ff198dcd8b8e0e27d3f237b0a68a861a9f2d1286260c8"
+    },
+    {
+      "file": "hela_0086.png",
+      "sourceFrame": 171,
+      "bytes": 167504,
+      "sha256": "f54fb7c1b60787ec22d1512fe73d7efdffdf2e47301d79f04405f90238c35ebf"
+    },
+    {
+      "file": "hela_0087.png",
+      "sourceFrame": 173,
+      "bytes": 168132,
+      "sha256": "e9a57a8462293d01bf9452f33dbd7632be63cd84a356ab2f108c960aa88e4a57"
+    },
+    {
+      "file": "hela_0088.png",
+      "sourceFrame": 175,
+      "bytes": 169204,
+      "sha256": "c0bb828dca111ea4f8c4cc0c9db1e64d07c2511115998df7b440b14590243f01"
+    },
+    {
+      "file": "hela_0089.png",
+      "sourceFrame": 177,
+      "bytes": 168364,
+      "sha256": "d0ac06dc85ec46b86133afc92b3d7de63745ea3138099b6957b8f6d069db454f"
+    },
+    {
+      "file": "hela_0090.png",
+      "sourceFrame": 179,
+      "bytes": 168674,
+      "sha256": "ab5e57247d3b7e21b0adea1a171d55ec51e258c99d5289f24c248010b9592aca"
+    },
+    {
+      "file": "hela_0091.png",
+      "sourceFrame": 181,
+      "bytes": 168528,
+      "sha256": "67aeed2086ebd3530ff2eb10997536b91db759cf3b374b7161f57e9556d6556d"
+    },
+    {
+      "file": "hela_0092.png",
+      "sourceFrame": 183,
+      "bytes": 168651,
+      "sha256": "84ab88e0e05e31a2f66224d08f16306300cca5d72ad364ccf5171b6ded8ca69a"
+    },
+    {
+      "file": "hela_0093.png",
+      "sourceFrame": 185,
+      "bytes": 169211,
+      "sha256": "ee2d343767f9ad5d1de2c6c0fa8883c6ce373d58f388d969f8dd11d35ad7aee4"
+    },
+    {
+      "file": "hela_0094.png",
+      "sourceFrame": 187,
+      "bytes": 168842,
+      "sha256": "00b33f545a5bbcfb6b17209e401ff25383ef0ed884a359f747aec9dba31de8e7"
+    },
+    {
+      "file": "hela_0095.png",
+      "sourceFrame": 189,
+      "bytes": 169293,
+      "sha256": "9c1345b03d4b16c2e2a08bd4db10691dc4644158d0750d47e6ac148030e01081"
+    },
+    {
+      "file": "hela_0096.png",
+      "sourceFrame": 191,
+      "bytes": 169032,
+      "sha256": "2f4ca5dc28044ddccd3d8cdb624951b60afa2c514953638ed8055df46ecb2b35"
+    },
+    {
+      "file": "hela_0097.png",
+      "sourceFrame": 193,
+      "bytes": 170820,
+      "sha256": "322fe9ad999537bc510015004c2d76dae09c20057fd8b03962144fe460e52d9f"
+    },
+    {
+      "file": "hela_0098.png",
+      "sourceFrame": 195,
+      "bytes": 169647,
+      "sha256": "c3b2849fc2058764b1a7b012e2357526add032d8c02a9d0c07be0e5b674b350c"
+    },
+    {
+      "file": "hela_0099.png",
+      "sourceFrame": 197,
+      "bytes": 169106,
+      "sha256": "1a2e34ab222b66374f56de724835501fda6d1021d872df619e4ce93e50e6a8d4"
+    },
+    {
+      "file": "hela_0100.png",
+      "sourceFrame": 199,
+      "bytes": 168990,
+      "sha256": "91a2a0803515b11ec809b3c45df39a93592ac64a037c9e8012060d6072238090"
+    },
+    {
+      "file": "hela_0101.png",
+      "sourceFrame": 201,
+      "bytes": 168826,
+      "sha256": "72eb9a7cb8ecf48acafd947cf2417db5140619904c265f1e4707dbd518cb1c3d"
+    },
+    {
+      "file": "hela_0102.png",
+      "sourceFrame": 203,
+      "bytes": 168852,
+      "sha256": "929dc17d43a4067c7218b20ecca992ce64aad07394a735aea43fa85b79b5d592"
+    },
+    {
+      "file": "hela_0103.png",
+      "sourceFrame": 205,
+      "bytes": 169090,
+      "sha256": "e87afb46b25823749f940d6bd6630357f1e7a07ce8f8cb3abc881f0ea40453cb"
+    },
+    {
+      "file": "hela_0104.png",
+      "sourceFrame": 207,
+      "bytes": 168745,
+      "sha256": "d65bad71f89a664aa7ff33dab6d746680e142a251ae321910b7ffa773f6eccdd"
+    },
+    {
+      "file": "hela_0105.png",
+      "sourceFrame": 209,
+      "bytes": 168980,
+      "sha256": "a67e468ca0c1fecd22479966b157dc04dfced59ad3663d8f7885cfb405aebb15"
+    },
+    {
+      "file": "hela_0106.png",
+      "sourceFrame": 211,
+      "bytes": 169183,
+      "sha256": "42e66b7a27e43cf7126789abbd7bf74854aff5347a0a47e9cc6ec5879e647bf5"
+    },
+    {
+      "file": "hela_0107.png",
+      "sourceFrame": 213,
+      "bytes": 169200,
+      "sha256": "e96e8301c6c4c7533cb9e3fb8f5fec4edfaa1eb864e78658d39dd3b82e485df1"
+    },
+    {
+      "file": "hela_0108.png",
+      "sourceFrame": 215,
+      "bytes": 169776,
+      "sha256": "9a65e9bf009615f5bf1e7f13a20003bd20dc4c3a6df8b2e484c86058d7e88789"
+    },
+    {
+      "file": "hela_0109.png",
+      "sourceFrame": 217,
+      "bytes": 170176,
+      "sha256": "5811f42cba3216144120ffc4eef4524df9ceb1b1c35dd68fbda779c37f6d0eab"
+    },
+    {
+      "file": "hela_0110.png",
+      "sourceFrame": 219,
+      "bytes": 170504,
+      "sha256": "dbf40ebeaac1eae837d088b15cbeaf917148ba4ce779952fc25911f344dd0f13"
+    },
+    {
+      "file": "hela_0111.png",
+      "sourceFrame": 221,
+      "bytes": 170302,
+      "sha256": "edb84d25d4edfe66fff701b784778cc6c043d473c47f40e4ffc2e81210783cd4"
+    },
+    {
+      "file": "hela_0112.png",
+      "sourceFrame": 223,
+      "bytes": 170161,
+      "sha256": "3f4eb8fb943746191afbeafb7d015470548bd62cb3d489863f32724298d34840"
+    },
+    {
+      "file": "hela_0113.png",
+      "sourceFrame": 225,
+      "bytes": 169683,
+      "sha256": "8db7ae56924dd0ac1760b05af82e5a1f983fa5c0898cee0b8b216fcb7db10ce8"
+    },
+    {
+      "file": "hela_0114.png",
+      "sourceFrame": 227,
+      "bytes": 169945,
+      "sha256": "f58043688b3826df2e5f63287149dbe11c359cedf4d19896b7345f00dacad052"
+    },
+    {
+      "file": "hela_0115.png",
+      "sourceFrame": 229,
+      "bytes": 169974,
+      "sha256": "8bebaa6fe3927b6ee90a290c16f940416d8fee54fbe717d48e62c26fbd2db739"
+    },
+    {
+      "file": "hela_0116.png",
+      "sourceFrame": 231,
+      "bytes": 170175,
+      "sha256": "d771421f9697f86a6439e9fe8e7e3d1b84d7d691b09c86be1c4054bcfdf1917e"
+    },
+    {
+      "file": "hela_0117.png",
+      "sourceFrame": 233,
+      "bytes": 170197,
+      "sha256": "751d4b16bd88ba74dbeac8994be51c2b4e31ce4c511281fa2968ab4a7e41b7a7"
+    },
+    {
+      "file": "hela_0118.png",
+      "sourceFrame": 235,
+      "bytes": 169827,
+      "sha256": "d132810c93441c30d0212e7135152531f1c2ec83f9924a7f021aefd23761006b"
+    },
+    {
+      "file": "hela_0119.png",
+      "sourceFrame": 237,
+      "bytes": 169788,
+      "sha256": "f02a5d1c3153763544b7b4abfb5442c7034ccc3811f64a3565640e36af463b9d"
+    },
+    {
+      "file": "hela_0120.png",
+      "sourceFrame": 239,
+      "bytes": 169833,
+      "sha256": "46c09ecc8706eb1eb0f7342618d21fb3cc8cc1872a33fad44ac9fd1e40851b86"
+    },
+    {
+      "file": "hela_0121.png",
+      "sourceFrame": 241,
+      "bytes": 169279,
+      "sha256": "f1fcac4c2f98380758132e199ca994655efc9c429951d6121d336a66a9b5e8ab"
+    },
+    {
+      "file": "hela_0122.png",
+      "sourceFrame": 243,
+      "bytes": 170025,
+      "sha256": "34309a600256eb2f4f54398acfb8ae13dd027d0a40157c87036c79d798ddbef7"
+    },
+    {
+      "file": "hela_0123.png",
+      "sourceFrame": 245,
+      "bytes": 170086,
+      "sha256": "7651595e4116a0126463355b2c1ff3d60fa72bce2ea379286512bff5558fd541"
+    },
+    {
+      "file": "hela_0124.png",
+      "sourceFrame": 247,
+      "bytes": 170400,
+      "sha256": "a12198f30e73d077675da502f3b2d3612a90ffb71b34e0b8d0c6696f0ff1a2dc"
+    },
+    {
+      "file": "hela_0125.png",
+      "sourceFrame": 249,
+      "bytes": 169752,
+      "sha256": "2c8469f2817e57f2288244764edbb3fc7cd8e3dd399fe84fd19a4aced3b48a29"
+    },
+    {
+      "file": "hela_0126.png",
+      "sourceFrame": 251,
+      "bytes": 169521,
+      "sha256": "43573e9b326862791979652905ca59169e12ab11f202b64a9b0498bfd80b57dc"
+    },
+    {
+      "file": "hela_0127.png",
+      "sourceFrame": 253,
+      "bytes": 169181,
+      "sha256": "cf9ebb6b1eccceceae38a622c953eaacc7b1c41d327f3be0ef3bc30ea526709d"
+    },
+    {
+      "file": "hela_0128.png",
+      "sourceFrame": 255,
+      "bytes": 168918,
+      "sha256": "e250e5f6ed2ae7acf89e68bb5222f273bc0121d874fcdc844521b350d91c341e"
+    },
+    {
+      "file": "hela_0129.png",
+      "sourceFrame": 257,
+      "bytes": 168767,
+      "sha256": "c43dcad388555980b7e3c56cccccb75341fe3b7762e7f2d4dbcea3946e4513ce"
+    },
+    {
+      "file": "hela_0130.png",
+      "sourceFrame": 259,
+      "bytes": 169438,
+      "sha256": "d92b0384e1c4a673feced19ca20a4d3018bfc8b49024f240702d6433b08e5ceb"
+    },
+    {
+      "file": "hela_0131.png",
+      "sourceFrame": 261,
+      "bytes": 169375,
+      "sha256": "c54ce334a904fac83b5faf02c6e7f3d1ba17cffe302d73b33b1304dcd4359b79"
+    },
+    {
+      "file": "hela_0132.png",
+      "sourceFrame": 263,
+      "bytes": 169454,
+      "sha256": "c6eaee38ef91eba643e8411618ef9c181edb04913d6c207aa41664e89fe5d530"
+    },
+    {
+      "file": "hela_0133.png",
+      "sourceFrame": 265,
+      "bytes": 169715,
+      "sha256": "e113d3a01eba33eea4ded089a3fa4e39dae5f2e2b019ce6daf583eb7f2f56a93"
+    },
+    {
+      "file": "hela_0134.png",
+      "sourceFrame": 267,
+      "bytes": 169034,
+      "sha256": "674811474e698f8371abb8480e7947a03f18fea2bbd5bc8bf073ca07e65df55a"
+    },
+    {
+      "file": "hela_0135.png",
+      "sourceFrame": 269,
+      "bytes": 169198,
+      "sha256": "bb9b33a6013475480bba9c7a856678fcd8601413dbce72cea4d4cea941396dea"
+    },
+    {
+      "file": "hela_0136.png",
+      "sourceFrame": 271,
+      "bytes": 169111,
+      "sha256": "5e3d91cd617665fbad593278fda5528a486cd300cad6b4b20306aa74e89b6841"
+    },
+    {
+      "file": "hela_0137.png",
+      "sourceFrame": 273,
+      "bytes": 169566,
+      "sha256": "a506b8a485ef1603ce119f7aae57b3c43112f24021948a3b3e5969af1726ae5f"
+    },
+    {
+      "file": "hela_0138.png",
+      "sourceFrame": 275,
+      "bytes": 169262,
+      "sha256": "b720b962d14c18915eb7cd9177bbfed605ae9ac78b472e493512c6565a06fec4"
+    },
+    {
+      "file": "hela_0139.png",
+      "sourceFrame": 277,
+      "bytes": 169324,
+      "sha256": "8a91bbb8055c80d107dee6e6edeff3e47e94d4ef6cce870354fc8ad67d6e5d17"
+    },
+    {
+      "file": "hela_0140.png",
+      "sourceFrame": 279,
+      "bytes": 169572,
+      "sha256": "3d5de2e13b24e403c991c41c087373c7cf5846dd3d861ec548816b9c5ac1af45"
+    },
+    {
+      "file": "hela_0141.png",
+      "sourceFrame": 281,
+      "bytes": 169514,
+      "sha256": "685eaaf30280fbaeb6bdfe9a05209a1adab8ddeea2d5a14708a98ffc340dc9a1"
+    },
+    {
+      "file": "hela_0142.png",
+      "sourceFrame": 283,
+      "bytes": 169211,
+      "sha256": "a18cc25befd5f4ddbc745d42e59bbbbf0f67cd68347f98c74b5622740045231f"
+    },
+    {
+      "file": "hela_0143.png",
+      "sourceFrame": 285,
+      "bytes": 169365,
+      "sha256": "0049d9851edad70e0951113e192d53acf1bc02e2a9e3983d3609702ced2b3577"
+    },
+    {
+      "file": "hela_0144.png",
+      "sourceFrame": 287,
+      "bytes": 169357,
+      "sha256": "3a567e6b9fcd38c4e9e0eaef3e1d1cc71c033ba42a7c4af032d6fe7e54662b1c"
+    },
+    {
+      "file": "hela_0145.png",
+      "sourceFrame": 289,
+      "bytes": 170015,
+      "sha256": "d24703d7f58d0f3d71a1226c1f05a5361a2651b46e7491010f22988562d5a16e"
+    },
+    {
+      "file": "hela_0146.png",
+      "sourceFrame": 291,
+      "bytes": 170677,
+      "sha256": "cceb89b5e538b9fa74a4eb7d0b2ef6c563c8a37090ab6a46dd259e9a04483c8c"
+    },
+    {
+      "file": "hela_0147.png",
+      "sourceFrame": 293,
+      "bytes": 171692,
+      "sha256": "fc2f816e16272dbdf072432c7bee066d5f502427855195417798514bbf9c9c84"
+    },
+    {
+      "file": "hela_0148.png",
+      "sourceFrame": 295,
+      "bytes": 171874,
+      "sha256": "bd6a2c6efa9f621c0a26e4ad1956eb4ea292dca4311d7f6d5987b6e2a1f0f95a"
+    },
+    {
+      "file": "hela_0149.png",
+      "sourceFrame": 297,
+      "bytes": 172444,
+      "sha256": "e5a386f070e25cb9341fa40e82a8887b9b9799c90aef22090b2815aef4fa96b1"
+    },
+    {
+      "file": "hela_0150.png",
+      "sourceFrame": 299,
+      "bytes": 172417,
+      "sha256": "22941e27df47311ae8e0c71c686bffd64b9dbc4697cae6457a827bce56a54b37"
+    }
+  ]
+}

@@ -28,6 +28,20 @@ SegRef3Dは、連続画像や3D volumeから、構造のsegmentation、mask修�
 物理的な連続切片は、定量3D解析の前に[registration](Tutorial/Registration.md)が必要な場合があります。
 実寸計測には、信頼できるpixel/voxel spacingとslice spacingが必要です。
 
+## デモデータ
+
+SegRef3D Liteでは、ブラウザから直接読み込める2種類の顕微鏡画像スタックを用意しています。
+
+- **電子顕微鏡画像：** HeLa細胞、EMPIAR-10478（CC0）。150枚、512 × 512、25.4 MB。
+- **マウス脳 — 光学顕微鏡：** Brain Architecture Project（BAP）由来の連続切片画像。
+  132枚、707 × 553、51.5 MB。CC BY-SA 4.0に基づいて再配布しています。
+
+開始画面または **Open** メニューから選べます。既存のAppleとRabbitCTデモも利用できます。
+デモ画像は選択時にダウンロードされます。ユーザー自身の画像を通常利用時に外部へ送信することはありません。
+出典、加工内容、引用文献は[デモデータのライセンス表記](lite-web/demo/DEMO_DATA_LICENSES.md)をご覧ください。
+画像のライセンスは、SegRef3D本体のApache-2.0ライセンスとは別です。
+マウス脳画像の実際のpixel spacingとslice spacingは不明のため、実寸計測には校正が必要です。
+
 ## 何をしたいですか？
 
 - 連続画像やvolume内の構造を**segment**する

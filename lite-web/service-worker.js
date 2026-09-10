@@ -1,17 +1,14 @@
-const CACHE_NAME = "segref3d-lite-web-v50";
-const APPLE_DEMO_FILES = Array.from(
-  { length: 20 },
-  (_, index) => `./demo/apple-kanzi-84/apple_${String(index + 1).padStart(4, "0")}.jpg`,
-);
+const CACHE_NAME = "segref3d-lite-web-v51";
+// Demo images and volumes are downloaded only when selected; cache on demand.
 const APP_FILES = [
   "./",
   "./index.html",
-  "./styles.css?v=33",
-  "./app.mjs?v=47",
-  "./workspace-ui.mjs?v=30",
+  "./styles.css?v=34",
+  "./app.mjs?v=48",
+  "./workspace-ui.mjs?v=31",
   "./core.mjs?v=28",
   "./mask-sequence.mjs?v=1",
-  "./demo-datasets.mjs?v=4",
+  "./demo-datasets.mjs?v=5",
   "./image-tools.mjs?v=26",
   "./medical-io.mjs?v=25",
   "./medical-source.mjs?v=1",
@@ -44,7 +41,6 @@ const APP_FILES = [
   "./icon-192.png",
   "./icon-512.png",
   "./manifest.webmanifest",
-  ...APPLE_DEMO_FILES,
 ];
 
 self.addEventListener("install", (event) => {

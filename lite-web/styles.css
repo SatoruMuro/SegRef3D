@@ -1100,6 +1100,7 @@ svg {
 
 .demo-intro {
   display: grid;
+  pointer-events: auto;
   gap: 4px;
   max-width: 560px;
   margin: 16px auto 0;
@@ -1110,6 +1111,36 @@ svg {
 .demo-intro strong {
   color: var(--ink);
   font-size: 12px;
+}
+
+.microscopy-demos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px;
+  margin: 6px 0;
+}
+
+.microscopy-demos .command-button {
+  height: auto;
+  padding: 10px;
+  white-space: normal;
+}
+
+.microscopy-demos small {
+  display: block;
+  margin-top: 4px;
+}
+
+#open-menu .open-menu-panel .command-button span {
+  display: inline;
+  white-space: normal;
+}
+
+#open-menu .open-menu-panel .command-button {
+  width: 100%;
+  height: auto;
+  min-height: 34px;
+  text-align: left;
 }
 
 .demo-intro b {
@@ -1169,12 +1200,13 @@ svg {
 
 .demo-calibration-values {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 8px;
 }
 
 .demo-calibration-values span {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   justify-content: space-between;
   gap: 10px;
@@ -1189,7 +1221,7 @@ svg {
 .demo-calibration-values strong {
   color: var(--ink);
   font-size: 12px;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .demo-calibration-values i {
