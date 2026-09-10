@@ -11,7 +11,9 @@ move are preserved in their original language.
   Runtime verification now fails on nonzero exit codes or missing success markers.
 - Enable Seg CT/MRI for compatible DICOM CT/MR volumes in Lite and Local GPU,
   with modality metadata, generated NIfTI input and patient-space geometry validation.
-- Withdraw the v1.3.1 Windows GPU ZIP; retain its investigation record.
+- Identify the v1.3.1 Windows GPU ZIP as unsuitable for native x64 distribution.
+  The rebuilt ZIP passed integrity checks; distribution is held pending startup
+  verification because this host's Smart App Control blocks the new unsigned EXE.
 
 ## 2026.9.9 — Local GPU v1.3.1 and Lite DICOM Job ZIP fix
 

@@ -1,9 +1,22 @@
 # SegRef3D Local GPU v1.3.2 配布情報
 
-v1.3.1で報告された起動直後のWinError 193を修正するpatch releaseです。
-v1.3.1の同名差し替えは行いません。新しい配布名は
-`SegRef3D-Local-GPU-v1.3.2-Windows.zip`です。完成物のハッシュと検証結果は、
-最終ZIPを別フォルダに展開して確認した後、このページへ記録します。
+v1.3.1で報告された起動直後のWinError 193について、原因の特定、修正、
+v1.3.2の再ビルドとZIP整合性検証まで完了しました。ただし、展開したEXEの起動が
+この端末のSmart App Controlでブロックされ、**GUI・VTKの実起動検証は未完了**です。
+このZIPを検証済みの完成版とは扱わず、Dropboxへの正式配布も保留しています。
+
+| 項目 | 内容 |
+|---|---|
+| 新ZIP名 | `SegRef3D-Local-GPU-v1.3.2-Windows.zip` |
+| サイズ | 3,998,870,575 bytes |
+| SHA-256 | `eefdaf4dc6bdc7b05951ac59d8a0c891759ad899493f91f60e7e0b47aaf3350e` |
+| ビルド元commit | `c350e71960bcc77c59f9a5648c0dbbb378937c16` |
+| PE数／ZIP entry数 | 911／18,753 |
+| 署名状態 | unsigned（Microsoft等の既存vendor署名は保持） |
+| 配布状況 | 作業環境のdistに作成済み。Dropbox未更新 |
+
+v1.3.1の同名差し替えは行っていません。起動確認を終えた新版ができる前に
+既存ZIPを整理しないという作業順序を守り、Dropbox上のv1.3.1もまだ変更していません。
 
 ## 根本原因はARM64ホストのruntime DLLの混入
 
@@ -104,3 +117,52 @@ version 14.50.35719.0、Microsoftの埋め込み署名Validです。SHA-256:
 
 署名方針は従来と同じunsignedです。runtime DLLのMicrosoft署名とアプリ全体の
 コード署名は区別します。SACの受け入れとNVIDIA GPU推論は別途確認が必要です。
+
+## 完成ZIPの検証結果と、起動を止めた別のポリシー
+
+新しいZIPを`build/verification-132/final-extracted/`へ展開しました。
+全911 PEがMachine `0x8664`かつCHPEなしで、署名棚卸し時、dist、ZIP内、展開後の
+全PEのSHA-256が一致しました。18,753 entryのCRC検査も成功しています。
+12 runtime DLLはすべて公式パッケージの抽出結果と一致しました。
+
+`vcruntime140.dll`のSHA-256比較:
+
+| 段階 | 旧v1.3.1 | 新v1.3.2 |
+|---|---|---|
+| dist／ZIP化対象の監査 | `6d987d8c…ca18758` | `18414685…d7775b2` |
+| ZIP内 | 同一 | 同一 |
+| 別フォルダへの展開後 | 同一 | 同一 |
+| Dropbox配布先ZIP内 | 同一 | 未コピー |
+
+完全なhashは上記本文と、Git管理外の`build/verification-132/final-integrity.json`、
+`original-comparison.json`に保存しています。
+
+展開後の3 runtime DLLは、x64 Pythonから個別にロードできました。
+ロード済みモジュールの実パスも展開先のDLLと一致しました。この単体検査は
+アプリのbootstrapを変更するものではなく、SegRef3D.exeの起動成功とも区別します。
+
+PowerShellから展開先の`SegRef3D.exe --vtk-check`を起動しようとしたところ、
+WindowsはEXEの実行開始前に「アプリケーション制御ポリシーによってこのファイルが
+ブロックされました」と返しました。2026-09-10 12:29:52 JSTのCode Integrity
+event 3033／3077は、`final-extracted/.../SegRef3D.exe`がEnterprise signing level
+requirementsを満たさないと記録し、event 3118はSmart App Control blockを記録しています。
+runtime DLLやVTK PYDのロード段階には到達していません。WinError 193の再発として
+扱っていません。現在のユーザー／コンピューター証明書ストアには利用可能な
+コード署名証明書がなく、Windowsのセキュリティ設定は変更していません。
+
+このため、展開物からのVTK import、GUI表示、引数なし通常起動の成功は未確認です。
+ビルド前のVTK 9.7.0 import成功を、完成ZIPの起動成功へ読み替えていません。
+実行が許可されたx64 Windows端末、または正式コード署名を利用できる環境で
+残りの検証を完了する必要があります。この作業端末はARM64 Windowsで、
+NVIDIA GPUも利用できないため、native x64実機とGPU推論は未確認です。
+
+実施した自動テストはDesktop 139件、Lite 126件で全件成功しました。
+architecture検査ではx64正常、ARM64／ARM64EC／x86／CHPE／破損PEを確認し、
+PowerShellとPythonの判定を照合しました。実際のv1.3.1 distも新しい検査で拒否されました。
+終了コード非0と、終了コード0でも成功markerのない結果を模擬し、ZIP検証が失敗する
+ことを確認しました。署名棚卸しは265 PEの既存署名保持、645依存PEが署名レビュー待ち、
+アプリEXE 1個が未署名です。
+
+実行ログは`build/verification-132/`の`build.log`、`python-tests.log`、`lite-tests.log`、
+`extracted-check.log`、`code-integrity.json`、`new-pe-signatures.json`、
+`runtime-dll-load.json`、`final-integrity.json`に保存しています。
