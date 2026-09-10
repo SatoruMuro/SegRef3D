@@ -1,4 +1,3 @@
-import ctypes
 import os
 from pathlib import Path
 import sys
@@ -18,9 +17,9 @@ def _configure_windows_dll_runtime() -> None:
     PyTorch c10.dll fails its DLL initialization with WinError 1114.
 
     The distribution preparation step removes those conflicting Qt copies.
-    Preloading the authoritative root copies here also makes the selected
-    runtime deterministic and protects development builds that have not yet
-    gone through that preparation step.
+    The build supplies architecture-validated x64 redistributable DLLs at
+    the root. Let the Windows loader/PyInstaller resolve them normally;
+    explicitly loading host-collected DLLs here can fail before app startup.
     """
     if sys.platform != "win32" or not getattr(sys, "frozen", False):
         return
@@ -35,19 +34,5 @@ def _configure_windows_dll_runtime() -> None:
 
     # Keep add_dll_directory handles alive for the process lifetime.
     sys._segref3d_dll_directory_handles = handles
-
-    loaded = []
-    for dll_name in (
-        "vcruntime140.dll",
-        "vcruntime140_1.dll",
-        "msvcp140.dll",
-        "concrt140.dll",
-    ):
-        dll_path = internal_dir / dll_name
-        if dll_path.is_file():
-            ctypes.WinDLL(str(dll_path))
-            loaded.append(str(dll_path))
-    sys._segref3d_preloaded_msvc_runtime = loaded
-
 
 _configure_windows_dll_runtime()

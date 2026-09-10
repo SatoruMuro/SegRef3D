@@ -1,5 +1,10 @@
 # SegRef3D Local GPU v1.3.1 配布情報
 
+**2026-09-10追記：このZIPはx64実機で起動不能のため配布対象から除外します。**
+ARM64 WindowsのSystem32由来のruntime DLLが混入していました。以下の起動成功は
+ARM64 Windows上での結果であり、x64実機での互換性を確認したものではありません。
+修正と検証結果は [v1.3.2配布情報](RELEASE_1_3_2.md) を参照してください。
+
 2026-09-09。Local GPUのバグ修正版を作成し、LiteのDICOM Create Input ZIP修正を本番公開した。公開済みv1.3.0との識別のためpatch versionを1.3.1へ進めた。公開済みLocal CPU v1.2.6の配布物・バージョン・リンクは変更していない。
 
 ## Windows正式ZIP

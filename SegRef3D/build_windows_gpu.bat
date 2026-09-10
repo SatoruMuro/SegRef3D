@@ -36,6 +36,14 @@ if errorlevel 1 exit /b 1
 
 :environment_ready
 
+if "%MSVC_REDIST_EXE%"=="" (
+    echo Set MSVC_REDIST_EXE to the official Microsoft VC_redist.x64.exe version 14.50.35719.
+    echo See docs\BUILD_GPU_CU128.md. System32 runtime collection is not portable.
+    exit /b 8
+)
+python tools\stage_windows_msvc.py "%MSVC_REDIST_EXE%" "build\msvc-x64"
+if errorlevel 1 exit /b 8
+
 for /f "tokens=2 delims==" %%i in ('findstr /b "__version__" SegRef3D.py') do set "VERSION=%%i"
 set "VERSION=%VERSION: =%"
 set "VERSION=%VERSION:"=%"
@@ -87,6 +95,7 @@ python -m PyInstaller SegRef3D.py ^
     --noupx ^
     --icon "SegRef3D.ico" ^
     --runtime-hook "tools\pyi_local_gpu.py" ^
+    --add-binary "build\msvc-x64\*.dll;." ^
     --paths "sam2pkg" ^
     --paths "sam2pkg\sam2" ^
     --add-data "ffmpeg_bin\ffmpeg.exe;ffmpeg_bin" ^

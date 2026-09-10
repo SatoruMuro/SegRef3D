@@ -37,7 +37,7 @@ def prepare(root):
         elif entry.is_file() and (entry.suffix.lower() in NON_RUNTIME_SUFFIXES or entry.name.startswith("test_") or entry.name.endswith("_test.py")):
             entry.unlink()
             removed += 1
-    for name in ("audit_windows_signatures.ps1", "sign_windows_release.ps1", "windows_signing_common.ps1", "windows_signing_approvals.json", "verify_windows_release.ps1"):
+    for name in ("audit_windows_signatures.ps1", "sign_windows_release.ps1", "windows_signing_common.ps1", "windows_signing_approvals.json", "verify_windows_release.ps1", "check_windows_x64.ps1"):
         destination = root / "scripts" / name
         destination.parent.mkdir(exist_ok=True)
         shutil.copy2(APP_ROOT / "scripts" / name, destination)

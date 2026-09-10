@@ -30,18 +30,32 @@ try {
 } finally { $archive.Dispose() }
 [IO.Compression.ZipFile]::ExtractToDirectory($zipPathResolved, $destination)
 $root = Join-Path $destination $top[0]
+. "$PSScriptRoot/check_windows_x64.ps1"
+$peCount = Assert-WindowsX64Bundle $root
 $info = Get-Content -LiteralPath (Join-Path $root 'release-info.json') -Raw | ConvertFrom-Json
 $summary = [ordered]@{ Zip = $zipPathResolved; Bytes = (Get-Item -LiteralPath $zipPathResolved).Length; SHA256 = (Get-FileHash -LiteralPath $zipPathResolved -Algorithm SHA256).Hash; Root = $root; Version = $info.version; SourceCommit = $info.sourceCommit; SigningStatus = $info.signingStatus; Checks = @() }
+$summary.NativeX64PECount = $peCount
+$summary.HostArchitecture = [Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
 if ($RuntimeChecks) {
     foreach ($argument in '--vtk-check', '--gpu-check', '--startup-smoke-test') {
         $name = $argument.TrimStart('-')
         $stdout = Join-Path $destination "$name.stdout.log"
         $stderr = Join-Path $destination "$name.stderr.log"
-        $style = if ($argument -eq '--startup-smoke-test') { 'Normal' } else { 'Hidden' }
+        $style = 'Hidden'
         $process = Start-Process -FilePath (Join-Path $root 'SegRef3D.exe') -ArgumentList $argument -WorkingDirectory $destination -WindowStyle $style -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
         if (-not $process.WaitForExit(120000)) { $process.Kill(); throw "Timed out: $argument" }
         $process.Refresh()
         $summary.Checks += [ordered]@{ Argument = $argument; ExitCode = $process.ExitCode; Stdout = $stdout; Stderr = $stderr }
+        $output = Get-Content -LiteralPath $stdout -Raw
+        $marker = switch ($argument) {
+            '--vtk-check' { '\[VTK\] Import OK:' }
+            '--gpu-check' { 'Result:' }
+            '--startup-smoke-test' { '\[SMOKE\] title=' }
+        }
+        if ($process.ExitCode -ne 0 -or $output -notmatch $marker) {
+            $summary | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $destination 'verification.json') -Encoding UTF8
+            throw "Runtime check failed: $argument (exit $($process.ExitCode)); inspect $stdout and $stderr"
+        }
     }
 }
 $summary | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $destination 'verification.json') -Encoding UTF8

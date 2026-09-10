@@ -1,8 +1,10 @@
 import importlib.util
+import json
 import os
 from pathlib import Path
 import subprocess
 import shutil
+import sys
 import tempfile
 import unittest
 import zipfile
@@ -39,7 +41,7 @@ class WindowsReleaseTests(unittest.TestCase):
             root = Path(temp) / "SegRef3D-Local-GPU-v1.3.1-Windows"
             root.mkdir()
             # Use an existing Windows PE without executing or modifying it.
-            shutil.copy2(Path(os.environ["WINDIR"]) / "System32/where.exe", root / "SegRef3D.exe")
+            shutil.copy2(sys.executable, root / "SegRef3D.exe")
             (root / "release-info.json").write_text('{"version":"1.3.1"}')
             command = ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(ROOT / "scripts/package_windows_release.ps1"), "-DistDir", str(root)]
             env = {**os.environ, "RELEASE_BUILD": "1", "SIGNING_ENABLED": "0", "ALLOW_UNSIGNED_RELEASE": "0"}
@@ -59,6 +61,29 @@ class WindowsReleaseTests(unittest.TestCase):
             self.assertEqual(verify.returncode, 0, verify.stderr.decode(errors="replace"))
             self.assertEqual((extraction / root.name / "SegRef3D.exe").read_bytes(), (root / "SegRef3D.exe").read_bytes())
             self.assertTrue((extraction / "verification.json").is_file())
+
+            # Simulate both a failed process and a false zero exit without a
+            # success marker. Neither may be reported as release verification success.
+            for code in (2, 0):
+                runtime_extraction = Path(temp) / f'failed-{code}'
+                runner = Path(temp) / f'verify-failure-{code}.ps1'
+                runner.write_text("""$ErrorActionPreference = 'Stop'
+function Start-Process {
+    param($FilePath, $ArgumentList, $WorkingDirectory, $WindowStyle, [switch]$PassThru, $RedirectStandardOutput, $RedirectStandardError)
+    'bootstrap failed' | Set-Content -LiteralPath $RedirectStandardOutput
+    'WinError 193' | Set-Content -LiteralPath $RedirectStandardError
+    $process = [pscustomobject]@{ ExitCode = EXIT_CODE }
+    $process | Add-Member ScriptMethod WaitForExit { param($timeout) return $true }
+    $process | Add-Member ScriptMethod Refresh { }
+    return $process
+}
+& 'VERIFY_SCRIPT' -ZipPath 'ZIP_PATH' -ExtractDir 'EXTRACT_PATH' -RuntimeChecks
+""".replace('EXIT_CODE', str(code)).replace('VERIFY_SCRIPT', str(ROOT / 'scripts/verify_windows_release.ps1'))
+                    .replace('ZIP_PATH', str(archive_path)).replace('EXTRACT_PATH', str(runtime_extraction)))
+                failed = subprocess.run(['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', str(runner)], capture_output=True, timeout=60)
+                self.assertNotEqual(failed.returncode, 0)
+                record = json.loads((runtime_extraction / 'verification.json').read_text(encoding='utf-8-sig'))
+                self.assertEqual(record['Checks'][0]['ExitCode'], code)
 
 
 if __name__ == "__main__":

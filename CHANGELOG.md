@@ -3,6 +3,16 @@
 Release and development history moved from the main README. Dates and descriptions before this
 move are preserved in their original language.
 
+## 2026.9.10 — Local GPU v1.3.2 Windows x64 runtime fix
+
+- Fixed WinError 193 caused by ARM64-host MSVC runtime DLLs in the x64 bundle.
+  Explicitly collect hash-pinned Microsoft x64 redistributables and remove ctypes preloads.
+- Reject ARM64/CHPE/native architecture mismatches before packaging and after ZIP extraction.
+  Runtime verification now fails on nonzero exit codes or missing success markers.
+- Enable Seg CT/MRI for compatible DICOM CT/MR volumes in Lite and Local GPU,
+  with modality metadata, generated NIfTI input and patient-space geometry validation.
+- Withdraw the v1.3.1 Windows GPU ZIP; retain its investigation record.
+
 ## 2026.9.9 — Local GPU v1.3.1 and Lite DICOM Job ZIP fix
 
 - Fixed Qt graphics-item ownership and cleanup around Auto Erase, Box Prompt,

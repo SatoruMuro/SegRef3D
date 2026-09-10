@@ -6,11 +6,11 @@ and the required order of signing and packaging, see [Windows signing](WINDOWS_S
 signing or explicit `ALLOW_UNSIGNED_RELEASE=1`. Formal ZIP names follow
 `SegRef3D-Local-GPU-v<version>-Windows.zip`; `release-info.json` records signing status.
 Development ZIPs retain the `-signed.zip` / `-unsigned.zip` suffix.
-For the explicitly authorized unsigned v1.3.1 release, set `RELEASE_BUILD=1`,
+For an explicitly authorized unsigned release, set `RELEASE_BUILD=1`,
 `ALLOW_UNSIGNED_RELEASE=1`, and `SIGNING_ENABLED=0`. After packaging, run:
 
 ```powershell
-.\scripts\verify_windows_release.ps1 -ZipPath .\dist\SegRef3D-Local-GPU-v1.3.1-Windows.zip -ExtractDir .\dist\verify-v1.3.1 -RuntimeChecks
+.\scripts\verify_windows_release.ps1 -ZipPath .\dist\SegRef3D-Local-GPU-v1.3.2-Windows.zip -ExtractDir .\dist\verify-v1.3.2 -RuntimeChecks
 ```
 The build preflights VTK imports; final VTK/GPU/GUI checks run on the extracted ZIP.
 
@@ -140,27 +140,49 @@ dist\SegRef3D-Local-GPU-v<version>-Windows\SegRef3D.exe --startup-smoke-test
 dist\SegRef3D-Local-GPU-v<version>-Windows\SegRef3D.exe --gpu-check
 ```
 
-The build is rejected before ZIP creation unless the frozen `--gpu-check`
-can import PyTorch. On a machine with a visible CUDA GPU it also requires the
-CUDA tensor operation to succeed.
+Release verification must run on a fresh extraction of the final ZIP. A failed
+VTK/GPU/GUI diagnostic, or missing success marker, makes verification fail. On a
+machine with a visible CUDA GPU the diagnostic also requires a CUDA tensor operation.
 
 ## Microsoft Visual C++ runtime and DLL layout
 
-The onedir distribution is self-contained. PyInstaller collects the official
-Microsoft Visual C++ runtime beside `python312.dll` in `_internal`; users are
-not required to install a separate redistributable for this package.
+The onedir distribution bundles the native x64 Microsoft Visual C++ runtime
+beside `python312.dll` in `_internal`. Do not use System32 as the runtime source:
+on Windows ARM64 it can contain ARM64X/CHPE DLLs that work on the build host but
+fail with WinError 193 on native x64 Windows.
+
+Download the pinned, Microsoft-signed redistributable and set its path before building:
+
+```powershell
+New-Item -ItemType Directory -Force build/deps
+curl.exe -L --fail -o build/deps/VC_redist.x64.exe https://aka.ms/vs/18/release/14.50.35719/VC_redist.x64.exe
+Get-AuthenticodeSignature build/deps/VC_redist.x64.exe
+$env:MSVC_REDIST_EXE = (Resolve-Path build/deps/VC_redist.x64.exe).Path
+.\build_windows_gpu.bat
+```
+
+`stage_windows_msvc.py` verifies installer SHA-256
+`8995548dfffcde7c49987029c764355612ba6850ee09a7b6f0fddc85bdc5c280`,
+extracts only `vcRuntimeMinimum_amd64/cab1.cab`, and validates every extracted
+DLL as native x64. It does not run the installer or modify Windows. The x64
+installer also contains an ARM64 payload, which must not be used for this bundle.
+Use a fresh `build/msvc-x64` staging directory for each build. The distribution
+includes `msvc-runtime-provenance.json` with source URL, version and DLL hashes.
 
 PyQt6-Qt6 6.9.1 also contains older MSVC runtime copies under
 `_internal\PyQt6\Qt6\bin`. Those copies must not ship because the Qt runtime
 hook adds that directory to the Windows DLL search path and can make PyTorch
 `c10.dll` initialize against the wrong `MSVCP140.dll`. The build therefore:
 
-1. removes only `MSVCP140.dll`, `VCRUNTIME140.dll`, and
-   `VCRUNTIME140_1.dll` from the Qt subdirectory;
-2. retains the authoritative Microsoft runtime at `_internal` root;
+1. explicitly passes the verified x64 DLLs to PyInstaller as binaries;
+2. verifies their collected hashes and removes older Qt copies of that runtime family;
 3. registers `_internal` and `_internal\torch\lib` before application imports;
-4. preloads the authoritative root runtime; and
-5. runs the PE dependency audit and frozen `--gpu-check` before ZIP creation.
+4. leaves actual runtime loading to Windows/PyInstaller, without ctypes preloads;
+5. rejects every non-x64 or CHPE EXE/DLL/PYD before packaging and after extraction;
+6. runs VTK/GPU/GUI checks on the extracted ZIP and records the host architecture.
+
+An ARM64-host startup test is not native x64 device acceptance. Record this limit
+explicitly and perform native x64 and NVIDIA GPU testing when those devices are available.
 
 ## Test matrix
 

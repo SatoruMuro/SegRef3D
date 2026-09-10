@@ -63,13 +63,13 @@ class BuildEditionTests(unittest.TestCase):
         self.assertIn("SIGNING_ENABLED", package)
         self.assertIn("RELEASE_BUILD", package)
 
-    def test_gpu_runtime_hook_preloads_authoritative_msvc_runtime(self):
+    def test_gpu_runtime_hook_retains_search_handles_without_explicit_msvc_loads(self):
         hook = (ROOT / "tools" / "pyi_local_gpu.py").read_text(encoding="utf-8")
 
         self.assertIn("os.add_dll_directory", hook)
         self.assertIn('internal_dir / "torch" / "lib"', hook)
-        self.assertIn('"msvcp140.dll"', hook)
-        self.assertIn("ctypes.WinDLL", hook)
+        self.assertIn('sys._segref3d_dll_directory_handles = handles', hook)
+        self.assertNotIn("ctypes", hook)
 
     def test_gpu_edition_does_not_report_the_cpu_only_sam2_message_on_failure(self):
         source = (ROOT / "SegRef3D.py").read_text(encoding="utf-8")

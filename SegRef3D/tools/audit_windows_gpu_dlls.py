@@ -9,6 +9,7 @@ from pathlib import Path
 import sys
 
 import pefile
+from windows_pe import audit_x64_tree
 
 
 SYSTEM_DLLS = {
@@ -96,6 +97,7 @@ def _classify(name: str, matches: list[Path]) -> str:
 
 def audit(dist_dir: Path) -> int:
     dist_dir = dist_dir.resolve()
+    audit_x64_tree(dist_dir)
     internal_dir = dist_dir / "_internal"
     torch_lib_dir = internal_dir / "torch" / "lib"
     system32_dir = Path(os.environ.get("WINDIR", r"C:\Windows")) / "System32"

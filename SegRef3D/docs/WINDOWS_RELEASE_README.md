@@ -5,16 +5,17 @@ the executable. This is the one-folder Windows GPU distribution; local SAM2 requ
 a compatible NVIDIA GPU. The exact version, source commit, and signing status are
 recorded in `release-info.json`.
 
-## v1.3.1 fixes
+## v1.3.2 fixes
 
-- Fixed Auto Erase drawing finalization accessing a deleted Qt graphics item.
-- Fixed stale crosshair/preview references around Box Prompt and slice/mode changes.
-- Preserved segmentation, mask/autosave formats, object IDs, and DICOM geometry.
-- Included signature audit/signing tools for the future signed release workflow.
+- Fixed WinError 193 at startup caused by ARM64-host runtime DLLs in the x64 bundle.
+- Bundled verified native x64 Microsoft runtime DLLs and removed explicit ctypes preloads.
+- Added architecture checks before packaging and after extraction; failed startup diagnostics now fail verification.
+- Enabled Seg CT/MRI for compatible DICOM-derived volumes, preserving patient geometry.
+- Retained the Auto Erase and Box Prompt fixes from v1.3.1.
 
 ## Known issue: Windows 11 Smart App Control
 
-This v1.3.1 release is **unsigned**. A production code signing certificate has not
+This v1.3.2 release is **unsigned**. A production code signing certificate has not
 yet been introduced. Some dependencies already have vendor signatures; this does
 not mean that the complete application is signed.
 
@@ -40,7 +41,8 @@ approved device/environment while signed distribution is being prepared.
 ## 日本語
 
 フォルダ全体を展開し、`_internal`を移動せずに`SegRef3D.exe`を起動してください。
-今回のv1.3.1は未署名版です。Windows 11のSmart App Controlにより、上記の内部PYDが
+v1.3.2ではruntime DLLのarchitecture混在によるWinError 193を修正しました。
+今回のv1.3.2は未署名版です。Windows 11のSmart App Controlにより、上記の内部PYDが
 ブロックされる場合があります。CodeIntegrity/Operationalログで対象ファイルを
 確認してください。SACをオフにすると起動した事例はありますが、無効化を必須条件とは
 していません。現行版の暫定回避や原因切り分けとして、端末管理者と判断してください。
