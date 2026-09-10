@@ -144,6 +144,12 @@ def _run_task(source: Path, task: str, rois: list[str], output: Path, fast: bool
 
 def _on_source_grid(mask_path: Path, source: nib.Nifti1Image) -> np.ndarray:
     mask = nib.load(str(mask_path))
+    # Undo pure permutations/flips without interpolation. Resampling an otherwise
+    # identical grid can drop boundary voxels due to float32 affine roundoff.
+    transform = nib.orientations.ornt_transform(
+        nib.orientations.io_orientation(mask.affine), nib.orientations.io_orientation(source.affine)
+    )
+    mask = mask.as_reoriented(transform)
     same_grid = mask.shape == source.shape and np.allclose(mask.affine, source.affine, rtol=0, atol=1e-4)
     if not same_grid:
         from nibabel.processing import resample_from_to  # pylint: disable=import-outside-toplevel
@@ -159,7 +165,8 @@ def _write_nifti(array: np.ndarray, source: nib.Nifti1Image, path: Path) -> None
     header = source.header.copy()
     header.set_data_dtype(np.uint8)
     image = nib.Nifti1Image(array.astype(np.uint8), source.affine, header)
-    image.set_qform(source.affine, code=int(source.header["qform_code"]) or 1)
+    qform, qcode = source.get_qform(coded=True)
+    image.set_qform(qform, code=int(qcode))
     image.set_sform(source.affine, code=int(source.header["sform_code"]) or 1)
     nib.save(image, str(path))
 
@@ -214,8 +221,8 @@ def process_request(request_zip: str | Path, output_zip: str | Path = "/content/
             manifest, source_path = validate_request_zip(request_zip, work / "request")
             if source_path is None:
                 raise Instant3DProcessingError("The request source was not extracted.")
-            if manifest["source"].get("modality") != "CT":
-                raise Instant3DProcessingError("Seg CT/MRI v1 currently supports CT NIfTI volumes only.")
+            if manifest["source"].get("modality") not in ("CT", "MRI"):
+                raise Instant3DProcessingError("Seg CT/MRI requires a CT or MRI medical volume.")
             validate_installed_rois(manifest["objects"])
             source = nib.load(str(source_path))
             task_groups = defaultdict(list)

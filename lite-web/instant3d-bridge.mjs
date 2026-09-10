@@ -122,9 +122,14 @@ export async function sha256Hex(bytes) {
 }
 
 export async function createInstant3DRequest({ source, objects, catalog, fast = false }) {
-  requireValue(source?.format === "nifti" && source.bytes, "Seg CT/MRI requires a compatible CT/MRI NIfTI volume.");
+  requireValue(source?.format === "nifti" && source.bytes, "Seg CT/MRI requires a compatible CT/MRI DICOM series or NIfTI volume.");
   requireValue(catalog?.schema_version === INSTANT3D_SCHEMA_VERSION, "The ROI catalog is unavailable or unsupported.");
   const normalizedObjects = validateInstant3DObjects(objects, catalog);
+  const modality = source.modality || "CT";
+  const allowed = new Set(catalog.structures.filter((item) => item.modality.includes(modality))
+    .map((item) => `${item.task}/${item.roi}`));
+  requireValue(["CT", "MRI"].includes(modality) && normalizedObjects.every((item) => allowed.has(`${item.task}/${item.roi}`)),
+    `Selected structures are not available for ${modality}.`);
   const extension = source.filename.toLowerCase().endsWith(".nii.gz") ? ".nii.gz" : ".nii";
   const sourceFilename = `source${extension}`;
   const checksum = source.sha256 || await sha256Hex(source.bytes);
@@ -134,7 +139,7 @@ export async function createInstant3DRequest({ source, objects, catalog, fast = 
     request_id: globalThis.crypto.randomUUID(),
     source: {
       filename: sourceFilename,
-      modality: "CT",
+      modality: source.modality || "CT",
       shape: [...source.shape],
       voxel_spacing_mm: [...source.spacing],
       orientation: source.orientation,
@@ -188,7 +193,7 @@ export function validateInstant3DResult(entries, currentSource, catalog) {
     "This ZIP uses an unsupported Seg CT/MRI bridge schema.");
   requireValue(manifest.status === "success", "Instant3D result status is not success.");
   manifest.objects = validateInstant3DObjects(manifest.objects, catalog);
-  requireValue(currentSource?.format === "nifti", "Load the original NIfTI volume before importing its result.");
+  requireValue(currentSource?.format === "nifti", "Load the original DICOM series or NIfTI volume before importing its result.");
   const mismatches = geometryMismatches(manifest.source, currentSource);
   requireValue(mismatches.length === 0,
     `Seg CT/MRI result does not match the loaded volume: ${mismatches.join(", ")}.`);

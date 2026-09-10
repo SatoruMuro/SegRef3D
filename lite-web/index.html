@@ -588,8 +588,9 @@
             <strong id="instant3d-title">Seg CT/MRI</strong>
             <span>Automatic anatomical segmentation with TotalSegmentator</span>
           </div>
-          <div id="instant3d-source-status" class="workflow-summary">Load a compatible CT/MRI NIfTI volume to begin.</div>
-          <p class="instant3d-availability">Available structures depend on the imaging modality and model. The v1 catalog currently includes supported open-license CT structures.</p>
+          <div id="instant3d-source-status" class="workflow-summary">Load a compatible CT/MRI DICOM series or NIfTI volume to begin.</div>
+          <label title="DICOM uses its Modality tag. For NIfTI, select CT or MRI.">Modality <select id="instant3d-modality" disabled><option value="CT">CT</option><option value="MRI">MRI</option></select></label>
+          <p class="instant3d-availability">Available structures depend on the imaging modality and model. The catalog includes supported open-license CT and MRI structures.</p>
           <label class="field-stack">
             <span>Search structures</span>
             <input id="instant3d-search" type="search" placeholder="Kidney, liver, psoas..." />
@@ -1136,6 +1137,6 @@
         if (status) status.textContent = `Application operation failed: ${message}`;
       });
     </script>
-    <script type="module" src="./app.mjs?v=46"></script>
+    <script type="module" src="./app.mjs?v=47"></script>
   </body>
 </html>

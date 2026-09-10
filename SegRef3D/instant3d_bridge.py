@@ -220,19 +220,31 @@ def collapse_object_groups(objects: object, catalog: dict | None = None) -> list
     return sorted(collapsed, key=lambda item: int(item["object_id"]))
 
 
-def make_request_manifest(source_path: str | os.PathLike, objects: list[dict], *, fast: bool = False) -> dict:
+def validate_modality_objects(modality, objects, catalog=None):
+    catalog = catalog or load_roi_catalog()
+    if modality not in ("CT", "MRI"):
+        raise Instant3DBridgeError("Seg CT/MRI requires CT or MRI modality.")
+    allowed = {(item["task"], item["roi"]) for item in catalog["structures"]
+               if modality in item.get("modality", []) and not item.get("license_required", False)}
+    if any((item["task"], item["roi"]) not in allowed for item in objects):
+        raise Instant3DBridgeError(f"Selected structures are not available for {modality}.")
+
+
+def make_request_manifest(source_path: str | os.PathLike, objects: list[dict], *, fast: bool = False, modality="CT") -> dict:
+    objects = validate_objects(objects)
+    validate_modality_objects(modality, objects)
     return {
         "schema": BRIDGE_SCHEMA,
         "schema_version": BRIDGE_VERSION,
         "request_id": str(uuid.uuid4()),
-        "source": nifti_fingerprint(source_path),
-        "objects": validate_objects(objects),
+        "source": {**nifti_fingerprint(source_path), "modality": modality},
+        "objects": objects,
         "options": {"fast": bool(fast)},
     }
 
 
-def create_request_zip(output_path: str | os.PathLike, source_path: str | os.PathLike, objects: list[dict], *, fast: bool = False) -> dict:
-    manifest = make_request_manifest(source_path, objects, fast=fast)
+def create_request_zip(output_path: str | os.PathLike, source_path: str | os.PathLike, objects: list[dict], *, fast: bool = False, modality="CT") -> dict:
+    manifest = make_request_manifest(source_path, objects, fast=fast, modality=modality)
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED, allowZip64=True) as archive:
@@ -283,6 +295,7 @@ def validate_request_zip(zip_path: str | os.PathLike, extract_dir: str | os.Path
             if source_member not in members or source_member not in ("image/source.nii", REQUEST_SOURCE):
                 raise Instant3DBridgeError("image/source.nii or image/source.nii.gz is missing from the request ZIP.")
             manifest["objects"] = validate_objects(manifest.get("objects"))
+            validate_modality_objects(manifest.get("source", {}).get("modality"), manifest["objects"])
             source_path = None
             if extract_dir is not None:
                 destination = Path(extract_dir)

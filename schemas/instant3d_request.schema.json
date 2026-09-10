@@ -13,7 +13,7 @@
       "required": ["filename", "modality", "shape", "voxel_spacing_mm", "orientation", "affine", "sha256"],
       "properties": {
         "filename": {"enum": ["source.nii", "source.nii.gz"]},
-        "modality": {"const": "CT"},
+        "modality": {"enum": ["CT", "MRI"]},
         "shape": {"type": "array", "items": {"type": "integer", "minimum": 1}, "minItems": 3, "maxItems": 3},
         "voxel_spacing_mm": {"type": "array", "items": {"type": "number", "exclusiveMinimum": 0}, "minItems": 3, "maxItems": 3},
         "orientation": {"type": "string", "minLength": 3, "maxLength": 3},

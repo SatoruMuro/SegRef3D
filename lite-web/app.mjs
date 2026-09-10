@@ -1,3 +1,4 @@
+import { dicomMedicalSource } from "./medical-source.mjs?v=1";
 import {
   LABEL_COLORS,
   applyRasterToMask,
@@ -32,7 +33,7 @@ import {
   parseNiftiLabelVolume,
   parseNiftiVolume,
   parseTiffStack,
-} from "./medical-io.mjs?v=24";
+} from "./medical-io.mjs?v=25";
 import {
   axisAlignedAffine,
   geometryWithSpacing,
@@ -54,7 +55,7 @@ import {
   geometryMismatches as instant3DGeometryMismatches,
   sha256Hex,
   validateInstant3DResult,
-} from "./instant3d-bridge.mjs?v=4";
+} from "./instant3d-bridge.mjs?v=5";
 import {
   adjustedRgba,
   displayControlRange,
@@ -191,6 +192,7 @@ const elements = {
   segonwebWarningDialog: document.querySelector("#segonweb-warning-dialog"),
   segonwebWarningCancel: document.querySelector("#segonweb-warning-cancel"),
   segonwebWarningContinue: document.querySelector("#segonweb-warning-continue"),
+  instant3dModality: document.querySelector("#instant3d-modality"),
   instant3dSourceStatus: document.querySelector("#instant3d-source-status"),
   instant3dSearch: document.querySelector("#instant3d-search"),
   instant3dAvailable: document.querySelector("#instant3d-available"),
@@ -444,6 +446,7 @@ const state = {
   volumeStatisticsGeneration: 0,
   activeDemoDatasetId: null,
   sourceVolume: null,
+  sourceVolumeError: null,
   instant3dCatalog: null,
   instant3dMappings: [],
   instant3dPendingAction: null,
@@ -582,8 +585,10 @@ function updateInstant3DControls() {
   elements.instant3dImport.disabled = !ready;
   elements.instant3dAdd.disabled = !ready;
   elements.instant3dSourceStatus.textContent = ready
-    ? `${state.sourceVolume.modality} NIfTI · ${state.sourceVolume.shape.join(" × ")} · ${state.sourceVolume.spacing.map((value) => Number(value).toPrecision(4)).join(" × ")} mm · ${state.sourceVolume.orientation}`
-    : "Load a compatible CT/MRI NIfTI volume to enable Seg CT/MRI export and import.";
+    ? `${state.sourceVolume.modality} ${state.sourceVolume.sourceKind === "dicom" ? "DICOM" : "NIfTI"} · ${state.sourceVolume.shape.join(" × ")} · ${state.sourceVolume.spacing.map((value) => Number(value).toPrecision(4)).join(" × ")} mm · ${state.sourceVolume.orientation}`
+    : state.sourceVolumeError || "Load a compatible CT/MRI DICOM series or NIfTI volume to enable Seg CT/MRI export and import.";
+  elements.instant3dModality.disabled = !ready || state.sourceVolume?.sourceKind === "dicom";
+  elements.instant3dModality.value = state.sourceVolume?.modality || "CT";
   renderInstant3DCatalog();
 }
 
@@ -665,7 +670,7 @@ async function applyInstant3DImport(mode) {
   updateLabelTargets();
   await applyMaskVolumeTransaction(nextMasks,
     `Imported Seg CT/MRI result: ${objectIds.size} object(s), ${mode} mode.`);
-  enableLabelsUsedByMasks(nextMasks);
+  enableLabelsUsedByMasks(nextMasks.map((mask) => ({ mask })));
   renderInstant3DMappings();
   state.instant3dPendingImport = null;
   if (elements.instant3dConflictDialog.open) elements.instant3dConflictDialog.close();
@@ -4255,6 +4260,7 @@ async function prepareImageSequence(
   state.images = prepared;
   state.volumeGeometry = preparedVolumeGeometry;
   state.sourceVolume = null;
+  state.sourceVolumeError = null;
   state.instant3dMappings = [];
   state.instant3dPendingImport = null;
   state.customModel = null;
@@ -4444,6 +4450,7 @@ async function decodeDicomSources(files) {
     sources,
     files: selected.items.map((instance) => instance.file),
     description: selected.description || "DICOM series",
+    medicalVolume: decoded,
     geometry: decoded.geometry,
     geometryWarnings: decoded.geometryWarnings,
   };
@@ -4481,7 +4488,7 @@ async function prepareNiftiFile(file) {
       [file],
       file.name.replace(/\.nii(?:\.gz)?$/i, "") || "NIfTI volume",
       "NIfTI slice(s)",
-      { autoExportVolInfo: true, volumeGeometry: volume.geometry },
+      { autoExportVolInfo: true, preserveDimensions: true, volumeGeometry: volume.geometry },
     );
     if (loaded) {
       state.sourceVolume = {
@@ -4635,13 +4642,22 @@ async function prepareFiles(files) {
         setStatus("DICOM loading canceled.");
         return;
       }
-      await prepareImageSequence(
+      const loaded = await prepareImageSequence(
         decoded.sources,
         decoded.files,
         projectFolder === "Image sequence" ? decoded.description : projectFolder,
         "DICOM frame(s)",
-        { autoExportVolInfo: true, volumeGeometry: decoded.geometry },
+        { autoExportVolInfo: true, preserveDimensions: true, volumeGeometry: decoded.geometry },
       );
+      if (loaded) {
+        try {
+          state.sourceVolume = dicomMedicalSource(decoded.medicalVolume);
+          state.sourceVolume.sha256 = await sha256Hex(state.sourceVolume.bytes);
+        } catch (error) {
+          state.sourceVolumeError = `Seg CT/MRI unavailable: ${error.message}`;
+        }
+        updateInstant3DControls();
+      }
       if (decoded.geometryWarnings.length > 0) {
         console.warn(...decoded.geometryWarnings);
         if (!decoded.geometry) {
@@ -5470,6 +5486,13 @@ function bindEvents() {
       if (elements.segonwebWarningDialog.open) elements.segonwebWarningDialog.close();
       setStatus("Opening Seg Anything in Google Colab. Upload occurs only when you choose the input ZIP in Colab.");
     }, 0);
+  });
+  elements.instant3dModality.addEventListener("change", () => {
+    if (!state.sourceVolume || state.sourceVolume.sourceKind === "dicom") return;
+    state.sourceVolume.modality = elements.instant3dModality.value;
+    state.instant3dMappings = [];
+    renderInstant3DMappings();
+    updateInstant3DControls();
   });
   elements.instant3dSearch.addEventListener("input", renderInstant3DCatalog);
   elements.instant3dAvailable.addEventListener("dblclick", addInstant3DStructure);

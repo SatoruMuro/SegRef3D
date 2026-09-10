@@ -21,12 +21,14 @@ class Instant3DWorkflowDialog(QDialog):
     exportRequested = pyqtSignal(list, bool)
     importRequested = pyqtSignal()
     openColabRequested = pyqtSignal()
+    modalityChanged = pyqtSignal(str)
 
-    def __init__(self, catalog: dict, mappings: list[dict], source_ready: bool, modality="CT", parent=None):
+    def __init__(self, catalog: dict, mappings: list[dict], source_ready: bool, modality="CT", parent=None, source_kind="nifti", source_error=None):
         super().__init__(parent)
         self.setWindowTitle("Seg CT/MRI")
         self.resize(620, 620)
         self.modality = str(modality or "CT").upper()
+        self.full_catalog = catalog
         self.groups = {
             item["id"]: item for item in catalog.get("groups", [])
             if not item.get("license_required", False) and self.modality in item.get("modality", [])
@@ -44,14 +46,21 @@ class Instant3DWorkflowDialog(QDialog):
         title.setStyleSheet("font-size: 16px; font-weight: 600;")
         layout.addWidget(title)
         source = QLabel(
-            f"Current modality: {self.modality} · compatible NIfTI volume" if source_ready else
-            "Load a compatible CT/MRI NIfTI (.nii or .nii.gz) volume before exporting."
+            f"Compatible {'DICOM series' if source_kind == 'dicom' else 'NIfTI volume'}" if source_ready else
+            source_error or "Load a compatible CT/MRI DICOM series or NIfTI volume before exporting."
         )
         source.setWordWrap(True)
         layout.addWidget(source)
+        self.modality_selector = QComboBox()
+        self.modality_selector.addItems(["CT", "MRI"])
+        self.modality_selector.setCurrentText(self.modality)
+        self.modality_selector.setEnabled(source_ready and source_kind != "dicom")
+        self.modality_selector.setToolTip("DICOM uses its Modality tag. For NIfTI, select CT or MRI.")
+        self.modality_selector.currentTextChanged.connect(self._change_modality)
+        layout.addWidget(self.modality_selector)
         availability = QLabel(
             "Available structures depend on the imaging modality and the TotalSegmentator model. "
-            "The current v1 catalog includes supported open-license CT structures."
+            "The catalog includes supported open-license CT and MRI structures."
         )
         availability.setWordWrap(True)
         layout.addWidget(availability)
@@ -72,6 +81,7 @@ class Instant3DWorkflowDialog(QDialog):
         self.object_id.addItems([f"Obj {value}" for value in range(1, 21)])
         add_row.addWidget(self.object_id)
         self.add_button = QPushButton("Add Structure")
+        self.add_button.setEnabled(source_ready)
         self.add_button.clicked.connect(self._add_selected)
         add_row.addWidget(self.add_button)
         layout.addLayout(add_row)
@@ -114,6 +124,18 @@ class Instant3DWorkflowDialog(QDialog):
 
         self._render_catalog()
         self._render_mappings()
+
+    def _change_modality(self, modality):
+        self.modality = modality
+        self.groups = {item["id"]: item for item in self.full_catalog.get("groups", [])
+                       if not item.get("license_required", False) and modality in item.get("modality", [])}
+        self.catalog = [*({**item, "group": item["id"]} for item in self.groups.values()),
+                        *(item for item in self.full_catalog["structures"]
+                          if not item.get("license_required", False) and modality in item.get("modality", []))]
+        self.mappings = []
+        self._render_catalog()
+        self._render_mappings()
+        self.modalityChanged.emit(modality)
 
     def _render_catalog(self):
         query = self.search.text().strip().lower()

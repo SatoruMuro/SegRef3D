@@ -80,6 +80,7 @@ from instant3d_bridge import (
     validate_result_zip as validate_instant3d_result_zip,
 )
 from instant3d_dialog import Instant3DWorkflowDialog
+from medical_source import dicom_source_to_nifti
 from mask_cleanup_dialog import MaskPostProcessingDialog
 from mask_postprocessing import (
     build_mask_volume_changes,
@@ -695,8 +696,10 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         self.dicom_slice_mapping = []
         self.source_dataset_name = None
         self._source_dataset_identity = None
+        # Canonical NIfTI transport: original NIfTI or internally derived DICOM volume.
         self.source_nifti_path = None
         self.source_nifti_fingerprint = None
+        self.source_volume_error = None
         self.volume_geometry = None
         self.instant3d_mappings = []
         self.instant3d_dialog = None
@@ -1946,14 +1949,22 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             self.instant3d_mappings,
             bool(self.source_nifti_path and os.path.isfile(self.source_nifti_path)),
             modality=(self.source_nifti_fingerprint or {}).get("modality", "CT"),
+            source_kind=(self.source_nifti_fingerprint or {}).get("source_kind", "nifti"),
+            source_error=self.source_volume_error,
             parent=self,
         )
+        dialog.modalityChanged.connect(self._set_instant3d_modality)
         dialog.exportRequested.connect(self.export_for_instant3dweb2)
         dialog.importRequested.connect(self.import_instant3dweb2_result)
         dialog.openColabRequested.connect(self.open_instant3dweb2)
         dialog.finished.connect(lambda _result, current=dialog: self._remember_instant3d_dialog(current))
         self.instant3d_dialog = dialog
         dialog.show()
+
+    def _set_instant3d_modality(self, modality):
+        if self.source_nifti_fingerprint and self.source_nifti_fingerprint.get("source_kind") != "dicom":
+            self.source_nifti_fingerprint["modality"] = modality
+            self.instant3d_mappings = []
 
     def _remember_instant3d_dialog(self, dialog):
         self.instant3d_mappings = [dict(item) for item in dialog.mappings]
@@ -1965,12 +1976,14 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             QMessageBox.information(
                 self,
                 "Seg CT/MRI",
-                "Seg CT/MRI requires a compatible CT/MRI NIfTI (.nii or .nii.gz) volume. "
-                "The current v1 catalog supports open-license CT structures.",
+                self.source_volume_error or "Load a compatible CT/MRI DICOM series or NIfTI volume.",
             )
             return
+        original_path = self.source_nifti_path
+        if self.source_nifti_fingerprint.get("source_kind") == "dicom":
+            original_path = next(iter(self.dicom_source_paths.values()), original_path)
         suggested = os.path.join(
-            os.path.dirname(self.source_nifti_path),
+            os.path.dirname(original_path),
             f"{self.output_file_stem()}_instant3d_request.zip",
         )
         output_path, _ = QFileDialog.getSaveFileName(
@@ -1983,7 +1996,8 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             output_path += ".zip"
         try:
             manifest = create_instant3d_request_zip(
-                output_path, self.source_nifti_path, mappings, fast=bool(fast)
+                output_path, self.source_nifti_path, mappings, fast=bool(fast),
+                modality=self.source_nifti_fingerprint.get("modality", "CT")
             )
             self.instant3d_mappings = collapse_instant3d_object_groups(manifest["objects"])
         except Exception as exc:
@@ -2009,7 +2023,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
     def import_instant3dweb2_result(self):
         if not self.source_nifti_path or not os.path.isfile(self.source_nifti_path):
             QMessageBox.information(
-                self, "Seg CT/MRI", "Load the original NIfTI volume before importing its result ZIP."
+                self, "Seg CT/MRI", self.source_volume_error or "Load the original DICOM series or NIfTI volume before importing its result ZIP."
             )
             return
         zip_path, _ = QFileDialog.getOpenFileName(
@@ -2028,8 +2042,10 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
             return
 
         keys = list(self.image_paths.keys())
-        if label_volume.shape[2] != len(keys):
-            message = "Result labelmap depth does not match the loaded image sequence."
+        if label_volume.shape[2] != len(keys) or any(
+            tuple(self.image_sizes[key]) != tuple(label_volume.shape[:2]) for key in keys
+        ):
+            message = "Result labelmap dimensions do not match the loaded image sequence."
             self.label_status.setText(message)
             QMessageBox.warning(self, "Seg CT/MRI Import", message)
             return
@@ -4228,6 +4244,29 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         arr *= 255.0
         return arr.astype(np.uint8)
 
+    def _prepare_dicom_medical_source(self, scalar_volume=None):
+        self.source_nifti_path = None
+        self.source_nifti_fingerprint = None
+        try:
+            keys = list(self.image_paths)
+            if not keys or any(key not in self.dicom_source_paths for key in keys):
+                raise Instant3DBridgeError("The editable sequence must contain only scalar slices from one DICOM series.")
+            path, fingerprint = dicom_source_to_nifti(
+                [self.dicom_source_paths[key] for key in keys],
+                self._reset_session_temp_dir("medical_source") / "source.nii",
+                scalar_volume=scalar_volume,
+                scalar_geometry=self.volume_geometry if scalar_volume is not None else None,
+            )
+            if fingerprint["shape"][2] != len(keys) or any(
+                tuple(self.image_sizes[key]) != tuple(fingerprint["shape"][:2]) for key in keys
+            ):
+                raise Instant3DBridgeError("DICOM scalar grid does not match the editable image sequence.")
+            self.source_nifti_path = path
+            self.source_nifti_fingerprint = fingerprint
+            self.source_volume_error = None
+        except Exception as exc:
+            self.source_volume_error = f"Seg CT/MRI unavailable: {exc}"
+
     def _load_nifti_volume(self, source_path):
         """Load a 3D NIfTI as editable axial slices while retaining its exact source geometry."""
         source_path = os.path.abspath(source_path)
@@ -4320,6 +4359,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
         self.source_dataset_name = None
         self.source_nifti_path = None
         self.source_nifti_fingerprint = None
+        self.source_volume_error = None
         self.volume_geometry = None
         self.volinf = None
         self.mm_per_px = None
@@ -4550,6 +4590,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
 
 
         dicom_geometry = None
+        dicom_scalar_volume = None
         dicom_candidate_paths = []
         non_dicom_image_paths = []
         for filename in selected_files:
@@ -4619,8 +4660,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
                     self.image_paths[key] = output_jpg_path
                     self.image_sizes[key] = Image.open(output_jpg_path).size
                     self.original_image_filenames[key] = filename
-                    if SLICE_MAPPING_DEBUG:
-                        self.dicom_source_paths[key] = input_path
+                    self.dicom_source_paths[key] = input_path
                     num_converted += 1
                     next_idx += 1   # ★ 採用したのでカウントアップ
                     continue                
@@ -4874,6 +4914,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
                     reader.SetFileNames(file_names)
                     image = reader.Execute()
                     arr = sitk.GetArrayFromImage(image)  # (Z,Y,X)
+                    dicom_scalar_volume = arr.transpose(2, 1, 0)
                     Z, H, W = arr.shape
                     # for s in range(Z):
                     #     key2 = f"{len(self.image_paths)+1:04}"
@@ -4890,8 +4931,7 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
                         self.image_paths[key] = out2
                         self.image_sizes[key] = (W, H)
                         self.original_image_filenames[key] = os.path.basename(file_names[s])
-                        if SLICE_MAPPING_DEBUG:
-                            self.dicom_source_paths[key] = str(file_names[s])
+                        self.dicom_source_paths[key] = str(file_names[s])
                         num_converted += 1
                         next_idx += 1   # ★                        
         
@@ -4914,6 +4954,9 @@ class SegRefMain(QMainWindow, Ui_MainWindow):
                 "Files may be invalid/unsupported or all failed to parse."
             )
             return
+
+        if dicom_candidate_paths:
+            self._prepare_dicom_medical_source(dicom_scalar_volume)
 
         if SLICE_MAPPING_DEBUG and self.dicom_source_paths:
             canonical_sources = [

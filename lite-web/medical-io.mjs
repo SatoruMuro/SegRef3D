@@ -712,6 +712,9 @@ export function parseDicomInstance(input, fileName, parser = globalThis.dicomPar
   const windowCenters = numericList(dataSet, "x00281050");
   const windowWidths = numericList(dataSet, "x00281051");
   const instance = {
+    modality: (dataSet.string("x00080060") || "").trim().toUpperCase(),
+    hasModalityLut: Boolean(dataSet.elements.x00283000),
+    declaredSliceSpacing: firstNumber(dataSet, "x00180088", firstNumber(dataSet, "x00180050")),
     name: fileName,
     dataSet,
     rows,
@@ -997,6 +1000,10 @@ function decodedDicomVolume(ordered, rawFrames) {
   const fallbackOriginRas = [-fallbackOriginLps[0], -fallbackOriginLps[1], fallbackOriginLps[2]];
   return {
     format: "dicom",
+    modality: ordered.every((item) => item.modality === first.modality)
+      ? ({ CT: "CT", MR: "MRI" }[first.modality] || null) : null,
+    declaredSliceSpacing: Math.abs(first.declaredSliceSpacing),
+    hasModalityLut: ordered.some((item) => item.hasModalityLut),
     seriesUid: first.seriesUid,
     width: first.columns,
     height: first.rows,
