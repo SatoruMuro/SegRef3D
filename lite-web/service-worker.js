@@ -1,9 +1,9 @@
-const CACHE_NAME = "segref3d-lite-web-v55";
+const CACHE_NAME = "segref3d-lite-web-v56";
 // Demo images and volumes are downloaded only when selected; cache on demand.
 const APP_FILES = [
   "./",
   "./index.html",
-  "./styles.css?v=35",
+  "./styles.css?v=36",
   "./app.mjs?v=52",
   "./physical-spacing.mjs?v=1",
   "./workspace-ui.mjs?v=33",
