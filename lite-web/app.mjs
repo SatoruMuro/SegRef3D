@@ -42,7 +42,8 @@ import {
   transformGeometryForPreparedImage,
   upsampleGeometryAlongK,
 } from "./medical-geometry.mjs?v=3";
-import { demoDatasetById } from "./demo-datasets.mjs?v=6";
+import { demoDatasetById } from "./demo-datasets.mjs?v=7";
+import { orientAxialDicomDemo } from "./dicom-demo.mjs?v=1";
 import { clearProjectMasks, loadMask, saveMask } from "./storage.mjs?v=26";
 import { createZip, parseZip } from "./zip.mjs?v=25";
 import {
@@ -92,7 +93,7 @@ import {
   volumeStatistics,
   volumeStatisticsAsync,
 } from "./mask-tools.mjs?v=21";
-import { upgradeWorkspaceLayout } from "./workspace-ui.mjs?v=33";
+import { upgradeWorkspaceLayout } from "./workspace-ui.mjs?v=34";
 import {
   createTrainingCaseEntries,
   createTrainingCaseId,
@@ -4325,7 +4326,7 @@ async function prepareImageSequence(
     : { minimum: 0, maximum: 255 };
   resetDisplaySettings({ announce: false });
   initializeCalibrationFromImages();
-  if (demoDataset) {
+  if (demoDataset && demoDataset.kind !== "dicom-zip") {
     if (demoDataset.calibration) {
       state.calibration.referenceLength = demoDataset.calibration.referenceLengthMm;
       state.calibration.zSpacing = demoDataset.calibration.sliceSpacingMm;
@@ -4416,7 +4417,7 @@ function chooseDicomSeries(groups) {
   return groups[index];
 }
 
-async function decodeDicomSources(files) {
+async function decodeDicomSources(files, { axialDemoPresentation = false } = {}) {
   const instances = [];
   const failures = [];
   for (let index = 0; index < files.length; index += 1) {
@@ -4445,13 +4446,14 @@ async function decodeDicomSources(files) {
   }
   const selected = chooseDicomSeries(groupDicomSeries(instances));
   if (!selected) return null;
-  const decoded = await decodeDicomSeriesAsync(selected.items, {
+  let decoded = await decodeDicomSeriesAsync(selected.items, {
     onProgress: (completed, total, instance) => {
       elements.loadingDetail.textContent =
         `Decoding DICOM ${completed} / ${total} · ${instance.name}`;
     },
   });
-  if (DEBUG_SLICE_MAPPING) {
+  if (axialDemoPresentation) decoded = orientAxialDicomDemo(decoded);
+  if (DEBUG_SLICE_MAPPING && !axialDemoPresentation) {
     console.debug(
       `[SegRef3D Lite] DICOM load/UI mapping (${decoded.frames.length} canonical slices):\n` +
         dicomMappingPreview(selected.items).map((line) => `  ${line}`).join("\n"),
@@ -4795,7 +4797,7 @@ async function downloadDemoVolume(dataset) {
   const totalBytes = Number(response.headers.get("Content-Length")) || dataset.volumeBytes;
   if (!response.body) {
     return new File([await response.blob()], dataset.volumeFilename, {
-      type: "application/gzip",
+      type: dataset.kind === "dicom-zip" ? "application/zip" : "application/gzip",
       lastModified: dataset.revision,
     });
   }
@@ -4811,7 +4813,7 @@ async function downloadDemoVolume(dataset) {
       `Downloading ${(receivedBytes / 1024 / 1024).toFixed(1)} / ${(totalBytes / 1024 / 1024).toFixed(1)} MB`;
   }
   return new File(chunks, dataset.volumeFilename, {
-    type: "application/gzip",
+    type: dataset.kind === "dicom-zip" ? "application/zip" : "application/gzip",
     lastModified: dataset.revision,
   });
 }
@@ -4860,11 +4862,52 @@ async function loadNiftiDemo(dataset) {
   }
 }
 
+async function loadDicomDemo(dataset) {
+  setLoading(true, `Loading ${dataset.displayName}`, "Downloading DICOM series");
+  try {
+    const archive = await downloadDemoVolume(dataset);
+    if (await sha256Hex(await archive.arrayBuffer()) !== dataset.archiveSha256) {
+      throw new Error("Demo download checksum mismatch. Reload the page and try again.");
+    }
+    elements.loadingDetail.textContent = "Checking and extracting DICOM series";
+    const entries = await parseZip(archive);
+    const files = entries.filter(entry => /\.dcm$/i.test(entry.name))
+      .map(entry => new File([entry.bytes], entry.name.split("/").at(-1), {
+        type: "application/dicom", lastModified: dataset.revision,
+      }));
+    if (files.length !== dataset.imageCount) throw new Error("The demo DICOM series is incomplete.");
+    const decoded = await decodeDicomSources(files, { axialDemoPresentation: true });
+    if (!decoded || decoded.sources.length !== dataset.imageCount || !decoded.geometry || decoded.geometryWarnings.length) {
+      throw new Error("The demo DICOM series could not be decoded with complete, consistent geometry.");
+    }
+    // Display only: source DICOM bytes and modality voxel values stay unchanged.
+    for (const source of decoded.sources) source.displayDefaults = { ...dataset.displayDefaults };
+    const sourceVolume = dicomMedicalSource(decoded.medicalVolume);
+    sourceVolume.sha256 = await sha256Hex(sourceVolume.bytes);
+    const loaded = await prepareImageSequence(decoded.sources, decoded.files, dataset.projectName,
+      "DICOM frame(s)", { preserveDimensions: true, demoDataset: dataset, volumeGeometry: decoded.geometry });
+    if (!loaded) return;
+    state.sourceVolume = sourceVolume;
+    updateInstant3DControls();
+    setSaveState(`${dataset.displayName} autosave active`, "saved");
+    setStatus(`${dataset.displayName} loaded: ${dataset.imageCount} DICOM slices. ${dataset.loadedInstruction}`);
+    showToast(`${dataset.displayName} ready · Explore CT slices`);
+    requestAnimationFrame(() => { fitCurrentImage(); openImageTools(dataset.guide.toolTab); });
+  } catch (error) {
+    console.error(error);
+    setStatus(`${dataset.displayName} loading failed: ${error.message}`);
+    window.alert(`${dataset.displayName} loading failed.\n\n${error.message}`);
+  } finally {
+    setLoading(false);
+  }
+}
+
 async function loadDemo(datasetId) {
   const dataset = demoDatasetById(datasetId);
   if (!dataset || state.loading) return;
   if (dataset.kind === "image-sequence") await loadImageSequenceDemo(dataset);
   else if (dataset.kind === "nifti-volume") await loadNiftiDemo(dataset);
+  else if (dataset.kind === "dicom-zip") await loadDicomDemo(dataset);
   else throw new Error(`Unsupported demo dataset kind: ${dataset.kind}`);
 }
 

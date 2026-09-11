@@ -309,12 +309,19 @@
                   <svg aria-hidden="true"><use href="#i-image"></use></svg>
                   <span><b>Load Mouse Brain Demo</b><small>Light microscopy · serial sections · 132 slices · 707 × 553 · 51.5 MB</small></span>
                 </button>
+                <button class="command-button demo-button" type="button" data-demo-id="pancreas-ct-demo">
+                  <svg aria-hidden="true"><use href="#i-box"></use></svg>
+                  <span><b>Load Pancreas CT Demo</b><small>TCIA · Contrast-enhanced abdominal DICOM CT · 181 slices · 512 × 512 · 43.0 MB</small></span>
+                </button>
               </div>
               <small>
                 Electron microscopy: <a href="https://doi.org/10.6019/EMPIAR-10478" target="_blank" rel="noopener noreferrer">EMPIAR-10478</a>,
                 <a href="https://creativecommons.org/publicdomain/zero/1.0/" target="_blank" rel="noopener noreferrer">CC0</a>.<br>
                 Mouse brain microscopy data: <a href="https://brainarchitecture.org/" target="_blank" rel="noopener noreferrer">Brain Architecture Project (BAP)</a>,
                 <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener noreferrer">CC BY-SA 4.0</a>.
+                <br>Pancreas-CT (Version 2): <a href="https://doi.org/10.7937/K9/TCIA.2016.tNB1kqBU" target="_blank" rel="noopener noreferrer">TCIA</a>,
+                <a href="https://creativecommons.org/licenses/by/3.0/" target="_blank" rel="noopener noreferrer">CC BY 3.0</a> ·
+                <a href="https://www.cancerimagingarchive.net/data-usage-policies-and-restrictions/" target="_blank" rel="noopener noreferrer">TCIA data usage policy</a> (retain attribution and policy link when reusing).
                 <a href="./demo/DEMO_DATA_LICENSES.md" target="_blank" rel="noopener noreferrer">Data credits and modifications</a>
               </small>
               <small>
@@ -1161,6 +1168,6 @@
         if (status) status.textContent = `Application operation failed: ${message}`;
       });
     </script>
-    <script type="module" src="./app.mjs?v=52"></script>
+    <script type="module" src="./app.mjs?v=53"></script>
   </body>
 </html>

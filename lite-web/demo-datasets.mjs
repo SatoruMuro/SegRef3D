@@ -5,6 +5,35 @@ const appleImages = Array.from(
 
 export const DEMO_DATASETS = Object.freeze([
   Object.freeze({
+    id: "pancreas-ct-demo", revision: 1, kind: "dicom-zip",
+    displayName: "Pancreas CT (TCIA)", projectName: "Pancreas CT - TCIA PANCREAS_0080",
+    sourceFormat: "dicom", modality: "CT", restoreAutosave: false,
+    volumePath: "./demo/pancreas-ct/PANCREAS_0080.zip", volumeFilename: "PANCREAS_0080.zip",
+    volumeBytes: 43011465,
+    archiveSha256: "6b9bff4c2a7bb77b564a13fb2fdcfa5a3afea25455ab066309fb5fce7c9a8065",
+    imageCount: 181, imageSize: Object.freeze([512, 512]), initialFrameIndex: 90,
+    displayDefaults: Object.freeze({ windowCenter: 40, windowWidth: 400 }),
+    loadedInstruction: "Scroll through the abdomen, adjust Window/Level, or choose structures in SegCT/MRI.",
+    guide: Object.freeze({
+      toolTab: "display", title: "Pancreas CT · TCIA", progressLabel: "Explore CT",
+      instruction: "Contrast-enhanced abdominal CT from Pancreas-CT (Version 2).",
+      primaryLabel: "DICOM series", primaryValue: "PANCREAS_0080 · 181 slices · 512 × 512",
+      secondaryLabel: "Source", secondaryValue: "The Cancer Imaging Archive (TCIA)",
+      note: "Screen down = posterior (back); slice order = caudal to cranial. Spacing comes from DICOM geometry. Initial Window/Level: 400 / 40 (display only).",
+      detail: "One complete series; original DICOM files and TCIA LICENSE unchanged. Manual segmentation is not included. Data are processed locally after download.",
+      nextStep: "Next: adjust Window/Level, draw a mask, or select structures in AI Segmentation → SegCT/MRI.",
+      revealNextStepAfterCalibration: false,
+    }),
+    attribution: Object.freeze({
+      uiPrefix: "DICOM data from", sourceLabel: "TCIA · Pancreas-CT (Version 2)",
+      citation: "Roth H, Farag A, Turkbey EB, Lu L, Liu J, Summers RM. Data From Pancreas-CT (Version 2). The Cancer Imaging Archive, 2016.",
+      doiUrl: "https://doi.org/10.7937/K9/TCIA.2016.tNB1kqBU",
+      licenseName: "CC BY 3.0", licenseUrl: "https://creativecommons.org/licenses/by/3.0/",
+      policyUrl: "https://www.cancerimagingarchive.net/data-usage-policies-and-restrictions/",
+      adaptation: "Official single-series ZIP retained byte-for-byte. Demo presentation reverses rows and slice order with matching affine; no interpolation or voxel value changes. Viewer-only abdominal Window/Level preset.",
+    }),
+  }),
+  Object.freeze({
     id: "apple-kanzi-84",
     revision: 2,
     kind: "image-sequence",

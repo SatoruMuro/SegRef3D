@@ -9,7 +9,7 @@ import { createNiftiLabelVolume } from "../volume-tools.mjs";
 
 test("Apple demo declares ordered images, calibration guidance, and attribution", () => {
   const dataset = demoDatasetById("apple-kanzi-84");
-  assert.equal(DEMO_DATASETS.length, 4);
+  assert.equal(DEMO_DATASETS.length, 5);
   assert.equal(dataset.imagePaths.length, 20);
   assert.equal(dataset.imagePaths[0], "./demo/apple-kanzi-84/apple_0001.jpg");
   assert.equal(dataset.imagePaths.at(-1), "./demo/apple-kanzi-84/apple_0020.jpg");
@@ -81,7 +81,7 @@ test("Demos use the normal sequence pipeline and load assets only on demand", as
   assert.ok(html.indexOf('id="reference-length"') < html.indexOf('id="spacing-z"'));
   assert.match(app, /decodeNiftiSources\(file\)/);
   assert.match(app, /prepareImageSequence\([\s\S]*preserveDimensions: true, demoDataset: dataset/);
-  assert.match(worker, /demo-datasets\.mjs\?v=6/);
+  assert.match(worker, /demo-datasets\.mjs\?v=7/);
   assert.doesNotMatch(worker, /APPLE_DEMO_FILES|\.\/demo\//);
   assert.doesNotMatch(worker, /RabbitCT_reference_256_corrected/);
   for (const id of ["hela-em-demo", "mouse-brain-demo"]) {

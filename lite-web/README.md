@@ -1,5 +1,16 @@
 # SegRef3D Lite
 
+The demo list includes **Pancreas CT (TCIA)**: one complete contrast-enhanced abdominal
+DICOM series, PANCREAS_0080 (181 × 512 × 512), from **Pancreas-CT (Version 2)**.
+The unchanged official series ZIP (43.0 MB) downloads only when selected. Viewing,
+Window/Level adjustments and SegCT/MRI request generation run locally.
+
+Roth H, Farag A, Turkbey EB, Lu L, Liu J, Summers RM. *Data From Pancreas-CT (Version 2).*
+The Cancer Imaging Archive, 2016. [Dataset DOI](https://doi.org/10.7937/K9/TCIA.2016.tNB1kqBU).
+[CC BY 3.0](https://creativecommons.org/licenses/by/3.0/) ·
+[TCIA Data Usage Policy](https://www.cancerimagingarchive.net/data-usage-policies-and-restrictions/) ·
+[Full credits and redistribution requirements](./demo/DEMO_DATA_LICENSES.md#abdominal-dicom-ct-pancreas-ct-tcia--cc-by-30).
+
 Browser-based, local-first image mask editor derived from the non-SAM2 workflow in SegRef3D.
 
 Generated export names use the loaded source folder name as their prefix, so datasets remain easy to

@@ -202,6 +202,7 @@ export function upgradeWorkspaceLayout() {
   for (const [id, title] of [
     ["hela-em-demo", "Electron Microscopy Demo"],
     ["mouse-brain-demo", "Mouse Brain Demo"],
+    ["pancreas-ct-demo", "Pancreas CT Demo (TCIA)"],
   ]) {
     const demo = commandButton(`open-${id}`, title, "i-image");
     demo.dataset.demoId = id;
