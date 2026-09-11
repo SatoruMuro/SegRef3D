@@ -4,6 +4,10 @@ import { createServer } from "node:http";
 import { readFile, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { parseZip, createZip } from '../zip.mjs';
+import { createHash } from 'node:crypto';
+import { gzipSync } from 'node:zlib';
+import { readNiftiTrainingVolume, createNiftiScalarVolume } from '../training-export.mjs';
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const output = path.resolve(process.argv[2]);
@@ -42,8 +46,8 @@ try {
       const r = button.getBoundingClientRect();
       return { width: r.width, height: r.height, x: r.x, y: r.y, icon: !!button.querySelector('svg'), name: button.querySelector('b').textContent };
     }));
-    assert.equal(layout.length, 4);
-    assert.deepEqual(layout.map(b => b.name), ['Load Apple Demo', 'Load Rabbit CT Demo', 'Load Electron Microscopy Demo', 'Load Mouse Brain Demo']);
+    assert.equal(layout.length, 5);
+    assert.deepEqual(layout.map(b => b.name), ['Load Apple Demo', 'Load Rabbit CT Demo', 'Load Electron Microscopy Demo', 'Load Mouse Brain Demo', 'Load Pancreas CT Demo']);
     assert.ok(layout.every(b => b.icon && Math.abs(b.width - layout[0].width) < 1 && Math.abs(b.height - layout[0].height) < 1));
     if (width > 600) { assert.equal(layout[0].y, layout[1].y); assert.equal(layout[2].y, layout[3].y); }
     else { assert.ok(layout.every(b => b.x === layout[0].x)); }
@@ -59,6 +63,7 @@ try {
     ['#load-rabbit-demo', 'rabbitct-reference-256', 256],
     ['.demo-grid [data-demo-id="hela-em-demo"]', 'hela-em-demo', 150],
     ['.demo-grid [data-demo-id="mouse-brain-demo"]', 'mouse-brain-demo', 132],
+    ['.demo-grid [data-demo-id="pancreas-ct-demo"]', 'pancreas-ct-demo', 181],
   ]) {
     const welcomeContext = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 1600, height: 1100 } });
     await welcomeContext.route('**/*', route => route.request().url().startsWith(origin) ? route.continue() : route.abort());
@@ -76,6 +81,7 @@ try {
     ["apple-kanzi-84", "open-apple-demo", 20],
     ["hela-em-demo", "open-hela-em-demo", 150],
     ["mouse-brain-demo", "open-mouse-brain-demo", 132],
+    ["pancreas-ct-demo", "open-pancreas-ct-demo", 181],
     ["rabbitct-reference-256", "open-rabbit-demo", 256],
     ["hela-em-demo", "open-hela-em-demo", 150],
     ["apple-kanzi-84", "open-apple-demo", 20],
@@ -156,6 +162,69 @@ try {
       await page.waitForFunction(() => document.querySelector('#volume-statistics-calibration').textContent.includes('estimated'));
       assert.match(await page.locator('#volume-statistics-calibration').textContent(),/estimated/);
       await page.screenshot({path:path.join(output,'mouse-after-calibration.png')});
+    } else if (id === 'pancreas-ct-demo') {
+      assert.equal(physical.xy,'metadata'); assert.equal(physical.z,'metadata');
+      const ct = await page.evaluate(() => ({index:demoTest.state.index,
+        formats:[...new Set(demoTest.state.images.map(i=>i.sourceFormat))],
+        shape:demoTest.state.sourceVolume.shape, kind:demoTest.state.sourceVolume.sourceKind,
+        spacing:demoTest.state.sourceVolume.spacing, sha256:demoTest.state.sourceVolume.sha256}));
+      assert.equal(ct.index,90); assert.deepEqual(ct.formats,['dicom']);
+      assert.equal(ct.kind,'dicom'); assert.deepEqual(ct.shape,[512,512,181]);
+      assert.deepEqual(ct.spacing,[0.9765625,0.9765625,1]);
+      const orientation = await page.evaluate(() => ({
+        affine: demoTest.state.sourceVolume.affine,
+        z: demoTest.state.images.map(i=>i.dicom.imagePositionPatient[2]),
+      }));
+      assert.ok(orientation.affine[0][0]<0 && orientation.affine[1][1]<0 && orientation.affine[2][2]>0);
+      assert.deepEqual(orientation.z,Array.from({length:181},(_,i)=>i-180));
+      assert.deepEqual(actual.display,{windowCenter:40,windowWidth:400,brightness:0,contrast:1});
+      await page.locator('#next-image').click();
+      assert.equal(await page.locator('#slice-number').inputValue(),'92');
+      await page.locator('#previous-image').click();
+      await page.locator('[data-tool-tab="display"]').click();
+      const before = await page.locator('#editor-canvas').screenshot();
+      await page.locator('#window-center').fill('80'); await page.locator('#window-center').dispatchEvent('input');
+      assert.notDeepEqual(await page.locator('#editor-canvas').screenshot(),before);
+      await page.locator('[data-tool-tab="ai"]').click();
+      await page.locator('#instant3d-available').selectOption('total/pancreas');
+      await page.locator('#instant3d-object-id').selectOption('3');
+      await page.locator('#instant3d-add').click();
+      assert.equal(await page.locator('#instant3d-modality').inputValue(),'CT');
+      assert.equal(await page.locator('#instant3d-export').isEnabled(),true);
+      await page.screenshot({path:path.join(output,'pancreas-ct-catalog.png')});
+      await page.locator('#instant3d-export').click();
+      const pending=page.waitForEvent('download',{timeout:120000});
+      await page.locator('#instant3d-warning-continue').click();
+      const result=await pending; const resultPath=path.join(output,'pancreas-request.zip');
+      await result.saveAs(resultPath);
+      const entries=await parseZip(new Blob([await readFile(resultPath)]));
+      const manifest=JSON.parse(new TextDecoder().decode(entries.find(e=>e.name==='manifest.json').bytes));
+      assert.equal(manifest.source.sha256,ct.sha256);
+      const sourceEntry=entries.find(e=>e.name.startsWith('image/'));
+      assert.ok(sourceEntry, 'request ZIP contains the source volume');
+      assert.equal(createHash('sha256').update(sourceEntry.bytes).digest('hex'),ct.sha256);
+      const source = readNiftiTrainingVolume(sourceEntry.bytes);
+      assert.deepEqual(source.geometry.affine,orientation.affine);
+      const labels = new Uint8Array(512*512*181);
+      labels[17*512*512+37*512+21]=3;
+      const resultManifest = {
+        schema:manifest.schema, schema_version:manifest.schema_version,
+        request_id:manifest.request_id, status:'success', source:manifest.source,
+        objects:manifest.objects, result:{labelmap:'labelmap/labels.nii.gz',label_png:[]},
+        software:{segct_mri:'browser-fixture',totalsegmentator:'synthetic-inference'},warnings:[],overlaps:[],
+      };
+      const imported = await createZip([
+        {name:'manifest.json',blob:new Blob([JSON.stringify(resultManifest)])},
+        {name:'labelmap/labels.nii.gz',blob:new Blob([gzipSync(createNiftiScalarVolume({
+          values:labels,width:512,height:512,depth:181,geometry:source.geometry,
+        }))])},
+      ]);
+      const importPath=path.join(output,'pancreas-result.zip');
+      await writeFile(importPath,new Uint8Array(await imported.arrayBuffer()));
+      await page.locator('#instant3d-result-input').setInputFiles(importPath);
+      await page.waitForFunction(()=>demoTest.state.images[17].mask[37*512+21]===3);
+      assert.equal(await page.evaluate(()=>demoTest.state.images.reduce((n,i)=>
+        n+i.mask.reduce((sum,v)=>sum+(v===3),0),0)),1);
     } else if (id === 'apple-kanzi-84') {
       assert.equal(physical.xy,'unknown');
       assert.equal(await page.evaluate(() => demoTest.state.calibration.referenceLength),100);

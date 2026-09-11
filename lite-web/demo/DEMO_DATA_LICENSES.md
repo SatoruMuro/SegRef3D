@@ -4,6 +4,46 @@ SegRef3D software remains licensed under [Apache-2.0](../../LICENSE).
 The following data licenses apply only to the respective demo image assets and their
 adaptations, not to SegRef3D software. The data providers do not endorse SegRef3D.
 
+## Abdominal DICOM CT: Pancreas-CT (TCIA) — CC BY 3.0
+
+**Source:** The Cancer Imaging Archive (TCIA), **Pancreas-CT (Version 2)**.
+One complete contrast-enhanced abdominal CT series, **PANCREAS_0080**, is included:
+181 axial DICOM images, 512 × 512, 43,011,465-byte ZIP. Manual segmentation is not included.
+
+**Dataset citation:** Roth H, Farag A, Turkbey EB, Lu L, Liu J, Summers RM.
+*Data From Pancreas-CT (Version 2).* The Cancer Imaging Archive, 2016.
+[DOI: 10.7937/K9/TCIA.2016.tNB1kqBU](https://doi.org/10.7937/K9/TCIA.2016.tNB1kqBU).
+
+[Collection](https://www.cancerimagingarchive.net/collection/pancreas-ct/) ·
+[CC BY 3.0](https://creativecommons.org/licenses/by/3.0/) ·
+[TCIA Data Usage Policy](https://www.cancerimagingarchive.net/data-usage-policies-and-restrictions/) ·
+[Original TCIA license and policy notice](./pancreas-ct/LICENSE.txt) ·
+[Asset manifest](./pancreas-ct/manifest.json).
+
+Retain attribution, DOI, license and the TCIA data usage policy link when using or
+redistributing these data; require downstream users to retain them too. Follow TCIA
+restrictions, including no re-identification or contact of participants.
+
+The official single-series ZIP, including LICENSE, is retained **byte-for-byte**.
+No slices were removed, resampled, cropped or re-encoded. TCIA describes these DICOMs
+as created from anonymized Analyze/NIfTI volumes, rather than original scanner exports.
+The supplied geometry gives X/Y 0.9765625 mm and Z 1 mm (position-derived); these values
+are preserved without substituting collection-level typical slice thickness.
+In the demo, screen down is posterior (back) and slices run caudal to cranial
+(LPS Z −180 to 0 mm). Decoded rows and slice order are reversed, with the affine
+updated consistently for viewing, masks and exports. This is a lossless voxel
+permutation, with no interpolation or change to the downloaded DICOM files.
+
+The initial abdominal Window/Level (400/40) is a display-only preset; stored voxels
+and source metadata are unchanged. Images download from this site only on selection
+and are processed locally. SegCT/MRI request generation is local; Colab upload remains
+an explicit separate user action.
+
+Series UID: `1.2.826.0.1.3680043.2.1125.1.41202274843063370955090296887703130`.
+Archive SHA-256: `6b9bff4c2a7bb77b564a13fb2fdcfa5a3afea25455ab066309fb5fce7c9a8065`.
+All 181 DICOM files decode; SOP Instance UIDs are unique and slice positions form a
+continuous 1 mm interval. The manifest records per-file hashes and positions.
+
 ## Electron microscopy: HeLa EM — CC0
 
 Peddie CP, Jones ML, Collinson LM. *Cropped regions from Serial Block Face SEM of HeLa cell
