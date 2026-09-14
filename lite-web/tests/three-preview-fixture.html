@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>3D preview rendering regression fixture</title>
+<style>body { margin: 0; background: #17191d; } #preview { width: 800px; height: 600px; } canvas { width: 100%; height: 100%; }</style>
+<div id="preview"></div>
+<script type="module">
+import * as THREE from "../vendor/three.module.min.js";
+import { createStlPreview } from "../three-viewer.mjs";
+function sphere(radius, center = [0, 0, 0]) {
+  const indexed = new THREE.SphereGeometry(radius, 48, 32);
+  const geometry = indexed.toNonIndexed();
+  geometry.translate(...center);
+  const data = geometry.attributes.position.array, triangles = [];
+  for (let i = 0; i < data.length; i += 9) {
+    triangles.push([Array.from(data.slice(i, i + 3)), Array.from(data.slice(i + 3, i + 6)), Array.from(data.slice(i + 6, i + 9))]);
+  }
+  geometry.dispose(); indexed.dispose();
+  return triangles;
+}
+globalThis.makePreview = (overlap = false) => {
+  globalThis.preview?.dispose?.();
+  globalThis.preview = createStlPreview({
+    container: document.querySelector("#preview"),
+    meshes: [
+      { label: 1, triangles: sphere(2, overlap ? [-0.5, 0, 0] : [0, 0, 0]) },
+      { label: 2, triangles: sphere(overlap ? 2 : 0.9, overlap ? [0.5, 0, 0] : [0, 0, 0]) },
+    ], colors: { 1: "#ff2020", 2: "#20ff20" },
+  });
+  preview.setObjectOpacity(1, 0.2); preview.setObjectOpacity(2, 1);
+};
+globalThis.sampleView = (azimuth, elevation = 0) => {
+  const { camera, controls, renderer, scene } = globalThis.previewInternals;
+  camera.position.set(12 * Math.cos(elevation) * Math.sin(azimuth), -12 * Math.cos(elevation) * Math.cos(azimuth), 12 * Math.sin(elevation));
+  camera.up.set(0, 0, 1); camera.lookAt(controls.target);
+  previewInternals.render();
+  const gl = renderer.getContext(), size = Math.max(1, Math.round(64 * renderer.getPixelRatio())), pixels = new Uint8Array(size * size * 4);
+  gl.readPixels(Math.floor(gl.drawingBufferWidth / 2 - size / 2), Math.floor(gl.drawingBufferHeight / 2 - size / 2), size, size, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+  let green = 0, red = 0, sum = [0, 0, 0];
+  for (let i = 0; i < pixels.length; i += 4) {
+    if (pixels[i + 1] > pixels[i] * 1.2) green++;
+    if (pixels[i] > pixels[i + 1] * 1.2) red++;
+    for (let c = 0; c < 3; c++) sum[c] += pixels[i + c];
+  }
+  return { green, red, pixelCount: size * size, mean: sum.map((value) => value / (size * size)) };
+};
+makePreview();
+</script></html>

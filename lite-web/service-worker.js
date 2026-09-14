@@ -1,10 +1,10 @@
-const CACHE_NAME = "segref3d-lite-web-v58";
+const CACHE_NAME = "segref3d-lite-web-v59";
 // Demo images and volumes are downloaded only when selected; cache on demand.
 const APP_FILES = [
   "./",
   "./index.html",
   "./styles.css?v=37",
-  "./app.mjs?v=53",
+  "./app.mjs?v=54",
   "./physical-spacing.mjs?v=1",
   "./workspace-ui.mjs?v=34",
   "./core.mjs?v=28",
@@ -24,7 +24,9 @@ const APP_FILES = [
   "./mask-tools.mjs?v=21",
   "./storage.mjs?v=26",
   "./volume-tools.mjs?v=18",
-  "./three-viewer.mjs?v=17",
+  "./three-viewer.mjs?v=18",
+  "./preview-controls.mjs?v=1",
+  "./preview-transparency.mjs?v=1",
   "./zip.mjs?v=25",
   "./vendor/dicom-parser.min.js",
   "./vendor/fflate.mjs",
@@ -35,7 +37,6 @@ const APP_FILES = [
   "./vendor/utif.module.js",
   "./vendor/three.module.min.js",
   "./vendor/three.core.min.js",
-  "./vendor/OrbitControls.js",
   "./vendor/THREE-LICENSE.txt",
   "./vendor/utilities.js",
   "./favicon.ico",

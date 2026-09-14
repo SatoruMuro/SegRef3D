@@ -19,6 +19,7 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -28,3 +29,17 @@ jobs:
           node-version: 22
       - name: Test mask and export logic
         run: node --test "lite-web/tests/*.test.mjs"
+      - name: Install browser test runtime
+        run: |
+          npm install --no-save --package-lock=false playwright@1.62.1
+          npx playwright install --with-deps chromium
+      - name: Test 3D rendering and Apple demo workflow
+        run: node lite-web/tests/three-viewer.browser.mjs build/preview-qa/oit
+      - name: Test conventional transparency fallback
+        run: OIT_FALLBACK=1 node lite-web/tests/three-viewer.browser.mjs build/preview-qa/fallback
+      - name: Save rendering regression results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: preview-rendering
+          path: build/preview-qa/
