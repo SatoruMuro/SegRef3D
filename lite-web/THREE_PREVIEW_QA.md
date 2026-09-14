@@ -112,6 +112,11 @@ Verified in **Chrome 152.0.7977.84** and **Edge 153.0.4234.32** on Windows:
   object hidden. At opacity 1 the inner contribution is exactly zero; at every
   other opacity it remains present at every direction and increases as the shell
   becomes more transparent. Hidden outer surfaces leave only the inner object.
+  After this full Windows verification, the routine test matrix was reduced to
+  72 equatorial, 12 at each oblique elevation, and one at each pole (98 views per
+  opacity), avoiding redundant pole views and shortening software-renderer CI.
+  CI uses a 0.5 pixel ratio with the same CSS viewport and sampling region; local
+  installed-browser checks use a 1.0 pixel ratio.
 - Overlap sorting: the center-order change falls from 71.43 to **0.0144/255**
   with OIT. Forcing opposite object draw orders over 360 degrees changes mean
   color by at most **0.0196/255** (floating-point rounding).

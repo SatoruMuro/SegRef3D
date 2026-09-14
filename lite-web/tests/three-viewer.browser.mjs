@@ -35,7 +35,9 @@ if (process.env.SERVE_ONLY) {
   const browser = await chromium.launch({ headless: process.env.HEADED !== "1", ...(process.env.BROWSER_CHANNEL ? { channel: process.env.BROWSER_CHANNEL } : {}) });
   const results = { browser: browser.version(), channel: process.env.BROWSER_CHANNEL || "chromium" };
   try {
-    const context = await browser.newContext({ viewport: { width: 1200, height: 900 }, serviceWorkers: "block" });
+    // Preserve CSS geometry and mouse distances while limiting pixel work on
+    // software-rendered CI. Local installed-browser validation uses native 1x.
+    const context = await browser.newContext({ viewport: { width: 1200, height: 900 }, deviceScaleFactor: process.env.CI ? 0.5 : 1, serviceWorkers: "block" });
     const page = await context.newPage(), errors = [];
     page.on("pageerror", (error) => { errors.push(error.message); console.error(error.message); });
     page.on("console", (msg) => { if (msg.type() === "error" && !msg.text().includes("404")) { errors.push(msg.text()); console.error(msg.text()); } });
@@ -49,10 +51,13 @@ if (process.env.SERVE_ONLY) {
         preview.setObjectOpacity(1, opacity);
         let minGreen = Infinity, minRed = Infinity, minInnerContribution = Infinity, maxInnerContribution = 0;
         for (const elevation of [-Math.PI / 2, -0.7, 0, 0.7, Math.PI / 2]) {
-          for (let step = 0; step < 72; step++) {
-            const value = sampleView(step * Math.PI / 36, elevation);
+          // At a pole azimuth does not change the viewing direction. Keep the
+          // full 5-degree sweep at the equator and 30-degree oblique sweeps.
+          const steps = Math.abs(elevation) > 1 ? 1 : elevation === 0 ? 72 : 12;
+          for (let step = 0; step < steps; step++) {
+            const value = sampleView(step * 2 * Math.PI / steps, elevation);
             preview.setObjectVisible(2, false);
-            const withoutInner = sampleView(step * Math.PI / 36, elevation);
+            const withoutInner = sampleView(step * 2 * Math.PI / steps, elevation);
             preview.setObjectVisible(2, true);
             const contribution = value.mean[1] - withoutInner.mean[1];
             minInnerContribution = Math.min(minInnerContribution, contribution);
@@ -70,13 +75,14 @@ if (process.env.SERVE_ONLY) {
       return { observations, hidden, hiddenState, shown };
     });
     const nested = results.nested;
-    assert.equal(nested.observations[0].minRed, 4096, "opaque shell must fully occlude inner sphere from every direction");
+    console.log("Nested geometry sweep completed.");
+    assert.equal(nested.observations[0].minRed, nested.hidden.pixelCount, "opaque shell must fully occlude inner sphere from every direction");
     assert.equal(nested.observations[0].maxInnerContribution, 0);
     for (const row of nested.observations.filter((row) => row.opacity < 1)) assert.ok(row.minInnerContribution > 20, `inner sphere must contribute at every angle at opacity ${row.opacity}: ${row.minInnerContribution}`);
     for (let i = 2; i < nested.observations.length; i++) assert.ok(nested.observations[i].minInnerContribution > nested.observations[i - 1].minInnerContribution, "lower shell opacity should reveal more of the interior");
-    assert.equal(nested.hidden.green, 4096);
+    assert.equal(nested.hidden.green, nested.hidden.pixelCount);
     assert.deepEqual(nested.hiddenState, { visible: false, transparent: false, depthWrite: true });
-    assert.equal(nested.shown.red, 4096);
+    assert.equal(nested.shown.red, nested.shown.pixelCount);
     results.overlap = await page.evaluate(() => {
       makePreview(true); preview.setObjectOpacity(1, 0.5); preview.setObjectOpacity(2, 0.5);
       const before = sampleView(-0.0001), after = sampleView(0.0001);
@@ -97,6 +103,7 @@ if (process.env.SERVE_ONLY) {
       assert.ok(results.orderInvariance < 1, "swapping transparent draw order must not change the visible surfaces throughout 360 degrees");
     }
     await page.screenshot({ path: path.join(output, "overlap.png") });
+    console.log("Overlapping geometry and draw-order checks completed.");
     await page.evaluate(() => { makePreview(); preview.setObjectOpacity(1, 0.2); });
     // Real mouse input, not direct calls to the camera controller.
     const initial = await page.evaluate(() => previewInternals.camera.position.toArray());

@@ -32,7 +32,7 @@ globalThis.sampleView = (azimuth, elevation = 0) => {
   camera.position.set(12 * Math.cos(elevation) * Math.sin(azimuth), -12 * Math.cos(elevation) * Math.cos(azimuth), 12 * Math.sin(elevation));
   camera.up.set(0, 0, 1); camera.lookAt(controls.target);
   previewInternals.render();
-  const gl = renderer.getContext(), size = 64, pixels = new Uint8Array(size * size * 4);
+  const gl = renderer.getContext(), size = Math.max(1, Math.round(64 * renderer.getPixelRatio())), pixels = new Uint8Array(size * size * 4);
   gl.readPixels(Math.floor(gl.drawingBufferWidth / 2 - size / 2), Math.floor(gl.drawingBufferHeight / 2 - size / 2), size, size, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
   let green = 0, red = 0, sum = [0, 0, 0];
   for (let i = 0; i < pixels.length; i += 4) {
@@ -40,7 +40,7 @@ globalThis.sampleView = (azimuth, elevation = 0) => {
     if (pixels[i] > pixels[i + 1] * 1.2) red++;
     for (let c = 0; c < 3; c++) sum[c] += pixels[i + c];
   }
-  return { green, red, mean: sum.map((value) => value / (size * size)) };
+  return { green, red, pixelCount: size * size, mean: sum.map((value) => value / (size * size)) };
 };
 makePreview();
 </script></html>
