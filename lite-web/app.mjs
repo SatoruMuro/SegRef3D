@@ -2879,6 +2879,11 @@ function renderStlPreviewControls(meshes) {
     ? physicalSpacingNote(state.physicalSpacing)
     : "Uncalibrated preview — placeholder grid, not physical measurements. Volume calibration required.";
   elements.stlPreviewObjects.append(scaleNote);
+  const controlsNote = document.createElement("small");
+  controlsNote.style.display = "block";
+  controlsNote.style.marginTop = "0.75rem";
+  controlsNote.textContent = "Drag: rotate · Shift + drag or middle: pan · Right drag or wheel: zoom · Ctrl + drag: spin. Touch: one finger rotates; two fingers pan and zoom.";
+  elements.stlPreviewObjects.append(controlsNote);
   for (const mesh of meshes) {
     const row = document.createElement("div");
     row.className = "stl-preview-object-row";
@@ -2918,7 +2923,7 @@ async function openStlPreview() {
       setStatus(message);
     });
     elements.stlPreviewProgress.textContent = "Starting Three.js viewer";
-    const { createStlPreview } = await import("./three-viewer.mjs?v=17");
+    const { createStlPreview } = await import("./three-viewer.mjs?v=18");
     state.stlPreview = createStlPreview({
       container: elements.stlPreviewCanvas,
       meshes,

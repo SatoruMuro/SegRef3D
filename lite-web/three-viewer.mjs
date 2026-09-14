@@ -1,5 +1,34 @@
 import * as THREE from "./vendor/three.module.min.js";
-import { OrbitControls } from "./vendor/OrbitControls.js";
+import { PreviewControls } from "./preview-controls.mjs?v=1";
+import { createPreviewTransparency } from "./preview-transparency.mjs?v=1";
+
+export function createPreviewCamera() {
+  const camera = new THREE.PerspectiveCamera(42, 1, 0.01, 100000);
+  camera.up.set(0, 0, 1); // Establish anatomical Z-up before creating the controller.
+  return camera;
+}
+
+export function resetPreviewCamera(camera, controls, maximum) {
+  controls.cancelGesture();
+  const distance = maximum * 2.25;
+  camera.position.set(distance * 0.78, -distance, distance * 0.72);
+  camera.up.set(0, 0, 1);
+  controls.target.set(0, 0, 0);
+  controls.update();
+}
+
+export function setSurfaceOpacity(material, value) {
+  const opacity = Number(value);
+  if (!Number.isFinite(opacity)) return;
+  material.opacity = THREE.MathUtils.clamp(opacity, 0, 1);
+  const isOpaque = material.opacity >= 0.999;
+  if (material.transparent === isOpaque) {
+    material.transparent = !isOpaque;
+    material.needsUpdate = true;
+  }
+  material.depthWrite = isOpaque;
+  material.depthTest = true;
+}
 
 export function trianglesToPositions(triangles) {
   const positions = new Float32Array(triangles.length * 9);
@@ -25,11 +54,16 @@ export function createStlPreview({ container, meshes, colors }) {
   container.replaceChildren(renderer.domElement);
 
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(42, 1, 0.01, 100000);
-  const controls = new OrbitControls(camera, renderer.domElement);
-  controls.enableDamping = true;
-  controls.dampingFactor = 0.08;
-  controls.screenSpacePanning = true;
+  const camera = createPreviewCamera();
+  const controls = new PreviewControls(camera, renderer.domElement);
+  let needsRender = true;
+  controls.onChange = () => { needsRender = true; };
+  const onContextRestored = () => { needsRender = true; };
+  renderer.domElement.addEventListener("webglcontextrestored", onContextRestored);
+  // The vendored renderer sorts transparent surfaces by projected bounding-
+  // sphere center each frame (back to front), after the opaque depth pass.
+  renderer.sortObjects = true;
+  const transparency = createPreviewTransparency(renderer);
 
   scene.add(new THREE.HemisphereLight(0xffffff, 0x30343a, 1.6));
   const keyLight = new THREE.DirectionalLight(0xffffff, 2.2);
@@ -52,9 +86,8 @@ export function createStlPreview({ container, meshes, colors }) {
       roughness: 0.68,
       metalness: 0.04,
       side: THREE.DoubleSide,
-      transparent: true,
-      opacity: 0.86,
     });
+    setSurfaceOpacity(material, 0.86);
     const surface = new THREE.Mesh(geometry, material);
     surface.name = `Obj ${item.label}`;
     surfaceGroup.add(surface);
@@ -69,13 +102,11 @@ export function createStlPreview({ container, meshes, colors }) {
   camera.near = Math.max(maximum / 10000, 0.001);
   camera.far = maximum * 100;
   camera.updateProjectionMatrix();
+  controls.minDistance = maximum * 0.01;
+  controls.maxDistance = maximum * 40;
 
   const resetCamera = () => {
-    const distance = maximum * 2.25;
-    camera.position.set(distance * 0.78, -distance, distance * 0.72);
-    camera.up.set(0, 0, 1);
-    controls.target.set(0, 0, 0);
-    controls.update();
+    resetPreviewCamera(camera, controls, maximum);
   };
   resetCamera();
 
@@ -85,6 +116,7 @@ export function createStlPreview({ container, meshes, colors }) {
     renderer.setSize(width, height, false);
     camera.aspect = width / height;
     camera.updateProjectionMatrix();
+    needsRender = true;
   };
   const observer = new ResizeObserver(resize);
   observer.observe(container);
@@ -92,10 +124,13 @@ export function createStlPreview({ container, meshes, colors }) {
 
   let animationFrame = 0;
   let disposed = false;
+  const render = () => {
+    if (transparency) transparency.render(scene, camera, surfaces, controls.target);
+    else renderer.render(scene, camera);
+  };
   const animate = () => {
     if (disposed) return;
-    controls.update();
-    renderer.render(scene, camera);
+    if (needsRender) { render(); needsRender = false; }
     animationFrame = requestAnimationFrame(animate);
   };
   animate();
@@ -104,17 +139,20 @@ export function createStlPreview({ container, meshes, colors }) {
     resetCamera,
     setObjectVisible(label, visible) {
       const surface = surfaces.get(Number(label));
-      if (surface) surface.visible = Boolean(visible);
+      if (surface) { surface.visible = Boolean(visible); needsRender = true; }
     },
     setObjectOpacity(label, opacity) {
       const surface = surfaces.get(Number(label));
-      if (surface) surface.material.opacity = Math.max(0.05, Math.min(1, Number(opacity)));
+      if (surface) { setSurfaceOpacity(surface.material, opacity); needsRender = true; }
     },
     dispose() {
+      if (disposed) return;
       disposed = true;
       cancelAnimationFrame(animationFrame);
       observer.disconnect();
       controls.dispose();
+      renderer.domElement.removeEventListener("webglcontextrestored", onContextRestored);
+      transparency?.dispose();
       for (const surface of surfaces.values()) {
         surface.geometry.dispose();
         surface.material.dispose();
