@@ -93,7 +93,7 @@ import {
   volumeStatistics,
   volumeStatisticsAsync,
 } from "./mask-tools.mjs?v=21";
-import { upgradeWorkspaceLayout } from "./workspace-ui.mjs?v=34";
+import { upgradeWorkspaceLayout } from "./workspace-ui.mjs?v=35";
 import {
   createTrainingCaseEntries,
   createTrainingCaseId,
@@ -1095,7 +1095,7 @@ function updateImageUi() {
     : "No image loaded";
   elements.projectHealth.disabled = !image;
   if (image) {
-    setStatus(`Editing ${image.name}. Wheel: images · Ctrl+wheel: zoom · middle drag: pan.`);
+    setStatus(`Editing ${image.name}.`);
   }
   updateLabelCounts();
   updateHistoryButtons();
