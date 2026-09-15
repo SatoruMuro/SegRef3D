@@ -269,6 +269,64 @@ export function createTiffLabelStack(masks, width, height) {
   return output;
 }
 
+// Source RGBA pages, independent of masks and display adjustments. Read one page
+// at a time so canvas callers do not need a second full-stack pixel allocation.
+export async function createColorTiffStack(slices, width, height, {
+  readRgba = (slice) => slice,
+  onProgress = () => {},
+  yieldControl = () => new Promise((resolve) => setTimeout(resolve, 0)),
+} = {}) {
+  if (!Array.isArray(slices) || slices.length === 0) throw new Error("The color image stack is empty.");
+  if (!Number.isSafeInteger(width) || !Number.isSafeInteger(height) || width < 1 || height < 1) {
+    throw new Error("Color TIFF dimensions are invalid.");
+  }
+  const sliceBytes = width * height * 4;
+  const entryCount = 12;
+  const ifdBytes = 2 + entryCount * 12 + 4;
+  const pageMetadataBytes = ifdBytes + 8; // Four SHORT BitsPerSample values.
+  const firstIfd = 8 + sliceBytes * slices.length;
+  const totalBytes = firstIfd + pageMetadataBytes * slices.length;
+  if (!Number.isSafeInteger(totalBytes) || totalBytes > 0xffffffff) {
+    throw new Error("Color TIFF exceeds the 4 GiB classic TIFF limit. Export a smaller stack.");
+  }
+  const output = new Uint8Array(totalBytes);
+  const view = new DataView(output.buffer);
+  output.set([0x49, 0x49, 42, 0]);
+  view.setUint32(4, firstIfd, true);
+  for (let page = 0; page < slices.length; page += 1) {
+    const rgba = await readRgba(slices[page], page);
+    if (!(rgba instanceof Uint8Array || rgba instanceof Uint8ClampedArray) || rgba.length !== sliceBytes) {
+      throw new Error(`Color TIFF slice ${page + 1} RGBA dimensions do not match.`);
+    }
+    const pixelOffset = 8 + page * sliceBytes;
+    output.set(rgba, pixelOffset);
+    const ifdOffset = firstIfd + page * pageMetadataBytes;
+    const bitsOffset = ifdOffset + ifdBytes;
+    for (let channel = 0; channel < 4; channel += 1) view.setUint16(bitsOffset + channel * 2, 8, true);
+    view.setUint16(ifdOffset, entryCount, true);
+    const entries = [
+      [256, 4, 1, width],
+      [257, 4, 1, height],
+      [258, 3, 4, bitsOffset],
+      [259, 3, 1, 1], // Uncompressed, like the label TIFF.
+      [262, 3, 1, 2], // RGB, never a palette or scalar label image.
+      [273, 4, 1, pixelOffset],
+      [274, 3, 1, 1], // Top-left, no rotation or flip.
+      [277, 3, 1, 4],
+      [278, 4, 1, height],
+      [279, 4, 1, sliceBytes],
+      [284, 3, 1, 1], // Interleaved RGBA.
+      [338, 3, 1, 2], // Unassociated alpha; do not composite a background.
+    ];
+    entries.forEach((entry, index) => writeTiffEntry(view, ifdOffset + 2 + index * 12, ...entry));
+    view.setUint32(ifdOffset + 2 + entryCount * 12,
+      page + 1 < slices.length ? ifdOffset + pageMetadataBytes : 0, true);
+    onProgress(page + 1, slices.length);
+    await yieldControl();
+  }
+  return output;
+}
+
 export function distanceTransform1d(values, length) {
   const distances = new Float64Array(length);
   const locations = new Int32Array(length);
