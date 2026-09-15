@@ -70,6 +70,7 @@ import {
 } from "./image-tools.mjs?v=26";
 import {
   createBinaryStl,
+  createColorTiffStack,
   createNiftiLabelVolume,
   createTiffLabelStack,
   createVolInfoCsv,
@@ -78,7 +79,7 @@ import {
   interpolateMultiLabelVolume,
   marchingTetrahedra,
   parseVolInfoCsv,
-} from "./volume-tools.mjs?v=18";
+} from "./volume-tools.mjs?v=19";
 import {
   applyMaskVolumeChanges,
   buildMaskVolumeChanges,
@@ -176,6 +177,7 @@ const elements = {
   exportMenuNifti5x: document.querySelector("#export-menu-nifti-5x"),
   exportMenuNifti10x: document.querySelector("#export-menu-nifti-10x"),
   exportMenuTiff: document.querySelector("#export-menu-tiff"),
+  exportMenuColorTiff: document.querySelector("#export-menu-color-tiff"),
   exportMenuStatistics: document.querySelector("#export-menu-statistics"),
   exportMenuStl: document.querySelector("#export-menu-stl"),
   exportLabels: document.querySelector("#export-labels"),
@@ -1044,6 +1046,9 @@ function setControlsEnabled(enabled) {
     ...elements.modeButtons,
   ];
   for (const control of controls) control.disabled = !enabled;
+  const colorTiffReason = colorTiffUnavailableReason();
+  elements.exportMenuColorTiff.disabled = !enabled || Boolean(colorTiffReason);
+  elements.exportMenuColorTiff.title = colorTiffReason || "Export original source colors without masks or display adjustments";
   for (const control of elements.labelList.querySelectorAll(".label-menu-button")) {
     control.disabled = !enabled;
   }
@@ -2730,6 +2735,47 @@ async function exportLabelVolume(format, factor = 1) {
   }
 }
 
+function colorTiffUnavailableReason() {
+  if (state.images.length === 0) return "Load an image stack to export Color TIFF.";
+  if (state.images.some((image) => !image.originalColorCanvas)) {
+    return "Color TIFF requires source color rasters. This dataset has no supported color source (DICOM, NIfTI and grayscale TIFF are unavailable).";
+  }
+  const first = state.images[0].originalColorCanvas;
+  if (state.images.some(({ originalColorCanvas: canvas }) => canvas.width !== first.width || canvas.height !== first.height)) {
+    return "Color TIFF requires equal original image dimensions; shared canvas padding is not exported.";
+  }
+  return "";
+}
+
+async function exportColorTiff() {
+  if (state.loading) return;
+  closeToolsDockOnNarrow();
+  setLoading(true, "Exporting Color TIFF", "Preparing original source images");
+  try {
+    const reason = colorTiffUnavailableReason();
+    if (reason) throw new Error(reason);
+    const { width, height } = state.images[0].originalColorCanvas;
+    // state.images is also the existing TIFF's z order. Never sort or use the
+    // display canvas: it can be windowed, resized and composited onto white.
+    const bytes = await createColorTiffStack(state.images, width, height, {
+      readRgba: (image) => canvasRgba(image.originalColorCanvas),
+      onProgress(completed, total) {
+        elements.loadingDetail.textContent = `${completed} / ${total}`;
+      },
+    });
+    const filename = `${outputFileStem()}_color_${timestamp()}.tiff`;
+    downloadBlob(new Blob([bytes], { type: "image/tiff" }), filename);
+    setStatus(`Exported ${state.images.length}-slice Color TIFF (${width} × ${height}, original RGBA, no mask overlay).`);
+    showToast(`Downloaded ${filename}`);
+  } catch (error) {
+    console.error(error);
+    setStatus(`Color TIFF export failed: ${error.message}`);
+    window.alert(`Color TIFF export failed.\n\n${error.message}`);
+  } finally {
+    setLoading(false);
+  }
+}
+
 async function exportTrainingDataZip() {
   if (state.loading || state.images.length === 0) return;
   const highBitDepth = Math.max(...state.images.map((image) => Number(image.sourceBitDepth) || 8));
@@ -4253,6 +4299,11 @@ async function prepareImageSequence(
       volumeOrigin: source.volumeOrigin || null,
       dicom: source.dicom || null,
       sourceCanvas,
+      // Retain the decoded raster before makeWorkingCanvas adds white padding,
+      // resizes or display rendering mutates sourceCanvas. Scalar medical
+      // renders are not original color data.
+      originalColorCanvas: !["dicom", "nifti"].includes(source.sourceFormat) && source.sourceColor !== false
+        ? source.sourceCanvas : null,
       basePixels: modalityPixels ? null : canvasRgba(sourceCanvas),
       modalityPixels,
       displayDefaults: source.displayDefaults || null,
@@ -4389,7 +4440,7 @@ async function decodeRasterSources(files) {
         width: decoded.image.naturalWidth,
         height: decoded.image.naturalHeight,
         sourceCanvas: imageElementToCanvas(decoded.image),
-        sourceFormat: /\.png$/i.test(files[index].name) ? "png" : "jpeg",
+        sourceFormat: /\.png$/i.test(files[index].name) ? "png" : /\.webp$/i.test(files[index].name) ? "webp" : "jpeg",
         sourceBitDepth,
         trainingWarning: sourceBitDepth > 8
           ? `${sourceBitDepth}-bit PNG values are decoded to the editor's 8-bit working grid; original high-bit-depth values are not retained.`
@@ -4595,6 +4646,7 @@ async function decodeTiffSources(files) {
         height: frame.height,
         sourceCanvas: await medicalFrameToCanvas(frame),
         sourceFormat: "tiff",
+        sourceColor: frame.kind === "rgba",
         sourceBitDepth: frame.sourceBitDepth || volume.sourceBitDepth || 8,
         trainingWarning: volume.trainingWarning,
         pixelSpacing: [1, 1],
@@ -4647,7 +4699,7 @@ async function prepareFiles(files) {
     .filter((file) => isTiffFilename(file.name))
     .sort((left, right) => naturalCompare(left.name, right.name));
   const rasterFiles = visibleFiles
-    .filter((file) => /\.(jpe?g|png)$/i.test(file.name))
+    .filter((file) => /\.(jpe?g|png|webp)$/i.test(file.name))
     .sort((left, right) => naturalCompare(left.name, right.name));
   const dicomFiles = visibleFiles
     .filter((file) => /\.dcm$/i.test(file.name) || !file.name.includes("."))
@@ -4718,7 +4770,7 @@ async function prepareFiles(files) {
       }
       return;
     }
-    throw new Error("No JPG, PNG, TIFF, DICOM, or NIfTI images were found.");
+    throw new Error("No JPG, PNG, WebP, TIFF, DICOM, or NIfTI images were found.");
   } catch (error) {
     console.error(error);
     setStatus(`Image loading failed: ${error.message}`);
@@ -5562,6 +5614,7 @@ function bindEvents() {
   elements.exportMenuNifti5x.addEventListener("click", () => exportLabelVolume("nifti", 5));
   elements.exportMenuNifti10x.addEventListener("click", () => exportLabelVolume("nifti", 10));
   elements.exportMenuTiff.addEventListener("click", () => exportLabelVolume("tiff"));
+  elements.exportMenuColorTiff.addEventListener("click", exportColorTiff);
   elements.exportMenuStatistics.addEventListener("click", exportVolumeStatisticsCsv);
   elements.exportMenuStl.addEventListener("click", exportStlMeshes);
   elements.exportTraining.addEventListener("click", exportTrainingDataZip);

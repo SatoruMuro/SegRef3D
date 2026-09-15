@@ -239,7 +239,12 @@ not a general arbitrary-structure segmenter and does not imply clinical validati
 - **Label PNG**: per-slice integer label masks for image-based workflows.
 - **Overlay PNG**: visual review images combining visible labels with source images.
 - **NIfTI Labelmap**: preferred for voxel labels and patient/source geometry in tools such as 3D Slicer.
-- **TIFF**: image-stack interchange when full patient-space transforms are not required.
+- **TIFF**: unchanged 8-bit grayscale label-ID stack; full patient-space transforms are not embedded.
+- **Color TIFF**: original decoded source colors and alpha as one uncompressed 8-bit RGBA
+  multi-page TIFF, without masks, display adjustments or added background. Original dimensions
+  and loaded slice order are preserved, including when the working canvas was resized or padded.
+  Supports PNG/JPEG/WebP sequences and RGB TIFF; gray raster images remain gray. Disabled for
+  DICOM, NIfTI, grayscale TIFF, or unequal original image dimensions. Browser-local only.
 - **STL**: surface mesh for 3D viewing/CAD; does not contain the original scalar volume.
 - **Volume Statistics CSV**: calibrated per-object voxel/volume statistics; only meaningful with
   trustworthy spacing and masks.

@@ -105,7 +105,7 @@ do not endorse SegRef3D. The approximately 20 MB demo volume is fetched only whe
 
 ## Current features
 
-- Load naturally sorted JPG/PNG image folders
+- Load naturally sorted JPG/PNG/WebP image folders
 - Load DICOM folders with `.dcm` or extensionless files
 - Load NIfTI-1/NIfTI-2 `.nii` and `.nii.gz` volumes as editable slice sequences
 - Optional resize for images larger than 2000 px
@@ -138,6 +138,7 @@ do not endorse SegRef3D. The approximately 20 MB demo volume is fetched only whe
 - Label PNG and visible-overlay PNG sequence export as ZIP
 - NIfTI Labelmap export in Original, 5x, and 10x slice-interpolated forms, plus multi-page TIFF
   stack export
+- Color TIFF export of the original source image stack, preserving RGB color and alpha without masks
 - Multi-page TIFF and naturally sorted TIFF-folder import for 8-bit grayscale, 16-bit grayscale,
   and RGB data
 - 1x/5x/10x signed-distance slice interpolation and binary STL export
@@ -245,6 +246,22 @@ is `(D - 1) * factor + 1`; every source slice is copied unchanged to `k * factor
 vector is divided by the factor so the first and last physical positions remain unchanged. In
 3D Slicer, load the result as **Segmentation** to import label IDs as separate segments. TIFF
 exports preserve mask pixels but do not reliably preserve full patient-space geometry.
+
+**Color TIFF** (Export → Volumes, beside TIFF) exports the original decoded source image
+stack without grayscale conversion, mask overlays, object colors, display adjustments, or
+background compositing. The existing **TIFF** export remains an 8-bit grayscale label-ID stack.
+Color TIFF is a single uncompressed multi-page TIFF with 8-bit RGBA samples and unassociated
+alpha, named `<source-folder>_color_<timestamp>.tiff`. Pages follow the same loaded z order
+as TIFF (natural filename order for image folders), with no rotation or flip. Original width
+and height are retained even if the editor was resized or padded during loading. Unequal
+original dimensions disable Color TIFF; shared white canvas padding is never exported.
+
+PNG/JPEG/WebP sequences and supported RGB TIFF stacks are available; grayscale raster
+images export with equal R/G/B values. DICOM, NIfTI and grayscale TIFF disable the button
+with an explanatory tooltip. Color and alpha are those of the browser-decoded 8-bit raster,
+not the original compressed file or high-bit-depth samples. Full patient-space geometry and
+source color profiles are not embedded. Processing stays entirely in the browser, yields
+between pages with progress, and rejects files beyond classic TIFF's 4 GiB limit.
 
 **Replace** replaces each matched image mask. **Merge** treats imported label `0` as transparent,
 keeps existing labels outside imported regions, and lets imported non-zero labels win on overlap.
@@ -368,6 +385,13 @@ Run tests with Node.js 22 or newer:
 ```bash
 node --test "lite-web/tests/*.test.mjs"
 ```
+
+With the existing Playwright browser test runtime installed, run
+`node lite-web/tests/color-tiff.browser.mjs build/color-tiff-qa` to load synthetic
+PNG/JPEG/WebP, RGB TIFF, grayscale and medical inputs, verify downloaded pixels and
+existing exports, and capture the Export menu at desktop and narrow widths. Set
+`BROWSER_CHANNEL=msedge` to use installed Edge; `PLAYWRIGHT_MODULE` can point to an
+existing Playwright `index.mjs`. The fixtures and output remain local in `build/`.
 
 ## Browser limits
 
