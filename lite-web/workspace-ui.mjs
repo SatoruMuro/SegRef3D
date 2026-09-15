@@ -330,7 +330,11 @@ export function upgradeWorkspaceLayout() {
   navigation.append(previous, number, counter, slider, next);
   const statusMessage = oldStatus.querySelector(".status-message");
   const imageMeta = document.querySelector("#image-meta");
-  sliceBar.append(navigation, statusMessage, imageMeta);
+  const operationGuide = document.createElement("div");
+  operationGuide.className = "viewer-operation-guide";
+  operationGuide.textContent = "F/R: Next/Previous · E/Q: Zoom in/out · WASD: Move   |   Wheel: images · Ctrl+wheel: zoom · Middle drag: pan";
+  operationGuide.title = operationGuide.textContent;
+  sliceBar.append(navigation, statusMessage, imageMeta, operationGuide);
   center.append(canvasPanel, sliceBar);
   oldStatus.remove();
 
