@@ -373,6 +373,19 @@ must confirm that uploading research or medical data to Google Colab is permitte
 institution. Results are algorithmic segmentations intended for review and refinement, not an
 independent clinical diagnosis.
 
+## Legacy SVG mask migration
+
+Legacy SegRef3D SVG masks can be imported and converted to the current editable label-mask format.
+Load the original DICOM, choose **Open → Masks / Project ZIP → PNG / SVG Folder** or a mask ZIP,
+review the filename-to-slice mapping, edit the restored objects, and export **Training Data ZIP**.
+**Export → SVG Masks** creates a Local-compatible colored SVG ZIP in canonical slice order.
+
+SVG supplies 2D masks only; the loaded source volume supplies 3D geometry. The old Local DICOM
+loader used natural filename order, so do not assume an old SVG number equals the current z index.
+Dimensions must exactly match the working grid, and unsupported SVG content is rejected.
+See [Legacy SVG migration](LEGACY_SVG_MIGRATION.md) for the supported subset, legacy 20-color
+palette, mapping review, Replace/Merge rules, safety policy and reproducible tests.
+
 ## Local development
 
 Serve the repository root with a server that maps `.mjs` to JavaScript, then open:

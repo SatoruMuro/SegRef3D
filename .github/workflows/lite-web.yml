@@ -4,12 +4,16 @@ on:
   pull_request:
     paths:
       - "lite-web/**"
+      - "test-data/legacy-svg/**"
+      - "SegRef3D/tests/medical_source_fixtures.py"
       - ".github/workflows/lite-web.yml"
   push:
     branches:
       - main
     paths:
       - "lite-web/**"
+      - "test-data/legacy-svg/**"
+      - "SegRef3D/tests/medical_source_fixtures.py"
       - ".github/workflows/lite-web.yml"
   workflow_dispatch:
 
@@ -37,6 +41,15 @@ jobs:
         run: node lite-web/tests/three-viewer.browser.mjs build/preview-qa/oit
       - name: Test Color TIFF and existing export downloads
         run: node lite-web/tests/color-tiff.browser.mjs build/color-tiff-qa
+      - name: Set up Python for synthetic DICOM fixtures
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test legacy SVG migration from DICOM to training data
+        run: |
+          python -m pip install numpy nibabel pydicom
+          python SegRef3D/tests/medical_source_fixtures.py build/svg-qa/medical
+          node lite-web/tests/legacy-svg.browser.mjs build/svg-qa
       - name: Test conventional transparency fallback
         run: OIT_FALLBACK=1 node lite-web/tests/three-viewer.browser.mjs build/preview-qa/fallback
       - name: Save rendering regression results
@@ -47,3 +60,4 @@ jobs:
           path: |
             build/preview-qa/
             build/color-tiff-qa/
+            build/svg-qa/

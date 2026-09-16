@@ -3,6 +3,17 @@
 Release and development history moved from the main README. Dates and descriptions before this
 move are preserved in their original language.
 
+## Unreleased — Lite legacy SVG mask migration
+
+- Legacy SegRef3D SVG masks can be imported and converted to the current editable label-mask format.
+- Preserve Local GPU's 20-color/Obj mapping and aliased odd-even contour interpretation.
+  Review old DICOM filename order versus canonical slice order before import; reject missing,
+  duplicate, zero-based slices, mismatched dimensions and unsafe/unsupported SVG features.
+- Add canonical colored SVG ZIP export with a mask manifest and lossless pixel contours.
+  Imported masks support editing, cleanup, Undo/Redo, PNG/Project ZIP, NIfTI and Training Data ZIP.
+- SVG remains a 2D slice mask; the loaded source volume supplies 3D geometry.
+  See [migration details](lite-web/LEGACY_SVG_MIGRATION.md).
+
 ## 2026.9.10 — Local GPU v1.3.2 Windows x64 runtime fix
 
 - Fixed WinError 193 caused by ARM64-host MSVC runtime DLLs in the x64 bundle.

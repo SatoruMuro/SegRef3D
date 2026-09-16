@@ -149,7 +149,7 @@
             id="mask-folder-input"
             class="visually-hidden"
             type="file"
-            accept="image/png,.png"
+            accept="image/png,.png,.svg,.json"
             webkitdirectory
             multiple
           />
@@ -260,6 +260,7 @@
             <div class="toolbar-menu-panel" role="menu" aria-label="Export options">
               <span class="menu-heading">Masks</span>
               <button id="export-labels" type="button" role="menuitem" disabled>Label PNG</button>
+              <button id="export-svg-masks" type="button" role="menuitem" disabled>SVG Masks</button>
               <button id="export-overlays" type="button" role="menuitem" disabled>Overlay PNG</button>
               <span class="menu-heading">Project</span>
               <button id="export-project" type="button" role="menuitem" disabled>Project ZIP</button>
@@ -473,7 +474,8 @@
           </div>
         </div>
         <div class="local-file-dialog-copy">
-          <p>Open grayscale label PNGs with values 0-20. Files stay on this device.</p>
+          <p>Open grayscale label PNGs (0-20) or legacy SegRef3D colored SVG masks. Files stay on this device.</p>
+          <p>SVG masks must match the loaded working grid. Review the slice mapping before import.</p>
           <p>Project ZIP restores editor settings only when Replace is selected.</p>
         </div>
         <fieldset class="mask-import-mode">
@@ -492,7 +494,7 @@
         </fieldset>
         <div class="mask-import-options">
           <button id="choose-mask-folder" class="command-button" type="button">
-            <svg><use href="#i-folder"></use></svg><span>Mask Folder</span>
+            <svg><use href="#i-folder"></use></svg><span>PNG / SVG Folder</span>
           </button>
           <button id="choose-mask-zip" class="command-button" type="button">
             <svg><use href="#i-download"></use></svg><span>ZIP / Project ZIP</span>
@@ -502,6 +504,25 @@
           <button id="mask-import-cancel" class="command-button" type="button">Cancel</button>
         </div>
       </div>
+    </dialog>
+
+    <dialog id="svg-mapping-dialog" class="local-file-dialog" aria-labelledby="svg-mapping-title">
+      <form method="dialog" class="local-file-dialog-content">
+        <h2 id="svg-mapping-title">Review SVG slice mapping</h2>
+        <p>SVG contains slice masks, not 3D geometry. The loaded source volume supplies the geometry. Check Obj 1 / Obj 2 and anatomical alignment after import.</p>
+        <label for="svg-slice-order">Original mask order</label>
+        <select id="svg-slice-order">
+          <option value="legacy-filename">Old Local: natural DICOM filename order</option>
+          <option value="canonical">Current canonical: mask0001 → display 1 / z=0</option>
+          <option value="reverse">Reverse: mask0001 → last display slice</option>
+        </select>
+        <p id="svg-mapping-summary"></p>
+        <pre id="svg-mapping-preview" style="max-height:240px;overflow:auto;white-space:pre-wrap"></pre>
+        <div class="local-file-dialog-actions">
+          <button value="cancel" class="command-button">Cancel</button>
+          <button id="svg-mapping-apply" value="apply" class="command-button accent">Import with this mapping</button>
+        </div>
+      </form>
     </dialog>
 
     <dialog id="clear-masks-dialog" class="local-file-dialog" aria-labelledby="clear-masks-title">
@@ -1169,6 +1190,6 @@
         if (status) status.textContent = `Application operation failed: ${message}`;
       });
     </script>
-    <script type="module" src="./app.mjs?v=57"></script>
+    <script type="module" src="./app.mjs?v=58"></script>
   </body>
 </html>

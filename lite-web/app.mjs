@@ -116,6 +116,7 @@ import {
   maskManifestBlob,
   validateMaskManifest,
 } from "./mask-sequence.mjs?v=1";
+import { decodeLegacySvg, createSvgMaskEntries, svgEntries, mapSvgEntries } from "./legacy-svg.mjs?v=1";
 
 const DEBUG_SLICE_MAPPING = new URLSearchParams(
   globalThis.location?.search || "",
@@ -181,6 +182,7 @@ const elements = {
   exportMenuStatistics: document.querySelector("#export-menu-statistics"),
   exportMenuStl: document.querySelector("#export-menu-stl"),
   exportLabels: document.querySelector("#export-labels"),
+  exportSvgMasks: document.querySelector("#export-svg-masks"),
   exportOverlays: document.querySelector("#export-overlays"),
   exportProject: document.querySelector("#export-project"),
   exportTraining: document.querySelector("#export-training"),
@@ -1027,6 +1029,7 @@ function setControlsEnabled(enabled) {
     elements.clearMasks,
     elements.imageTools,
     elements.exportLabels,
+    elements.exportSvgMasks,
     elements.exportOverlays,
     elements.exportProject,
     elements.exportTraining,
@@ -3246,6 +3249,10 @@ async function prepareImportedMasks(mappings) {
 }
 
 async function importLabelEntries(entries, sourceName, mode = "replace") {
+  const hasSvg = svgEntries(entries).length > 0;
+  // Keep existing PNG-folder behavior, including old folders containing both
+  // representations. Local also treats label PNGs as authoritative.
+  if (hasSvg && selectLabelPngEntries(entries).length === 0) return importSvgEntries(entries, sourceName, mode);
   const selected = await selectCanonicalLabelEntries(entries);
   if (selected.length === 0) throw new Error("No label PNG files were found.");
   const importCount = Math.min(selected.length, state.images.length);
@@ -3284,7 +3291,8 @@ async function importLabelEntries(entries, sourceName, mode = "replace") {
   const changedCount = await applyImportedMasks(imported, { mode });
   const action = mode === "merge" ? "Merged" : "Replaced";
   setStatus(
-    `${action} ${imported.length} label PNG mask(s) from ${sourceName}. ${changedCount} image(s) changed and autosaved.`,
+    `${action} ${imported.length} label PNG mask(s) from ${sourceName}. ${changedCount} image(s) changed and autosaved.` +
+      (hasSvg ? " SVG files were ignored because label PNGs are present." : ""),
   );
   showToast(`${action} ${imported.length} mask(s).`);
   return true;
@@ -3481,6 +3489,82 @@ async function importProjectEntries(entries, manifestEntry, sourceName, mode = "
     mode === "merge" ? "Project masks merged; current settings preserved." : "Project masks and settings restored.",
   );
   return true;
+}
+
+async function importSvgEntries(entries, sourceName, mode) {
+  const manifests = entries.filter(e => entryBasename(e.name).toLowerCase() === MASK_MANIFEST_FILENAME);
+  if (manifests.length > 1) throw new Error("Multiple SVG mask manifests were found.");
+  const manifest = manifests.length ? JSON.parse(await readEntryText(manifests[0])) : null;
+  // Validate and decode everything before opening the review or changing masks.
+  let mappings = mapSvgEntries(entries, state.images, { manifest });
+  const decoded = new Map();
+  for (const { entry, image } of mappings) {
+    elements.loadingDetail.textContent = `Checking SVG ${decoded.size + 1} / ${mappings.length}`;
+    try {
+      decoded.set(entry, decodeLegacySvg(await readEntryText(entry), image.width, image.height));
+    } catch (error) { throw new Error(`${entryBasename(entry.name)}: ${error.message}`); }
+    await new Promise(resolve => setTimeout(resolve, 0));
+  }
+  const dialog = document.querySelector("#svg-mapping-dialog");
+  const orderSelect = document.querySelector("#svg-slice-order");
+  const preview = document.querySelector("#svg-mapping-preview");
+  const summary = document.querySelector("#svg-mapping-summary");
+  const apply = document.querySelector("#svg-mapping-apply");
+  orderSelect.disabled = Boolean(manifest);
+  const legacyAvailable = state.images.every(i => i.dicom?.sourceFilename) &&
+    new Set(state.images.map(i => i.dicom.sourceFilename)).size === state.images.length;
+  orderSelect.querySelector('[value="legacy-filename"]').disabled = !legacyAvailable;
+  orderSelect.value = manifest ? "canonical" : legacyAvailable ? "legacy-filename" : "canonical";
+  const update = () => {
+    try {
+      mappings = mapSvgEntries(entries, state.images, { manifest, order: orderSelect.value });
+      const reversed = mappings.every((m, i) => m.zIndex === mappings.length - 1 - i) && mappings.length > 1;
+      summary.textContent = `${mappings.length} SVG files / ${state.images.length} source slices; ` +
+        `${state.images[0].width} × ${state.images[0].height} pixels. ` +
+        (manifest ? "Canonical order verified from manifest. " : "No geometry/order metadata: verify this mapping against the original source and old workflow. ") +
+        (reversed ? "Detected reverse order relative to current canonical slices. " : "") +
+        (mode === "replace" ? "Replace will replace every matched frame, including other objects." : "Merge adds non-zero labels; imported labels win at overlaps, and other pixels stay unchanged.");
+      preview.textContent = mappings.map(m => `${entryBasename(m.entry.name)} → display ${m.displaySlice} / z=${m.zIndex} → ${m.image.dicom?.sourceFilename || m.image.name}`).join("\n");
+      apply.disabled = false;
+    } catch (error) {
+      summary.textContent = error.message;
+      preview.textContent = "";
+      apply.disabled = true;
+    }
+  };
+  orderSelect.onchange = update;
+  update();
+  // The busy overlay must not cover the concrete mapping review.
+  const overlay = document.querySelector("#loading-overlay");
+  const wasHidden = overlay?.hidden;
+  if (overlay) overlay.hidden = true;
+  dialog.returnValue = "cancel";
+  const accepted = await new Promise(resolve => {
+    dialog.addEventListener("close", () => resolve(dialog.returnValue === "apply"), { once: true });
+    dialog.showModal();
+  });
+  if (overlay) overlay.hidden = wasHidden;
+  orderSelect.onchange = null;
+  if (!accepted) { setStatus("SVG import canceled. Current masks were not changed."); return false; }
+  const changed = await applyImportedMasks(mappings.map(m => ({ image: m.image, mask: decoded.get(m.entry) })), { mode });
+  setStatus(`Imported ${mappings.length} legacy SVG masks from ${sourceName}; ${changed} frames changed and autosaved (${manifest ? "canonical manifest" : orderSelect.value}).`);
+  showToast("SVG masks converted to editable Obj labels.");
+  return true;
+}
+
+async function exportSvgMasks() {
+  if (!state.images.length || state.loading) return;
+  setLoading(true, "Exporting SVG masks", "Preparing canonical slice masks");
+  try {
+    const entries = createSvgMaskEntries(state.images);
+    const filename = `${outputFileStem()}_svg_masks.zip`;
+    downloadBlob(await createZip(entries), filename);
+    setStatus(`Exported ${state.images.length} SVG masks and canonical manifest.`);
+    showToast(`Downloaded ${filename}`);
+  } catch (error) {
+    setStatus(`SVG export failed: ${error.message}`);
+    window.alert(`SVG export failed.\n\n${error.message}`);
+  } finally { setLoading(false); }
 }
 
 async function importMaskFolder(files) {
@@ -5619,6 +5703,7 @@ function bindEvents() {
   elements.exportMenuStl.addEventListener("click", exportStlMeshes);
   elements.exportTraining.addEventListener("click", exportTrainingDataZip);
   elements.exportLabels.addEventListener("click", () => exportSequence("labels"));
+  elements.exportSvgMasks.addEventListener("click", exportSvgMasks);
   elements.exportOverlays.addEventListener("click", () => exportSequence("overlays"));
   elements.exportProject.addEventListener("click", exportProjectZip);
   for (const button of elements.exportMenu.querySelectorAll("button")) {

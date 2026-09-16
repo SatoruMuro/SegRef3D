@@ -10,6 +10,13 @@ This tutorial uses the built-in **Apple Demo - Kanzi 84** to define three struct
 
 You do not need to install Python or desktop software. You upload a job ZIP to your own Google Colab runtime only when you run AI segmentation.
 
+**Migrating an old segmentation dataset:** Legacy SegRef3D SVG masks can be imported and converted
+to the current editable label-mask format. Load the original DICOM, choose **Open → Masks / Project ZIP →
+PNG / SVG Folder** (or ZIP), review the slice mapping, check the restored objects, then export
+**Training Data ZIP**. SVG is a slice mask; the loaded source supplies 3D geometry. Old DICOM
+filename order can differ from current canonical order. Dimensions must match, and unsupported
+SVG content is rejected. See the [migration guide](../lite-web/LEGACY_SVG_MIGRATION.md).
+
 ## 1. Open SegRef3D Lite
 
 [**Open SegRef3D Lite**](https://satorumuro.github.io/SegRef3D/lite-web/)
