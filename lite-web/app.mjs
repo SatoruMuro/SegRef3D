@@ -79,7 +79,7 @@ import {
   interpolateMultiLabelVolume,
   marchingTetrahedra,
   parseVolInfoCsv,
-} from "./volume-tools.mjs?v=19";
+} from "./volume-tools.mjs?v=20";
 import {
   applyMaskVolumeChanges,
   buildMaskVolumeChanges,
@@ -2765,7 +2765,7 @@ async function exportColorTiff() {
     });
     const filename = `${outputFileStem()}_color_${timestamp()}.tiff`;
     downloadBlob(new Blob([bytes], { type: "image/tiff" }), filename);
-    setStatus(`Exported ${state.images.length}-slice Color TIFF (${width} × ${height}, original RGBA, no mask overlay).`);
+    setStatus(`Exported ${state.images.length}-slice Color TIFF (${width} × ${height}, 24-bit RGB, alpha discarded, no mask overlay).`);
     showToast(`Downloaded ${filename}`);
   } catch (error) {
     console.error(error);

@@ -49,12 +49,20 @@ const rgba = [
 ];
 const masks = [new Uint8Array([1, 0, 2, 0, 3, 0]), new Uint8Array([4, 5, 0, 0, 0, 0]), new Uint8Array([0, 0, 0, 6, 0, 7])];
 
+const rgbChannels = rgba => [...rgba].filter((_, index) => index % 4 !== 3);
+
 function decodeTiff(bytes) {
   const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
   const pages = UTIF.decode(buffer);
   return pages.map(ifd => {
+    assert.deepEqual(ifd.t277, [3]);
+    assert.deepEqual(ifd.t258, [8, 8, 8]);
+    assert.deepEqual(ifd.t262, [2]);
+    assert.deepEqual(ifd.t259, [1]);
+    assert.deepEqual(ifd.t284, [1]);
+    assert.equal(Object.hasOwn(ifd, "t338"), false);
     UTIF.decodeImage(buffer, ifd, pages);
-    return { width: ifd.width, height: ifd.height, rgba: [...UTIF.toRGBA8(ifd)] };
+    return { width: ifd.width, height: ifd.height, rgb: rgbChannels(UTIF.toRGBA8(ifd)) };
   });
 }
 
@@ -85,7 +93,7 @@ async function rasterFixture(folder, format, pixels = rgba, width = 2, height = 
       return { bytes: [...new Uint8Array(await blob.arrayBuffer())], rgba: [...original.getContext("2d").getImageData(0, 0, width, height).data] };
     }, { pixels: pixels[index], format, width, height });
     await writeFile(path.join(directory, `slice${[1, 2, 10][index]}.${format}`), new Uint8Array(data.bytes));
-    expected[index] = { width, height, rgba: data.rgba };
+    expected[index] = { width, height, rgb: rgbChannels(data.rgba) };
   }
   return { directory, expected };
 }
@@ -151,7 +159,7 @@ try {
         colorTiffTest.state.displayVersion += 1;
         colorTiffTest.render();
       });
-      assert.notDeepEqual(await page.evaluate(() => [...colorTiffTest.state.images[0].sourceCanvas.getContext("2d").getImageData(0, 0, 2, 3).data]), expected[0].rgba);
+      assert.notDeepEqual(rgbChannels(await page.evaluate(() => [...colorTiffTest.state.images[0].sourceCanvas.getContext("2d").getImageData(0, 0, 2, 3).data])), expected[0].rgb);
       const after = await downloadExport("#export-menu-color-tiff", "png-masked-adjusted-color.tiff");
       assert.deepEqual(after.bytes, before.bytes, "mask and display settings must not affect a single output byte");
       const legacy = await downloadExport("#export-menu-tiff", "png-labels.tiff");
@@ -167,7 +175,7 @@ try {
       const overlays = await downloadExport("#export-overlays", "overlays.zip");
       const entries = (await parseZip(new Blob([overlays.bytes]))).filter(e => e.name.endsWith(".png"));
       assert.equal(entries.length, 3);
-      assert.notDeepEqual(await decodePng(entries[0].bytes), expected[0].rgba);
+      assert.notDeepEqual(rgbChannels(await decodePng(entries[0].bytes)), expected[0].rgb);
       const nifti = await downloadExport("#export-menu-nifti", "labelmap.nii");
       assert.deepEqual([...nifti.bytes.subarray(352)], masks.flatMap(m => [...m]));
       const header = new DataView(nifti.bytes.buffer);
@@ -184,7 +192,7 @@ try {
       }
       await page.setViewportSize({ width: 1440, height: 1000 });
     }
-    results.push({ format, pages: 3, width: 2, height: 3, exactDecodedPixels: true });
+    results.push({ format, pages: 3, width: 2, height: 3, samplesPerPixel: 3, bitsPerSample: [8, 8, 8], extraSamples: false, exactDecodedRgb: true });
   }
   const gray = await rasterFixture("gray-png", "png", [[0, 0, 0, 255, 31, 31, 31, 255, 90, 90, 90, 255, 128, 128, 128, 255, 200, 200, 200, 255, 255, 255, 255, 255]]);
   await loadFolder(gray.directory, 1);
@@ -195,14 +203,14 @@ try {
   await mkdir(singleChannelDir, { recursive: true });
   await writeFile(path.join(singleChannelDir, "gray.png"), await encodeLabelPng(grayValues, 2, 3));
   await loadFolder(singleChannelDir, 1);
-  assert.deepEqual(decodeTiff((await downloadExport("#export-menu-color-tiff", "single-channel-color.tiff")).bytes)[0].rgba,
-    [...grayValues].flatMap(value => [value, value, value, 255]));
+  assert.deepEqual(decodeTiff((await downloadExport("#export-menu-color-tiff", "single-channel-color.tiff")).bytes)[0].rgb,
+    [...grayValues].flatMap(value => [value, value, value]));
 
   const rgbTiff = path.join(output, "input-rgb.tiff");
   await writeFile(rgbTiff, await createColorTiffStack(rgba.map(p => new Uint8Array(p)), 2, 3));
   await page.locator("#volume-input").setInputFiles(rgbTiff);
   await page.waitForFunction(() => !colorTiffTest.state.loading && colorTiffTest.state.images.length === 3);
-  assert.deepEqual(decodeTiff((await downloadExport("#export-menu-color-tiff", "tiff-color.tiff")).bytes), rgba.map(p => ({ width: 2, height: 3, rgba: p })));
+  assert.deepEqual(decodeTiff((await downloadExport("#export-menu-color-tiff", "tiff-color.tiff")).bytes), rgba.map(p => ({ width: 2, height: 3, rgb: rgbChannels(p) })));
 
   for (const [filename, bytes] of [["gray.tiff", createTiffLabelStack(masks, 2, 3)], ["gray.nii", createNiftiLabelVolume(masks, 2, 3)]]) {
     const file = path.join(output, filename); await writeFile(file, bytes);
@@ -233,7 +241,7 @@ try {
   assert.equal(await page.locator("#export-menu-color-tiff").isDisabled(), true);
   assert.match(await page.locator("#export-menu-color-tiff").getAttribute("title"), /equal original image dimensions/);
   assert.deepEqual(alerts, []); assert.deepEqual(errors, []); assert.deepEqual(outsideRequests, []);
-  results.push({ grayscaleRaster: "gray RGBA", grayscaleTiff: "disabled", nifti: "disabled", dicom: "disabled", rgbTiff: "exact RGBA", resize: "original size", mixedDimensions: "disabled", otherExports: "passed", desktopAndNarrow: "passed", outsideRequests: 0 });
+  results.push({ grayscaleRaster: "gray RGB", grayscaleTiff: "disabled", nifti: "disabled", dicom: "disabled", rgbTiff: "exact RGB", resize: "original size", mixedDimensions: "disabled", otherExports: "passed", desktopAndNarrow: "passed", outsideRequests: 0 });
   await writeFile(path.join(output, "results.json"), JSON.stringify(results, null, 2));
   console.log(JSON.stringify(results, null, 2));
 } finally {

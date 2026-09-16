@@ -269,8 +269,8 @@ export function createTiffLabelStack(masks, width, height) {
   return output;
 }
 
-// Source RGBA pages, independent of masks and display adjustments. Read one page
-// at a time so canvas callers do not need a second full-stack pixel allocation.
+// Source RGBA pages to 24-bit RGB, discarding alpha without compositing. Read
+// one page at a time and write RGB directly into the final TIFF allocation.
 export async function createColorTiffStack(slices, width, height, {
   readRgba = (slice) => slice,
   onProgress = () => {},
@@ -280,11 +280,14 @@ export async function createColorTiffStack(slices, width, height, {
   if (!Number.isSafeInteger(width) || !Number.isSafeInteger(height) || width < 1 || height < 1) {
     throw new Error("Color TIFF dimensions are invalid.");
   }
-  const sliceBytes = width * height * 4;
-  const entryCount = 12;
+  const sliceBytes = width * height * 3;
+  const rgbaBytes = width * height * 4;
+  // Keep strips and IFDs word-aligned even for an odd number of RGB pixels.
+  const sliceStride = sliceBytes + sliceBytes % 2;
+  const entryCount = 11;
   const ifdBytes = 2 + entryCount * 12 + 4;
-  const pageMetadataBytes = ifdBytes + 8; // Four SHORT BitsPerSample values.
-  const firstIfd = 8 + sliceBytes * slices.length;
+  const pageMetadataBytes = ifdBytes + 6; // Three SHORT BitsPerSample values.
+  const firstIfd = 8 + sliceStride * slices.length;
   const totalBytes = firstIfd + pageMetadataBytes * slices.length;
   if (!Number.isSafeInteger(totalBytes) || totalBytes > 0xffffffff) {
     throw new Error("Color TIFF exceeds the 4 GiB classic TIFF limit. Export a smaller stack.");
@@ -295,28 +298,31 @@ export async function createColorTiffStack(slices, width, height, {
   view.setUint32(4, firstIfd, true);
   for (let page = 0; page < slices.length; page += 1) {
     const rgba = await readRgba(slices[page], page);
-    if (!(rgba instanceof Uint8Array || rgba instanceof Uint8ClampedArray) || rgba.length !== sliceBytes) {
+    if (!(rgba instanceof Uint8Array || rgba instanceof Uint8ClampedArray) || rgba.length !== rgbaBytes) {
       throw new Error(`Color TIFF slice ${page + 1} RGBA dimensions do not match.`);
     }
-    const pixelOffset = 8 + page * sliceBytes;
-    output.set(rgba, pixelOffset);
+    const pixelOffset = 8 + page * sliceStride;
+    for (let source = 0, target = pixelOffset; source < rgba.length; source += 4, target += 3) {
+      output[target] = rgba[source];
+      output[target + 1] = rgba[source + 1];
+      output[target + 2] = rgba[source + 2];
+    }
     const ifdOffset = firstIfd + page * pageMetadataBytes;
     const bitsOffset = ifdOffset + ifdBytes;
-    for (let channel = 0; channel < 4; channel += 1) view.setUint16(bitsOffset + channel * 2, 8, true);
+    for (let channel = 0; channel < 3; channel += 1) view.setUint16(bitsOffset + channel * 2, 8, true);
     view.setUint16(ifdOffset, entryCount, true);
     const entries = [
       [256, 4, 1, width],
       [257, 4, 1, height],
-      [258, 3, 4, bitsOffset],
+      [258, 3, 3, bitsOffset],
       [259, 3, 1, 1], // Uncompressed, like the label TIFF.
       [262, 3, 1, 2], // RGB, never a palette or scalar label image.
       [273, 4, 1, pixelOffset],
       [274, 3, 1, 1], // Top-left, no rotation or flip.
-      [277, 3, 1, 4],
+      [277, 3, 1, 3],
       [278, 4, 1, height],
       [279, 4, 1, sliceBytes],
-      [284, 3, 1, 1], // Interleaved RGBA.
-      [338, 3, 1, 2], // Unassociated alpha; do not composite a background.
+      [284, 3, 1, 1], // Interleaved RGB; no ExtraSamples tag.
     ];
     entries.forEach((entry, index) => writeTiffEntry(view, ifdOffset + 2 + index * 12, ...entry));
     view.setUint32(ifdOffset + 2 + entryCount * 12,

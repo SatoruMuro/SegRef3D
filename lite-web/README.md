@@ -138,7 +138,7 @@ do not endorse SegRef3D. The approximately 20 MB demo volume is fetched only whe
 - Label PNG and visible-overlay PNG sequence export as ZIP
 - NIfTI Labelmap export in Original, 5x, and 10x slice-interpolated forms, plus multi-page TIFF
   stack export
-- Color TIFF export of the original source image stack, preserving RGB color and alpha without masks
+- Color TIFF export of the original source image stack, preserving RGB color without masks; alpha is discarded
 - Multi-page TIFF and naturally sorted TIFF-folder import for 8-bit grayscale, 16-bit grayscale,
   and RGB data
 - 1x/5x/10x signed-distance slice interpolation and binary STL export
@@ -250,15 +250,16 @@ exports preserve mask pixels but do not reliably preserve full patient-space geo
 **Color TIFF** (Export → Volumes, beside TIFF) exports the original decoded source image
 stack without grayscale conversion, mask overlays, object colors, display adjustments, or
 background compositing. The existing **TIFF** export remains an 8-bit grayscale label-ID stack.
-Color TIFF is a single uncompressed multi-page TIFF with 8-bit RGBA samples and unassociated
-alpha, named `<source-folder>_color_<timestamp>.tiff`. Pages follow the same loaded z order
+Color TIFF is a single uncompressed 24-bit RGB multi-page TIFF (8 bits per channel),
+named `<source-folder>_color_<timestamp>.tiff`. Alpha channels are discarded without
+compositing onto a background. Pages follow the same loaded z order
 as TIFF (natural filename order for image folders), with no rotation or flip. Original width
 and height are retained even if the editor was resized or padded during loading. Unequal
 original dimensions disable Color TIFF; shared white canvas padding is never exported.
 
 PNG/JPEG/WebP sequences and supported RGB TIFF stacks are available; grayscale raster
 images export with equal R/G/B values. DICOM, NIfTI and grayscale TIFF disable the button
-with an explanatory tooltip. Color and alpha are those of the browser-decoded 8-bit raster,
+with an explanatory tooltip. RGB values are those of the browser-decoded 8-bit raster,
 not the original compressed file or high-bit-depth samples. Full patient-space geometry and
 source color profiles are not embedded. Processing stays entirely in the browser, yields
 between pages with progress, and rejects files beyond classic TIFF's 4 GiB limit.

@@ -12,7 +12,9 @@ function decode(bytes) {
   });
 }
 
-test("Color TIFF round-trips every RGBA pixel, dimensions, alpha and page order", async () => {
+const rgbChannels = rgba => [...rgba].filter((_, index) => index % 4 !== 3);
+
+test("Color TIFF preserves every RGB pixel, dimensions and page order as 24-bit RGB", async () => {
   const first = new Uint8ClampedArray([
     255, 0, 0, 255, 0, 255, 0, 255,
     0, 0, 255, 255, 255, 255, 255, 255,
@@ -29,14 +31,43 @@ test("Color TIFF round-trips every RGBA pixel, dimensions, alpha and page order"
   for (const [index, { page, rgba }] of result.entries()) {
     assert.equal(page.width, 2);
     assert.equal(page.height, 3);
-    assert.deepEqual(page.t258, [8, 8, 8, 8]);
+    assert.deepEqual(page.t258, [8, 8, 8]);
     assert.deepEqual(page.t262, [2]);
     assert.deepEqual(page.t274, [1]);
-    assert.deepEqual(page.t338, [2]);
-    assert.deepEqual(rgba, [...[first, second][index]]);
+    assert.deepEqual(page.t277, [3]);
+    assert.deepEqual(page.t259, [1]);
+    assert.deepEqual(page.t284, [1]);
+    assert.equal(Object.hasOwn(page, "t338"), false);
+    assert.deepEqual(rgbChannels(rgba), rgbChannels([first, second][index]));
+    assert.deepEqual([...page.data], rgbChannels([first, second][index]));
   }
   assert.deepEqual(progress, [[1, 2], [2, 2]]);
   assert.equal(yields, 2);
+});
+
+test("alpha is discarded without changing RGB, including fully transparent colors", async () => {
+  const source = new Uint8Array([255, 0, 0, 255, 0, 255, 0, 128, 0, 0, 255, 0]);
+  const opaque = source.map((value, index) => index % 4 === 3 ? 255 : value);
+  const bytes = await createColorTiffStack([source, opaque], 3, 1);
+  const allOpaqueBytes = await createColorTiffStack([opaque, opaque], 3, 1);
+  assert.deepEqual(bytes, allOpaqueBytes, "alpha alone cannot affect output bytes");
+  for (const { page, rgba } of decode(bytes)) {
+    assert.deepEqual([...page.data], [255, 0, 0, 0, 255, 0, 0, 0, 255]);
+    assert.deepEqual(rgbChannels(rgba), rgbChannels(source));
+    assert.deepEqual(page.t279, [9], "strip byte count excludes alignment padding");
+    assert.equal(page.t273[0] % 2, 0);
+  }
+  // Classic TIFF requires word-aligned IFD offsets, even with odd RGB strips.
+  const view = new DataView(bytes.buffer);
+  let offset = view.getUint32(4, true);
+  let count = 0;
+  while (offset) {
+    assert.equal(offset % 2, 0);
+    count += 1;
+    offset = view.getUint32(offset + 2 + view.getUint16(offset, true) * 12, true);
+  }
+  assert.equal(count, 2);
+  assert.deepEqual([...source], [255, 0, 0, 255, 0, 255, 0, 128, 0, 0, 255, 0]);
 });
 
 test("existing TIFF remains an 8-bit scalar label stack in the same z order", () => {
@@ -63,5 +94,5 @@ test("Color TIFF rejects invalid dimensions, pixels and classic TIFF overflow", 
   }
   await assert.rejects(createColorTiffStack([new Uint8Array(3)], 1, 1), /RGBA dimensions/);
   await assert.rejects(createColorTiffStack([new Float32Array(4)], 1, 1), /RGBA dimensions/);
-  await assert.rejects(createColorTiffStack([null], 32768, 32768), /4 GiB/);
+  await assert.rejects(createColorTiffStack([null], 65536, 32768), /4 GiB/);
 });
