@@ -269,6 +269,7 @@
               <button id="export-menu-nifti-5x" type="button" role="menuitem" disabled>NIfTI Labelmap (5x)</button>
               <button id="export-menu-nifti-10x" type="button" role="menuitem" disabled>NIfTI Labelmap (10x)</button>
               <button id="export-menu-tiff" type="button" role="menuitem" disabled>TIFF</button>
+              <button id="export-menu-color-tiff" type="button" role="menuitem" disabled>Color TIFF</button>
               <button id="export-menu-statistics" type="button" role="menuitem" disabled>Volume Statistics CSV</button>
               <span class="menu-heading">3D</span>
               <button id="export-menu-stl" type="button" role="menuitem" disabled>STL</button>
@@ -365,7 +366,7 @@
       <footer class="status-bar">
         <div class="status-message">
           <svg><use href="#i-info"></use></svg>
-          <span id="status-text">Load a JPG, PNG, TIFF, DICOM folder, or NIfTI volume to begin.</span>
+          <span id="status-text">Load a JPG, PNG, WebP, TIFF, DICOM folder, or NIfTI volume to begin.</span>
         </div>
         <button
           id="local-processing-status"
@@ -1168,6 +1169,6 @@
         if (status) status.textContent = `Application operation failed: ${message}`;
       });
     </script>
-    <script type="module" src="./app.mjs?v=55"></script>
+    <script type="module" src="./app.mjs?v=57"></script>
   </body>
 </html>

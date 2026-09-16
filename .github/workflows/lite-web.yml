@@ -35,6 +35,8 @@ jobs:
           npx playwright install --with-deps chromium
       - name: Test 3D rendering and Apple demo workflow
         run: node lite-web/tests/three-viewer.browser.mjs build/preview-qa/oit
+      - name: Test Color TIFF and existing export downloads
+        run: node lite-web/tests/color-tiff.browser.mjs build/color-tiff-qa
       - name: Test conventional transparency fallback
         run: OIT_FALLBACK=1 node lite-web/tests/three-viewer.browser.mjs build/preview-qa/fallback
       - name: Save rendering regression results
@@ -42,4 +44,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: preview-rendering
-          path: build/preview-qa/
+          path: |
+            build/preview-qa/
+            build/color-tiff-qa/
