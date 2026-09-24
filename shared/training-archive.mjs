@@ -37,7 +37,8 @@ export async function boundedDecompress(blob, format, limit) {
   for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
   return bytes;
 }
-export async function readSafeZip(source, limits = CASE_LIMITS) {
+export async function readSafeZip(source, limits = CASE_LIMITS, onProgress = () => {}) {
+  onProgress({stage:"Reading ZIP..."});
   const blob = source instanceof Blob ? source : new Blob([source]);
   if (blob.size < 22 || blob.size > limits.archive) throw new Error("ZIP archive size exceeds the safety limit or is incomplete.");
   const tailStart = Math.max(0, blob.size - 65557);
@@ -90,10 +91,12 @@ export async function readSafeZip(source, limits = CASE_LIMITS) {
   for (let i = 1; i < ranges.length; i++) if (ranges[i].local < ranges[i-1].dataStart + ranges[i-1].compressed) throw new Error("Overlapping ZIP entries.");
   const files = new Map();
   for (const spec of specs) {
+    onProgress({stage:"Extracting files...", completed:files.size, total:specs.length, filename:spec.name});
     const part = blob.slice(spec.dataStart, spec.dataStart + spec.compressed);
     const bytes = spec.method === 0 ? new Uint8Array(await part.arrayBuffer()) : await boundedDecompress(part, "deflate-raw", spec.expanded);
     if (bytes.length !== spec.expanded || ((crcUpdate(0xffffffff, bytes) ^ 0xffffffff) >>> 0) !== spec.checksum) throw new Error("ZIP integrity check failed.");
     files.set(spec.name, bytes);
+    onProgress({stage:"Extracting files...", completed:files.size, total:specs.length});
   }
   return files;
 }

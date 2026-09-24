@@ -1,14 +1,15 @@
-import { loadTrainingCase, checkConsistency, targetUnion, datasetWarnings, buildDataset } from "./dataset-format.mjs?v=1";
+import { loadTrainingCase, checkConsistency, targetUnion, datasetWarnings, buildDataset } from "./dataset-format.mjs?v=2";
 let cases=[];
 self.onmessage=async ({data})=>{
   try {
     if (data.action==="clear") cases=[];
     else if (data.action==="remove") cases=cases.filter(c=>c.caseId!==data.caseId);
     else if (data.action==="load") {
-      for (const blob of data.files) {
-        self.postMessage({type:"progress",message:`Validating ${cases.length+1}...`});
+      for (const [index,blob] of data.files.entries()) {
+        const report=progress=>self.postMessage({type:"progress",action:"load",zipIndex:index+1,zipTotal:data.files.length,displayName:blob.name||"Training ZIP",...progress});
         try {
-          const record=await loadTrainingCase(blob);
+          const record=await loadTrainingCase(blob,report);
+          report({stage:"Checking dataset consistency..."});
           checkConsistency([...cases,record]);
           if (cases.reduce((sum,c)=>sum+c.blob.size,blob.size)>1072693248) throw new Error("Dataset exceeds the 1 GiB browser limit.");
           cases.push(record);

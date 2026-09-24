@@ -20,10 +20,16 @@ Local implementation/test evidence and remaining GPU/desktop checks: [LOCAL_VALI
 5. Check annotation completeness. A case without this Obj ID is treated as a **true
    negative**, not as an unannotated case. Any case/target/name change clears confirmation.
 6. Create and download the Dataset ZIP. Open the Colab launcher separately.
-7. Choose a T4 GPU. Run config/setup, explicitly approve and upload one Dataset ZIP,
-   review the target/split/spacing summary, then run training and download the Model ZIP.
+7. Choose a T4 GPU. In the first code cell, approve and upload one Dataset ZIP before
+   setup. Then use **Runtime → Run all**: the saved ZIP is reused, and setup, dataset
+   validation, training and model download continue without further input prompts.
+   Optional training settings follow the upload cell. Keep the Colab runtime connected.
 
 Nothing is uploaded by the web application. Validation runs in a Web Worker.
+While loading, a progress panel shows the current ZIP and processing stage. Extraction
+percentages count completed ZIP entries (including CRC verification), not bytes or elapsed
+time; they reset for each ZIP. Reading and NIfTI preparation use an indeterminate bar.
+The panel closes after validation or an error; invalid cases remain listed as errors.
 Dataset packaging references original case ZIP blobs, without recompressing their
 contents or making a contiguous full-dataset ArrayBuffer.
 

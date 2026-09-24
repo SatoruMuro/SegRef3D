@@ -1,6 +1,6 @@
 // Stable import boundary for segref3d-training-case-1.0 consumers.
 // Deliberately independent of either application's state, canvas and display loaders.
-import { boundedDecompress, CASE_LIMITS, readSafeZip } from "./training-archive.mjs?v=1";
+import { boundedDecompress, CASE_LIMITS, readSafeZip } from "./training-archive.mjs?v=2";
 export const TRAINING_CASE_FORMAT = "segref3d-training-case-1.0";
 export const TOLERANCE = 1e-5;
 const types = { 2:["uint8",1,"getUint8",true], 4:["int16",2,"getInt16",true], 8:["int32",4,"getInt32",true],
@@ -88,8 +88,9 @@ export function sourceCategory(image) {
   if (image.channel_count === 3) return "rgb";
   return ["nifti","dicom"].includes(image.source_format) && /original_scalar|dicom_rescale/.test(image.intensity_policy) ? "medical_scalar" : "grayscale_8bit";
 }
-export async function validateTrainingCase(blob) {
-  const files=await readSafeZip(blob);
+export async function validateTrainingCase(blob, onProgress = () => {}) {
+  const files=await readSafeZip(blob, CASE_LIMITS, onProgress);
+  onProgress({stage:"Validating manifest..."});
   if (!files.has("manifest.json") || files.get("manifest.json").length > 1048576) throw new Error("Missing or oversized manifest.json.");
   const m=JSON.parse(new TextDecoder("utf-8",{fatal:true}).decode(files.get("manifest.json")));
   if (m.format!==TRAINING_CASE_FORMAT || !validCaseId(m.case_id)) throw new Error("Invalid training case manifest format or case_id.");
@@ -102,6 +103,7 @@ export async function validateTrainingCase(blob) {
   const expected=new Set(["manifest.json",label.file]);
   if (!new RegExp(`^labelsTr/${m.case_id}\\.nii(?:\\.gz)?$`).test(label.file)) throw new Error("Invalid label filename.");
   if (!files.has(label.file)) throw new Error("Missing label NIfTI.");
+  onProgress({stage:"Preparing labels...", filename:label.file});
   const parsedLabel=await inspectNifti(files.get(label.file),{labels:true});
   let decodedTotal=parsedLabel.decodedBytes;
   sameGeometry(parsedLabel.geometry,m.geometry);
@@ -116,6 +118,7 @@ export async function validateTrainingCase(blob) {
     if (c.index!==i || !new RegExp(`^imagesTr/${m.case_id}_${String(i).padStart(4,"0")}\\.nii(?:\\.gz)?$`).test(c.file)
         || c.name!==(image.channel_count===1?"scalar":["red","green","blue"][i])) throw new Error("Invalid image channel filename / order / name.");
     if (!files.has(c.file)) throw new Error("Missing image NIfTI.");
+    onProgress({stage:`Preparing images... (channel ${i+1}/${image.channel_count})`, filename:c.file});
     const parsed=await inspectNifti(files.get(c.file),{limit:CASE_LIMITS.expanded-decodedTotal});
     decodedTotal+=parsed.decodedBytes;
     sameGeometry(parsed.geometry,parsedLabel.geometry);

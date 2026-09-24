@@ -5,7 +5,7 @@
   <meta name="referrer" content="no-referrer">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; worker-src 'self'; connect-src 'none'; img-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
   <title>TrainRef3D — custom segmentation training</title>
-  <link rel="stylesheet" href="styles.css?v=1">
+  <link rel="stylesheet" href="styles.css?v=2">
 </head>
 <body>
   <header><a href="../lite-web/">← SegRef3D Lite</a><span>RESEARCH WORKFLOW · v1.0 MVP</span></header>
@@ -16,6 +16,11 @@
     <section aria-labelledby="load-heading">
       <h2 id="load-heading">1. Add training cases</h2>
       <div id="drop-area"><p>Drop SegRef3D Training ZIP files here</p><label class="button" for="files">Select Training ZIP files</label><input id="files" type="file" accept=".zip" multiple><p class="hint">One ZIP per independent case · 1 scalar or 3 RGB channels · 64 cases / 1 GiB per dataset maximum</p></div>
+      <div id="load-progress" hidden>
+        <p id="load-progress-text">Reading ZIP...</p>
+        <progress id="load-progress-bar" max="100" aria-labelledby="load-progress-text" aria-describedby="load-progress-detail"></progress>
+        <p id="load-progress-detail" class="hint"></p>
+      </div>
       <div class="table-scroll"><table><caption id="case-count">No cases loaded</caption><thead><tr><th>Case ID</th><th>Source format</th><th>Channels</th><th>Shape</th><th>Spacing (mm)</th><th>Labels</th><th>Intensity policy</th><th>Status</th><th>Remove</th></tr></thead><tbody id="case-rows"></tbody></table></div>
       <ul id="errors" class="errors" aria-label="Excluded cases"></ul>
       <button id="clear" type="button">Clear all cases</button>
@@ -38,6 +43,6 @@
     <p id="status" role="status" aria-live="polite">Ready to validate cases locally.</p>
     <footer><p>DICOM headers are not included in standard Training ZIPs, but image data and object names may contain identifiable information. These ZIPs are not guaranteed to be anonymous. Check your institution's rules before uploading to Google Colab.</p><p>Performance on the internal validation split does not establish clinical validity or generalizability.</p><a href="README.md">Format, limitations and testing guide</a></footer>
   </main>
-  <script type="module" src="app.mjs?v=1"></script>
+  <script type="module" src="app.mjs?v=2"></script>
 </body>
 </html>

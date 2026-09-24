@@ -8,8 +8,13 @@ SegRef3D Training ZIPs in the separate [TrainRef3D Web app](../train-web/README.
 one target Obj ID and confirm complete annotation, then explicitly upload the Dataset ZIP
 to your own Colab T4 runtime. The notebook delegates validation, preprocessing, MONAI 3D
 U-Net training, best checkpoints, foreground Dice and versioned Model ZIP output to
-`trainref3d_backend.py`. Config is editable in the first code cell; download has its own
-  final cell. No automatic image upload is added.
+`trainref3d_backend.py`. The first code cell explicitly approves and uploads the ZIP,
+before any package installation or backend download. **Runtime → Run all** then reuses
+the saved ZIP and runs setup, validation, training and the final download cell without
+further input prompts. Optional config follows upload. Set `REUPLOAD_DATASET = True`
+only when choosing a different ZIP, then restore `False`. Upload approval accepts any
+letter case of YES and ignores surrounding whitespace (also in InferRef3D).
+No automatic image upload is added.
 
 CPU units: `python -m unittest discover -s ColabNotebooks/tests -p "test_trainref3d_backend.py"`.
 Separate CPU/GPU mechanical smoke test: `tests/run_trainref3d_smoke.py` (add `--gpu` for CUDA).
@@ -22,7 +27,14 @@ clinical validity or generalizability.
 
 Use `InferRef3D_v1_0.ipynb` through [inferref3d.html](inferref3d.html). In SegRef3D Lite,
 select a trusted TrainRef3D Model ZIP and create one source-bound Inference Request ZIP. The
-notebook explicitly uploads both archives to the user's own Colab runtime, validates their hashes
+notebook explicitly uploads both archives together in the first code cell, before setup.
+Select a T4 GPU and **Runtime → Run all**, approve the initial upload, and select both ZIPs.
+The remaining cells run setup, validation, model loading, inference, Result ZIP creation and
+download without further input prompts. Rerunning reuses the saved ZIP pair and upload record,
+including after a kernel restart. Set `REUPLOAD_INPUTS = True` to replace the pair, then restore
+`False`. If either saved ZIP or the upload record is missing, upload both again.
+A plain image ZIP or Training Dataset ZIP is not an Inference Request ZIP.
+The notebook validates their hashes
 and manifests, loads `model.pt` with `torch.load(..., weights_only=True)`, reconstructs the MONAI
 UNet, and reproduces the model manifest's RAS/spacing/intensity/sliding-window contract.
 

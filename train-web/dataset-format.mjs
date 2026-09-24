@@ -1,9 +1,9 @@
-import { validateTrainingCase, TRAINING_CASE_FORMAT } from "../shared/training-case.mjs?v=1";
+import { validateTrainingCase, TRAINING_CASE_FORMAT } from "../shared/training-case.mjs?v=2";
 import { createStoredZip, DATASET_LIMITS } from "../shared/training-archive.mjs?v=1";
 export const DATASET_FORMAT = "trainref3d-dataset-1.0";
 const validated = new WeakSet();
-export async function loadTrainingCase(blob) {
-  const record = { ...await validateTrainingCase(blob), blob };
+export async function loadTrainingCase(blob, onProgress = () => {}) {
+  const record = { ...await validateTrainingCase(blob, onProgress), blob };
   validated.add(record);
   return record;
 }

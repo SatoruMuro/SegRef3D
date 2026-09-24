@@ -7,6 +7,7 @@ from unittest import mock
 import tempfile
 import unittest
 import zipfile
+import types
 
 import nibabel as nib
 import numpy as np
@@ -47,6 +48,13 @@ class InferRef3DBackendTests(unittest.TestCase):
         source = "\n".join("".join(cell.get("source", [])) for cell in notebook["cells"])
         self.assertIn("BACKEND_REF = 'main'", source)
         self.assertIn("len(uploaded) == 2", source)
+        codes = ["".join(cell["source"]) for cell in notebook["cells"] if cell["cell_type"] == "code"]
+        self.assertIn("files.upload()", codes[0])
+        self.assertEqual(source.count("files.upload()"), 1)
+        self.assertLess(source.index("files.upload()"), source.index("%pip"))
+        for code in codes[1:]:
+            self.assertNotIn("input(", code)
+            self.assertNotIn("files.upload(", code)
         self.assertIn("ir.run_inference", source)
         self.assertIn("files.download", source)
         self.assertNotIn("gradio", source.lower())
@@ -166,6 +174,56 @@ class InferRef3DBackendTests(unittest.TestCase):
         self.assertTrue(set(np.unique(np.asarray(prediction.dataobj))).issubset({0, 5}))
         self.assertEqual(manifest["prediction"]["sha256"], infer.sha256_file(prediction_path))
         self.assertRegex(manifest["backend"]["source_sha256"], r"^[0-9a-f]{64}$")
+
+    def test_notebook_uploaded_trained_model_to_result_download(self):
+        """Real TrainRef3D export -> notebook cells -> CPU inference -> download hook."""
+        import torch
+        from trainref3d_fixtures import dataset_file
+        previous_threads = torch.get_num_threads()
+        torch.set_num_threads(2)
+        self.addCleanup(torch.set_num_threads, previous_threads)
+        with contextlib.redirect_stdout(io.StringIO()):
+            dataset = train.prepare_dataset(dataset_file(self.root, count=2, negatives=()), self.root / "training_work")
+            config = train.TrainingConfig(epochs=1, num_workers=0, patch_size=(16,16,16),
+                                          channels=(4,8), strides=(2,), num_res_units=1)
+            trained = train.train(dataset, self.root / "training_output", config, allow_cpu=True)
+        model_path = Path(trained["archive"])
+        with zipfile.ZipFile(model_path) as archive:
+            manifest = json.loads(archive.read("model_manifest.json"))
+        request_path, _ = request_zip(self.root, model_path, manifest)
+        files = types.SimpleNamespace(upload=mock.Mock(return_value={
+            "request.zip": request_path.read_bytes(), "trained_model.zip": model_path.read_bytes(),
+        }), download=mock.Mock())
+        colab = types.ModuleType("google.colab")
+        colab.files = files
+        google = types.ModuleType("google")
+        google.colab = colab
+        notebook = json.loads((Path(__file__).resolve().parents[1] / "InferRef3D_v1_0.ipynb").read_text(encoding="utf-8"))
+        cells = ["".join(c["source"]).replace("/content", self.root.as_posix())
+                 for c in notebook["cells"] if c["cell_type"] == "code"]
+        namespace = {"ir": infer}
+        run_inference = infer.run_inference
+        def run_cpu(*args, **kwargs):
+            return run_inference(*args, **kwargs, allow_cpu=True)
+        with mock.patch.dict(sys.modules, {"google": google, "google.colab": colab}), \
+                mock.patch("builtins.input", return_value=" Yes ") as prompt, \
+                mock.patch.object(infer, "run_inference", side_effect=run_cpu), \
+                contextlib.redirect_stdout(io.StringIO()):
+            exec(cells[0], namespace)
+            # Simulate Run all after upload; the first cell must reuse the saved pair.
+            exec(cells[0], namespace)
+            # Only installation/download/CUDA setup is replaced by the local CPU environment.
+            for code in cells[1:]:
+                if "%pip" not in code:
+                    exec(code, namespace)
+        files.upload.assert_called_once()
+        prompt.assert_called_once()
+        files.download.assert_called_once_with(namespace["result"]["result_zip"])
+        with zipfile.ZipFile(namespace["result"]["result_zip"]) as archive:
+            self.assertEqual(set(archive.namelist()), {"prediction.nii.gz", "inference_result.json", "README.txt"})
+            result_manifest = json.loads(archive.read("inference_result.json"))
+        self.assertEqual(result_manifest["model"]["model_sha256"], infer.sha256_file(model_path))
+        self.assertEqual(result_manifest["model"]["target_label_id"], manifest["task"]["target_label_id"])
 
 
 if __name__ == "__main__":

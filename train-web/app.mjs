@@ -1,8 +1,24 @@
-import { datasetWarnings } from "./dataset-format.mjs?v=1";
+import { datasetWarnings } from "./dataset-format.mjs?v=2";
 const el=id=>document.getElementById(id);
-const worker=new Worker(new URL("./dataset-worker.mjs?v=1",import.meta.url),{type:"module"});
+const worker=new Worker(new URL("./dataset-worker.mjs?v=2",import.meta.url),{type:"module"});
 let cases=[],targets=[],busy=false,failed=false,downloadUrl=null;
 const setStatus=message=>{el("status").textContent=message;};
+function showLoadProgress(data) {
+  el("load-progress").hidden=false;
+  el("drop-area").setAttribute("aria-busy","true");
+  const measured=Number.isInteger(data.completed)&&Number.isInteger(data.total)&&data.total>0;
+  const percent=measured?Math.floor(100*data.completed/data.total):null;
+  const message=`${data.stage}${measured?` ${percent}% (${data.completed}/${data.total} files)`:""}`;
+  el("load-progress-text").textContent=message;
+  el("load-progress-detail").textContent=data.zipIndex?`ZIP ${data.zipIndex}/${data.zipTotal} — ${data.displayName}${data.filename?` · ${data.filename}`:""}`:"Starting ZIP processing...";
+  if(measured)el("load-progress-bar").value=percent;
+  else el("load-progress-bar").removeAttribute("value");
+  setStatus(message);
+}
+function finishLoadProgress() {
+  el("load-progress").hidden=true;
+  el("drop-area").setAttribute("aria-busy","false");
+}
 function invalidate() {
   el("complete").checked=false; el("ready").hidden=true;
   if (downloadUrl) { URL.revokeObjectURL(downloadUrl); downloadUrl=null; }
@@ -37,20 +53,23 @@ function send(message) {if(busy||failed)return;invalidate();busy=true;controls()
 function load(files) {
   if (busy||failed)return;
   const selected=[...files];
+  if (!selected.length)return;
   if (selected.length>64) {setStatus("Select at most 64 Training ZIPs at once.");return;}
   if (selected.some(f=>!f.name.toLowerCase().endsWith(".zip"))) {setStatus("Select .zip files only.");return;}
+  showLoadProgress({stage:"Reading ZIP..."});
   send({action:"load",files:selected});
 }
 worker.onmessage=({data})=>{
-  if(data.type==="progress") {setStatus(data.message);return;}
+  if(data.type==="progress") {if(data.action==="load")showLoadProgress(data);else setStatus(data.message);return;}
   if(data.type==="case-error") {const li=document.createElement("li");li.textContent=`Error — ${data.displayName} excluded: ${data.message}`;el("errors").append(li);return;}
   busy=false;
+  finishLoadProgress();
   if(data.type==="cases") {cases=data.cases;targets=data.targets;render();setStatus("Validation complete. Error cases are excluded. Review your target and annotation completeness.");}
   else if(data.type==="built") {downloadUrl=URL.createObjectURL(data.blob);el("download").href=downloadUrl;el("download").download=data.filename;el("ready").hidden=false;setStatus("Dataset ready. No data has been uploaded.");}
   else setStatus(`Error: ${data.message}`);
   controls();
 };
-worker.onerror=()=>{busy=false;failed=true;invalidate();cases=[];targets=[];render();setStatus("Validation worker failed (possibly insufficient memory). Reload the page and use fewer/smaller cases.");};
+worker.onerror=()=>{busy=false;failed=true;finishLoadProgress();invalidate();cases=[];targets=[];render();setStatus("Validation worker failed (possibly insufficient memory). Reload the page and use fewer/smaller cases.");};
 el("files").onchange=event=>{load(event.target.files);event.target.value="";};
 el("clear").onclick=()=>{el("errors").replaceChildren();send({action:"clear"});};
 el("target").onchange=()=>{invalidate();el("target-name").value=targets.find(t=>String(t.id)===el("target").value)?.names[0]||"";warnings();controls();};

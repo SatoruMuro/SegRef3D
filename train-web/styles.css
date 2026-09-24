@@ -1,4 +1,7 @@
 :root { color-scheme: dark; font-family: system-ui, sans-serif; background:#11171d; color:#e8edf1; }
+#load-progress { margin:18px 0; padding:14px 18px; border:1px solid #65cfb1; border-radius:8px; background:#131c23; }
+#load-progress p { margin:4px 0 10px; overflow-wrap:anywhere; }
+#load-progress-bar { display:block; width:100%; height:18px; accent-color:#65cfb1; }
 * { box-sizing:border-box; }
 body { margin:0; } header { padding:20px 4vw; display:flex; justify-content:space-between; gap:20px; border-bottom:1px solid #35414a; font-size:.85rem; color:#9dadb9; }
 main { max-width:1180px; margin:40px auto; padding:0 24px; } h1 { font-size:clamp(2.4rem,5vw,3.5rem); letter-spacing:-.04em; margin-bottom:10px; } h2 { font-size:1.25rem; } p { line-height:1.6; } a { color:#86d6c4; } .subtitle { color:#b6c7d4; font-size:1.1rem; }

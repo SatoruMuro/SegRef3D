@@ -27,6 +27,30 @@ export async function fixture({id="SR3D_12345678",rgb=false,negative=false,mutat
 }
 const options={targetLabelId:5,targetName:"Tumor",annotationComplete:true,datasetId:"TR3D_abcdef12"};
 
+test("ZIP progress counts verified entries and names preparation stages without fake percentages",async()=>{
+  const events=[];
+  const blob=await fixture({rgb:true,gzip:true});
+  const record=await loadTrainingCase(blob,event=>events.push(event));
+  assert.equal(record.channelCount,3);
+  assert.equal(events[0].stage,"Reading ZIP...");
+  const extracting=events.filter(e=>e.stage==="Extracting files...");
+  assert.equal(extracting[0].completed,0);
+  assert.deepEqual([...new Set(extracting.map(e=>e.completed))],[0,1,2,3,4,5]);
+  assert.ok(extracting.every(e=>e.total===5));
+  assert.equal(extracting.at(-1).completed,5);
+  assert.ok(events.some(e=>e.stage==="Preparing labels..."));
+  assert.equal(events.filter(e=>e.stage.startsWith("Preparing images...")).length,3);
+  assert.ok(events.filter(e=>e.stage!=="Extracting files...").every(e=>e.total===undefined));
+});
+
+test("failed integrity checks never count a corrupt entry as completed",async()=>{
+  const raw=new Uint8Array(await (await fixture()).arrayBuffer());raw[80]^=1;
+  const events=[];
+  await assert.rejects(loadTrainingCase(new Blob([raw]),e=>events.push(e)),/integrity/);
+  assert.equal(events.at(-1).completed,0);
+  assert.ok(!events.some(e=>e.stage.startsWith("Preparing")));
+});
+
 test("A: multiple actual Lite-exported cases validate; scalar gzip and oblique geometry",async()=>{
   const a=await loadTrainingCase(await fixture({gzip:true})),b=await loadTrainingCase(await fixture({id:"SR3D_87654321"}));
   checkConsistency([a,b]);assert.equal(a.channelCount,1);assert.deepEqual(a.geometry.shape,[4,3,2]);assert.deepEqual(a.labelIds,[1,2,5]);
