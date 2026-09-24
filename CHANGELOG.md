@@ -3,6 +3,19 @@
 Release and development history moved from the main README. Dates and descriptions before this
 move are preserved in their original language.
 
+## 2026.9.24 — TrainRef3D spatial flips disabled by default
+
+- Default to intensity-only augmentation to preserve anatomical laterality/orientation,
+  including right/left obturator internus targets. Keep preprocessing and crop order unchanged.
+- Add explicit `TrainingConfig.spatial_flip_probabilities` and Colab advanced configuration,
+  defaulting to `(0.0, 0.0, 0.0)` in RAS `(R-L, A-P, S-I)` order. Reject malformed,
+  non-finite and out-of-range probabilities; add transforms only for positive probabilities.
+- Record actual per-axis probabilities and axis order in Model ZIP preprocessing metadata.
+  Keep model format, state_dict, inference and target Obj ID contracts unchanged.
+- Add augmentation, notebook, split reproducibility and legacy inference compatibility tests.
+  The seed-42 case split algorithm is unchanged; real Model v1 comparisons require the same
+  development case IDs and verification against its saved train/validation IDs.
+
 ## Unreleased — Lite legacy SVG mask migration
 
 - Legacy SegRef3D SVG masks can be imported and converted to the current editable label-mask format.

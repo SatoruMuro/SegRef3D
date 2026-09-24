@@ -75,6 +75,34 @@ class InferRef3DBackendTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "architecture mismatch"):
             infer.load_weights_model(info, torch.device("cpu"))
 
+    def test_legacy_and_per_axis_training_augmentation_are_metadata_only(self):
+        import torch
+        from monai.transforms import Randomizable
+        policies = [
+            {"random_flip_probability_each_axis": 0.1, "intensity_scale_probability": 0.1, "intensity_scale_factor": 0.1},
+            {"random_flip_probability_RAS_axes": [0.0, 0.0, 0.0], "axis_order": ["R-L", "A-P", "S-I"],
+             "intensity_scale_probability": 0.1, "intensity_scale_factor": 0.1},
+            {"random_flip_probability_RAS_axes": [1.0, 0.2, 0.3], "axis_order": ["R-L", "A-P", "S-I"],
+             "intensity_scale_probability": 0.1, "intensity_scale_factor": 0.1},
+        ]
+        reference = None
+        for policy in policies:
+            with self.subTest(policy=policy):
+                model_path, request_path, _, _ = self.pair(
+                    mutate_manifest=lambda m: m["preprocessing"].update(augmentation=policy))
+                info = infer.load_model_zip(model_path, self.root)
+                request = infer.load_request_zip(request_path, self.root)
+                infer.validate_model_request(info, request)
+                infer.load_weights_model(info, torch.device("cpu"))
+                transform = infer.preprocessing_transform(info["manifest"])
+                self.assertFalse(any(isinstance(t, Randomizable) for t in transform.transforms))
+                image = transform({"image": request["image"]})["image"]
+                if reference is None:
+                    reference = image
+                else:
+                    self.assertTrue(torch.equal(image, reference))
+                    self.assertTrue(torch.equal(image.affine, reference.affine))
+
     def test_unsafe_model_and_request_paths_are_rejected(self):
         for filename, loader in (("bad_model.zip", infer.load_model_zip), ("bad_request.zip", infer.load_request_zip)):
             path = self.root / filename

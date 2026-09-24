@@ -60,6 +60,55 @@ class TrainRef3DBackendTests(unittest.TestCase):
         self.assertEqual(len(backend.split_cases(ids)["validation"]), 2)
         self.assertEqual(backend.split_cases(["one"])["mode"], "resubstitution_smoke_only")
 
+    def test_spatial_flip_config_defaults_and_validation(self):
+        self.assertEqual(backend.TrainingConfig().spatial_flip_probabilities, (0.0, 0.0, 0.0))
+        for probabilities in ((0, 0, 0), (0.2, 0.0, 1.0), [1, 0.5, 0]):
+            with self.subTest(probabilities=probabilities):
+                backend.TrainingConfig(spatial_flip_probabilities=probabilities).validate()
+        for probabilities in ((-0.1, 0, 0), (1.1, 0, 0), (0, 0), (0, 0, 0, 0),
+                              float("nan"), None, "000", {0: 0, 1: 0, 2: 0},
+                              (True, 0, 0), ("0.1", 0, 0), (None, 0, 0), (10**400, 0, 0),
+                              *((0, value, 0) for value in (float("nan"), float("inf"), -float("inf")))):
+            with self.subTest(probabilities=probabilities), self.assertRaisesRegex(ValueError, "spatial_flip_probabilities"):
+                backend.TrainingConfig(spatial_flip_probabilities=probabilities).validate()
+
+    def test_manifest_records_actual_spatial_flip_probabilities(self):
+        dataset = self.prepare()
+        for probabilities in ((0.0, 0.0, 0.0), (0.2, 0.0, 0.0), [0.1, 0.3, 1.0]):
+            with self.subTest(probabilities=probabilities):
+                config = backend.TrainingConfig(spatial_flip_probabilities=probabilities)
+                manifest = backend.model_manifest(dataset, config, "TR3DM_abcdef12", 2, 1, 0.4, {})
+                saved = json.loads(json.dumps(manifest, allow_nan=False))
+                self.assertEqual(saved["preprocessing"]["augmentation"], {
+                    "random_flip_probability_RAS_axes": list(probabilities),
+                    "axis_order": ["R-L", "A-P", "S-I"],
+                    "intensity_scale_probability": 0.1, "intensity_scale_factor": 0.1,
+                })
+                self.assertEqual(saved["training"]["config"]["spatial_flip_probabilities"], list(probabilities))
+                self.assertEqual(saved["format"], "trainref3d-model-1.0")
+        with self.assertRaisesRegex(ValueError, "spatial_flip_probabilities"):
+            backend.preprocessing_config(dataset, backend.TrainingConfig(spatial_flip_probabilities=(0, float("nan"), 0)))
+
+    def test_seed_42_split_23_cases_matches_pre_flip_policy_change(self):
+        # Synthetic IDs: frozen result from the previous split implementation, not real patient IDs.
+        ids = [f"SR3D_{i:08x}" for i in range(23)]
+        expected = {
+            "train": [ids[i] for i in (13, 17, 12, 22, 6, 9, 1, 19, 11, 10, 21, 4, 18, 7, 8, 0, 3, 20)],
+            "validation": [ids[i] for i in (16, 15, 2, 14, 5)],
+            "mode": "held_out_cases",
+        }
+        dataset = self.prepare()
+        template = dataset["cases"][0]
+        dataset["cases"] = [dict(template, case_id=case_id) for case_id in ids]
+        dataset["task"].update(target_label_id=1, target_name="Right obturator internus")
+        for probabilities in ((0.1, 0.1, 0.1), (0.0, 0.0, 0.0)):
+            config = backend.TrainingConfig(random_seed=42, spatial_flip_probabilities=probabilities)
+            dataset["split"] = backend.split_cases(ids[::-1], config.random_seed)
+            self.assertEqual(dataset["split"], expected)
+            manifest = backend.model_manifest(dataset, config, "TR3DM_abcdef12", 2, 1, 0.4, {})
+            self.assertEqual(manifest["dataset"]["train_case_ids"], expected["train"])
+            self.assertEqual(manifest["dataset"]["validation_case_ids"], expected["validation"])
+
     def test_schema_completeness_duplicate_and_missing(self):
         mutations = [lambda m,f: m.update(format="bad"), lambda m,f: m["task"].update(annotation_policy="unknown"),
                      lambda m,f: m["cases"].append(m["cases"][0]), lambda m,f: f.pop(next(iter(f))),

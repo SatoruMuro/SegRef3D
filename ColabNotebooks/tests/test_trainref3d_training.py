@@ -14,6 +14,45 @@ from trainref3d_fixtures import dataset_file
 
 @unittest.skipUnless(importlib.util.find_spec("torch") and importlib.util.find_spec("monai"), "Optional training dependencies not installed")
 class TrainRef3DTrainingTests(unittest.TestCase):
+    def test_default_training_transform_order_has_no_spatial_flips(self):
+        from monai.transforms import RandFlipd, RandScaleIntensityd
+        dataset = {"spacing": {"median_mm": [0.7, 0.9, 2.0]}, "source_category": "medical_scalar"}
+        transforms = backend.make_transforms(dataset, backend.TrainingConfig(), training=True).transforms
+        self.assertFalse(any(isinstance(t, RandFlipd) for t in transforms))
+        self.assertEqual([type(t).__name__ for t in transforms], [
+            "LoadImaged", "EnsureChannelFirstd", "Orientationd", "Spacingd", "NormalizeIntensity",
+            "SpatialPadd", "RandCropByPosNegLabeld", "RandScaleIntensityd", "EnsureTyped",
+        ])
+        intensity = next(t for t in transforms if isinstance(t, RandScaleIntensityd))
+        self.assertEqual(intensity.keys, ("image",))
+        self.assertEqual(intensity.prob, 0.1)
+        self.assertEqual(intensity.scaler.factors, (-0.1, 0.1))
+
+    def test_spatial_flips_are_opt_in_per_ras_axis_and_training_only(self):
+        from monai.transforms import RandFlipd
+        dataset = {"spacing": {"median_mm": [1, 1, 1]}, "source_category": "medical_scalar"}
+        for probabilities in ((0.2, 0.0, 0.0), (0.0, 0.3, 0.0), (0.0, 0.0, 1.0), [0.2, 0.3, 0.4]):
+            with self.subTest(probabilities=probabilities):
+                config = backend.TrainingConfig(spatial_flip_probabilities=probabilities)
+                transforms = backend.make_transforms(dataset, config, training=True).transforms
+                flips = [t for t in transforms if isinstance(t, RandFlipd)]
+                self.assertEqual([(t.flipper.spatial_axis, t.prob) for t in flips],
+                                 [(axis, p) for axis, p in enumerate(probabilities) if p > 0])
+                self.assertTrue(all(t.keys == ("image", "label") for t in flips))
+                names = [type(t).__name__ for t in transforms]
+                self.assertEqual(names[6], "RandCropByPosNegLabeld")
+                self.assertEqual(names[7:-2], ["RandFlipd"] * len(flips))
+                self.assertEqual(names[-2:], ["RandScaleIntensityd", "EnsureTyped"])
+                validation = backend.make_transforms(dataset, config, training=False).transforms
+                self.assertEqual([type(t).__name__ for t in validation], [
+                    "LoadImaged", "EnsureChannelFirstd", "Orientationd", "Spacingd", "NormalizeIntensity", "EnsureTyped",
+                ])
+
+    def test_invalid_spatial_flips_fail_before_transform_construction(self):
+        for probabilities in ((-0.1, 0, 0), (0, float("nan"), 0), (0, 0)):
+            with self.subTest(probabilities=probabilities), self.assertRaisesRegex(ValueError, "spatial_flip_probabilities"):
+                backend.make_transforms({}, backend.TrainingConfig(spatial_flip_probabilities=probabilities), training=True)
+
     def test_scalar_and_rgb_normalization_preserve_input(self):
         import torch
         from monai.data import MetaTensor

@@ -72,6 +72,22 @@ class TrainRef3DNotebookTests(unittest.TestCase):
                 self.assertEqual(namespace["upload_name"], "dataset.ZIP")
                 self.assertNotIn("uploaded", namespace)
 
+    def test_advanced_spatial_flip_setting_reaches_training_config(self):
+        cells = code_cells()
+        settings = next(code for code in cells if "SPATIAL_FLIP_PROBABILITIES =" in code)
+        self.assertIn("Laterality-sensitive anatomical targets should not use left-right flips.", settings)
+        train_cell = next(code for code in cells if "config = tr.TrainingConfig(" in code)
+        backend = types.SimpleNamespace(TrainingConfig=Mock(), train=Mock(return_value={"archive": "model.zip"}), plot_history=Mock())
+        namespace = {"tr": backend, "dataset": {}}
+        exec(settings, namespace)
+        self.assertEqual(namespace["SPATIAL_FLIP_PROBABILITIES"], (0.0, 0.0, 0.0))
+        for probabilities in ((0.0, 0.0, 0.0), (0.2, 0.0, 0.0)):
+            namespace["SPATIAL_FLIP_PROBABILITIES"] = probabilities
+            with contextlib.redirect_stdout(io.StringIO()):
+                exec(train_cell, namespace)
+            self.assertEqual(backend.TrainingConfig.call_args.kwargs["spatial_flip_probabilities"], probabilities)
+            self.assertEqual(backend.TrainingConfig.call_args.kwargs["random_seed"], 42)
+
     def test_run_all_reuses_upload_without_prompt(self):
         namespace, _ = self.run_upload()
         namespace, prompt = self.run_upload(namespace=namespace)

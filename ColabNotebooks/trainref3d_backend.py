@@ -335,12 +335,19 @@ class TrainingConfig:
     strides: tuple = (2, 2, 2, 2)
     num_res_units: int = 2
     max_resampled_voxels: int = 64000000
+    # After RAS orientation: R-L, A-P, S-I. Preserve anatomical laterality by default.
+    spatial_flip_probabilities: tuple = (0.0, 0.0, 0.0)
 
     def validate(self):
         for key in ("epochs", "batch_size", "patience", "samples_per_case", "max_resampled_voxels"):
             require(type(getattr(self, key)) is int and getattr(self, key) > 0, f"Invalid {key}")
         require(type(self.num_workers) is int and self.num_workers >= 0 and type(self.random_seed) is int, "Invalid workers / seed")
         require(math.isfinite(self.learning_rate) and self.learning_rate > 0, "Invalid learning rate")
+        require(isinstance(self.spatial_flip_probabilities, (tuple, list))
+                and len(self.spatial_flip_probabilities) == 3
+                and all(type(p) in (int, float) and 0 <= p <= 1 and math.isfinite(p)
+                        for p in self.spatial_flip_probabilities),
+                "Invalid spatial_flip_probabilities: expected three finite probabilities in [0, 1] for R-L, A-P, S-I")
         require(len(self.strides) == len(self.channels) - 1 and all(type(s) is int and s >= 1 for s in self.strides)
                 and all(type(c) is int and c > 0 for c in self.channels) and len(self.channels) >= 2, "Invalid UNet channels/strides")
         multiple = math.prod(self.strides)
@@ -354,6 +361,7 @@ def architecture_config(dataset, config):
 
 
 def preprocessing_config(dataset, config):
+    config.validate()
     return {"orientation": "RAS", "spacing_mm": dataset["spacing"]["median_mm"],
             "spacing_policy": "dataset_median_per_RAS_axis", "image_interpolation": "bilinear", "label_interpolation": "nearest",
             "intensity": "rgb_divide_255" if dataset["source_category"] == "rgb" else "per_volume_percentile_0.5_99.5_clip_then_zscore",
@@ -361,7 +369,9 @@ def preprocessing_config(dataset, config):
             "percentile_sampling": {"maximum_voxels": 1000000, "method": "deterministic_flat_stride"},
             "fixed_HU_window": False, "patch_size": list(config.patch_size), "padding": "constant_zero_symmetric",
             "foreground_sampling": {"positive_weight": 1, "negative_weight": 1, "samples_per_case": config.samples_per_case},
-            "augmentation": {"random_flip_probability_each_axis": 0.1, "intensity_scale_probability": 0.1, "intensity_scale_factor": 0.1},
+            "augmentation": {"random_flip_probability_RAS_axes": list(config.spatial_flip_probabilities),
+                             "axis_order": ["R-L", "A-P", "S-I"],
+                             "intensity_scale_probability": 0.1, "intensity_scale_factor": 0.1},
             "inference": {"sliding_window_overlap": 0.25, "mode": "gaussian", "class_selection": "argmax", "foreground_channel": 1}}
 
 
@@ -388,6 +398,7 @@ class NormalizeIntensity:
 
 
 def make_transforms(dataset, config, training=False):
+    config.validate()
     from monai.transforms import (Compose, LoadImaged, EnsureChannelFirstd, Orientationd, Spacingd, SpatialPadd,
                                   RandCropByPosNegLabeld, RandFlipd, RandScaleIntensityd, EnsureTyped)
     keys = ("image", "label")
@@ -399,7 +410,8 @@ def make_transforms(dataset, config, training=False):
         transforms.extend([SpatialPadd(keys=keys, spatial_size=config.patch_size, mode="constant"),
                            RandCropByPosNegLabeld(keys=keys, label_key="label", spatial_size=config.patch_size,
                                                  pos=1, neg=1, num_samples=config.samples_per_case),
-                           *(RandFlipd(keys=keys, prob=0.1, spatial_axis=i) for i in range(3)),
+                           *(RandFlipd(keys=keys, prob=prob, spatial_axis=axis)
+                             for axis, prob in enumerate(config.spatial_flip_probabilities) if prob > 0),
                            RandScaleIntensityd(keys="image", factors=0.1, prob=0.1)])
     transforms.append(EnsureTyped(keys=keys))
     return Compose(transforms)

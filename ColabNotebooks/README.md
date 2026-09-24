@@ -16,6 +16,13 @@ only when choosing a different ZIP, then restore `False`. Upload approval accept
 letter case of YES and ignores surrounding whitespace (also in InferRef3D).
 No automatic image upload is added.
 
+Advanced config exposes `SPATIAL_FLIP_PROBABILITIES = (0.0, 0.0, 0.0)` in RAS order
+`(R-L, A-P, S-I)` and passes it to `TrainingConfig.spatial_flip_probabilities`.
+Laterality-sensitive anatomical targets should not use left-right flips.
+Keep all three zero for right/left obturator internus; small intensity scaling remains
+enabled. The model manifest records the actual per-axis probabilities and axis order.
+Existing Model ZIPs remain supported by InferRef3D without applying training augmentation.
+
 CPU units: `python -m unittest discover -s ColabNotebooks/tests -p "test_trainref3d_backend.py"`.
 Separate CPU/GPU mechanical smoke test: `tests/run_trainref3d_smoke.py` (add `--gpu` for CUDA).
 See the [format and optional GPU validation guide](../train-web/README.md) for dependencies,

@@ -95,7 +95,9 @@ custom-model starting point, not an automated claim of optimal architecture.
 - RGB: divide each R/G/B channel by 255. Alpha is not an input channel.
 - Symmetric zero padding for small/depth-limited volumes; 96³ random patches with
   foreground/background weights 1:1, 2 samples/case; negatives fall back to background
-  sampling. Axis flips and small intensity scaling augment training patches only.
+  sampling. Spatial flips are disabled by default because anatomical laterality/orientation
+  may be meaningful. Per-axis RAS flip probabilities can be enabled explicitly in advanced
+  configuration. Small intensity scaling remains enabled by default for training patches only.
 - Defaults: 100 epochs, batch size 1 (2 sampled patches/case), 2 loader workers,
   seed 42, early-stopping patience 20. Adjust advanced config in Colab, not the Web UI.
 - AMP uses `torch.autocast` and `torch.amp.GradScaler` on CUDA. CPU needs an explicit
@@ -113,6 +115,31 @@ custom-model starting point, not an automated claim of optimal architecture.
 estimates. Do not treat variants of the same subject as independent cases or use
 synthetic/augmented copies to claim validation performance. There is no independent
 test set or cross-validation in this MVP.
+
+### Spatial flip policy and model comparisons
+
+`TrainingConfig.spatial_flip_probabilities` defaults to `(0.0, 0.0, 0.0)`.
+After RAS orientation, axis 0 is R-L, axis 1 is A-P and axis 2 is S-I.
+Laterality-sensitive anatomical targets should not use left-right flips.
+For right/left obturator internus, keep all three probabilities zero.
+For a target where flips are appropriate, explicitly opt in with, for example,
+`TrainingConfig(spatial_flip_probabilities=(0.2, 0.0, 0.0))`, or set
+`SPATIAL_FLIP_PROBABILITIES` in the notebook's advanced config cell.
+Only positive-probability axes add a `RandFlipd`; a tuple/list of three finite numbers
+in `[0, 1]` is required. Intensity scaling retains probability 0.1 and factor 0.1.
+
+The model manifest records `preprocessing.augmentation.random_flip_probability_RAS_axes`
+and `axis_order: ["R-L", "A-P", "S-I"]`, as well as the training config.
+The `trainref3d-model-1.0` format and `model.pt` state_dict contract are unchanged;
+InferRef3D accepts older manifests and never reapplies training augmentation.
+
+To compare a previous Model v1 with flips `(0.1, 0.1, 0.1)` against Model v2 with
+flips `(0.0, 0.0, 0.0)`, reuse the same 23 development cases, Obj 1 target and seed 42.
+The unchanged split sorts IDs and shuffles with an isolated seeded RNG, producing
+18 training and 5 validation cases independently of augmentation settings.
+Check `dataset.train_case_ids` and `dataset.validation_case_ids` against the saved v1
+manifest before comparing runs. This preserves case membership, not identical random
+patches or model weights across different augmentation pipelines.
 
 **Performance on the internal validation split does not establish clinical validity
 or generalizability.**

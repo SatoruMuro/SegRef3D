@@ -46,6 +46,12 @@ def run():
             assert set(archive.namelist()) == {"model.pt", "model_manifest.json", "training_history.csv", "validation_metrics.csv", "README.txt"}
             manifest = json.loads(archive.read("model_manifest.json"))
             assert manifest["training"]["epochs_completed"] == config.epochs
+            assert manifest["preprocessing"]["augmentation"] == {
+                "random_flip_probability_RAS_axes": [0.0, 0.0, 0.0],
+                "axis_order": ["R-L", "A-P", "S-I"],
+                "intensity_scale_probability": 0.1, "intensity_scale_factor": 0.1,
+            }
+            assert manifest["training"]["config"]["spatial_flip_probabilities"] == [0.0, 0.0, 0.0]
         assert all(0 <= row["dice"] <= 1 for row in result["metrics"])
         print("PASS: forward / loss / backward / best checkpoint reload / validation / Model ZIP")
         if not args.output:
