@@ -5,6 +5,20 @@ import test from "node:test";
 const root = new URL("../", import.meta.url);
 const read = (name) => readFile(new URL(name, root), "utf8");
 
+test("Custom Model offers a safe TrainRef3D link before the existing inference controls", async () => {
+  const html = await read("index.html");
+  const panel = html.match(/<section[^>]*aria-labelledby="custom-model-title"[^>]*>([\s\S]*?)<\/section>/)?.[1];
+  assert.ok(panel, "Custom Model section exists");
+  const link = panel.match(/<a\b[^>]*id="custom-model-train"[^>]*>Open TrainRef3D<\/a>/)?.[0];
+  assert.ok(link, "Open TrainRef3D link exists in Custom Model");
+  assert.match(link, /href="https:\/\/satorumuro\.github\.io\/SegRef3D\/train-web\/"/);
+  assert.match(link, /target="_blank"/);
+  assert.match(link, /rel="noopener noreferrer"/);
+  assert.match(link, /class="command-button"/);
+  assert.match(panel, /Predict one target with a TrainRef3D model<\/span>\s*<\/div>\s*<p[^>]*>Need a model\?<\/p>\s*<div[^>]*>\s*<a[^>]*id="custom-model-train"/);
+  assert.match(panel, /id="custom-model-train"[\s\S]*id="custom-model-select"[\s\S]*id="custom-model-export"[\s\S]*id="custom-model-open"[\s\S]*id="custom-model-import"/);
+});
+
 test("workspace UI exposes the Objects, Image, and Tools mental model", async () => {
   const [ui, css] = await Promise.all([read("workspace-ui.mjs"), read("styles.css")]);
   assert.match(ui, /workspace\.replaceChildren\(labelsPanel, center, toolsAside\)/);

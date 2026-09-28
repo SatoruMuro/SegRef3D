@@ -45,7 +45,7 @@ test("offline cache uses the current UI asset generation", async () => {
     readLiteWebFile("service-worker.js"),
   ]);
 
-  assert.match(html, /styles\.css\?v=39/);
+  assert.match(html, /styles\.css\?v=40/);
   assert.match(html, /favicon\.ico/);
   assert.match(html, /apple-touch-icon\.png/);
   assert.match(html, /class="brand-icon" src="\.\/icon-192\.png"/);
@@ -55,14 +55,14 @@ test("offline cache uses the current UI asset generation", async () => {
   assert.match(html, /id="window-width"[^>]+max="8192"/);
   assert.match(html, /TutorialSegRef3DLiteEN\.html/);
   assert.match(html, /AskAISegRef3D\.html/);
-  assert.match(worker, /segref3d-lite-web-v64/);
+  assert.match(worker, /segref3d-lite-web-v65/);
   assert.match(worker, /legacy-svg\.mjs\?v=1/);
   assert.match(worker, /three-viewer\.mjs\?v=18/);
   assert.match(worker, /preview-controls\.mjs\?v=1/);
   assert.match(worker, /preview-transparency\.mjs\?v=1/);
   assert.match(worker, /medical-geometry\.mjs\?v=3/);
   assert.match(worker, /mask-tools\.mjs\?v=21/);
-  assert.match(worker, /styles\.css\?v=39/);
+  assert.match(worker, /styles\.css\?v=40/);
   assert.match(worker, /favicon\.ico/);
   assert.match(worker, /apple-touch-icon\.png/);
   assert.match(worker, /icon-192\.png/);

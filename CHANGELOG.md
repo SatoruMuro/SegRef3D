@@ -3,6 +3,10 @@
 Release and development history moved from the main README. Dates and descriptions before this
 move are preserved in their original language.
 
+## 2026.9.28 — Lite Custom Model navigation
+
+- Add an Open TrainRef3D link to the Custom Model panel for model creation before inference.
+
 ## 2026.9.24 — TrainRef3D spatial flips disabled by default
 
 - Default to intensity-only augmentation to preserve anatomical laterality/orientation,

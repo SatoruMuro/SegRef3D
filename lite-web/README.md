@@ -212,6 +212,9 @@ does not establish clinical validity.
 
 ### Custom Model / InferRef3D
 
+The Custom Model section links directly to [TrainRef3D](https://satorumuro.github.io/SegRef3D/train-web/)
+for model creation and [InferRef3D](../ColabNotebooks/inferref3d.html) for inference.
+
 After TrainRef3D creates `TrainRef3D_Model_TR3DM_<id>.zip`, load a new source and open
 **AI Segmentation > Custom Model**. Lite validates the safe archive layout and
 `trainref3d-model-1.0` manifest locally; it never executes `model.pt`. Channel count and source

@@ -2801,6 +2801,13 @@ svg {
 
 .instant3d-availability { margin: 0; }
 
+.custom-model-workflow .command-button {
+  width: auto;
+  min-width: 92px;
+  max-width: 100%;
+  padding: 0 12px;
+}
+
 .custom-model-summary {
   display: grid;
   gap: 5px;
