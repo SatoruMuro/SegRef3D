@@ -6,6 +6,9 @@ locally, then trains one binary target in your own Google Colab GPU runtime.**
 Web entry point: `train-web/index.html` (serve the repository root over HTTP).
 After publication: <https://satorumuro.github.io/SegRef3D/train-web/>.
 Colab launcher: [trainref3d.html](../ColabNotebooks/trainref3d.html).
+Already have a Dataset ZIP? The page's top shortcut opens TrainRef3D Colab before dataset
+creation; no data is uploaded automatically. The Dataset ready button remains the next step
+after creating a new dataset.
 Local implementation/test evidence and remaining GPU/desktop checks: [LOCAL_VALIDATION.md](LOCAL_VALIDATION.md).
 
 ## Workflow

@@ -46,6 +46,28 @@ try {
   const page=await browser.newPage({viewport:{width:1280,height:1000},acceptDownloads:true});
   const errors=[];page.on("pageerror",error=>errors.push(error.message));
   await page.goto(`${origin}/train-web/`);
+  const shortcut=page.locator("#colab-shortcut a");
+  for(const width of [1280,390,320]) {
+    await page.setViewportSize({width,height:844});
+    assert.equal(await shortcut.isVisible(),true);
+    assert.equal(await page.locator("#ready").isHidden(),true);
+    assert.equal(await page.locator("#build").isDisabled(),true);
+    assert.equal(await shortcut.getAttribute("href"),"../ColabNotebooks/trainref3d.html");
+    assert.equal(await shortcut.getAttribute("target"),"_blank");
+    assert.equal(await shortcut.getAttribute("rel"),"noopener noreferrer");
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+    const box=await shortcut.boundingBox();
+    assert.ok(box.y>=0&&box.y+box.height<=844,"Shortcut is visible without scrolling");
+    assert.ok(box.x>=0&&box.x+box.width<=width,"Shortcut fits narrow screens");
+    await page.screenshot({path:path.join(output,`colab-shortcut-${width}.png`)});
+  }
+  const popupPending=page.waitForEvent("popup");await shortcut.click();
+  const popup=await popupPending;await popup.waitForLoadState("domcontentloaded");
+  assert.equal(popup.url(),`${origin}/ColabNotebooks/trainref3d.html`);
+  assert.equal(await popup.evaluate(()=>window.opener===null),true);
+  await popup.close();
+  assert.equal(await page.locator("#ready").isHidden(),true);
+  await page.setViewportSize({width:1280,height:1000});
   await page.evaluate(()=>{
     window.samples=[];window.busyFrames=0;
     const panel=document.getElementById("load-progress");
@@ -74,6 +96,20 @@ try {
   // Export still retains the original case ZIPs and contract after progress reporting.
   await page.locator("#complete").check();await page.locator("#build").click();
   await page.waitForFunction(()=>!document.getElementById("ready").hidden,{},{timeout:60000});
+  const readyColab=page.locator('#ready a[href="../ColabNotebooks/trainref3d.html"]');
+  assert.equal(await readyColab.isVisible(),true);
+  assert.equal(await readyColab.getAttribute("class"),"button");
+  assert.equal(await readyColab.getAttribute("target"),"_blank");
+  assert.equal(await readyColab.getAttribute("rel"),"noopener noreferrer");
+  for(const width of [1280,390,320]) {
+    await page.setViewportSize({width,height:844});
+    assert.equal(await shortcut.isVisible(),true);
+    assert.equal(await readyColab.isVisible(),true);
+    await readyColab.scrollIntoViewIfNeeded();
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+    await page.screenshot({path:path.join(output,`dataset-ready-${width}.png`)});
+  }
+  await page.setViewportSize({width:1280,height:1000});
   const pending=page.waitForEvent("download");await page.locator("#download").click();
   const download=await pending, exported=path.join(output,"dataset.zip");await download.saveAs(exported);
   const entries=await readSafeZip(new Blob([await readFile(exported)]),DATASET_LIMITS);
@@ -100,7 +136,7 @@ try {
   assert.equal(await page.locator("#load-progress").isHidden(),true);
   assert.equal(errors.filter(e=>!e.includes("Test worker failure")).length,0);
   const report={largeZipBytes:large.bytes,busyFrames:telemetry.busyFrames,progressEvents:telemetry.samples.length,
-    checks:["visible progress", "entry counts", "indeterminate preparation", "responsive main thread", "mixed valid/invalid ZIPs", "unchanged export bytes", "remove/clear", "retry after error", "mobile layout", "worker failure cleanup"]};
+    checks:["persistent Colab shortcut", "safe new-tab navigation", "initial desktop/mobile layout", "preserved Dataset ready link", "visible progress", "entry counts", "indeterminate preparation", "responsive main thread", "mixed valid/invalid ZIPs", "unchanged export bytes", "remove/clear", "retry after error", "mobile layout", "worker failure cleanup"]};
   await writeFile(path.join(output,"report.json"),JSON.stringify(report,null,2));
   console.log(JSON.stringify(report,null,2));
 } finally {if(browser)await browser.close();await new Promise(resolve=>server.close(resolve));}

@@ -3,6 +3,10 @@
 Release and development history moved from the main README. Dates and descriptions before this
 move are preserved in their original language.
 
+## 2026.9.28 — TrainRef3D Colab shortcut
+
+- Add a persistent, discreet Colab link above the dataset workflow; opening it uploads no data automatically.
+
 ## 2026.9.28 — Lite Custom Model navigation
 
 - Add an Open TrainRef3D link to the Custom Model panel for model creation before inference.
