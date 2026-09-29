@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'none'; img-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>EvalRef3D — Model Evaluation Certificate</title>
+  <link rel="stylesheet" href="../train-web/styles.css?v=2">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header><a href="../train-web/">← TrainRef3D</a><span>RESEARCH EVALUATION · v1.0</span></header>
+  <main>
+    <h1>EvalRef3D</h1>
+    <p class="subtitle">Record raw model performance on independent holdout subjects.</p>
+    <p class="privacy">Validation runs locally in your browser. Only Ground Truth and raw prediction labelmaps go into the Evaluation Request ZIP. Source MRI/image voxels and model weights stay on your computer.</p>
+    <p>A Model Evaluation Certificate is a self-evaluated research record. It is not a performance guarantee or clinical validation.</p>
+    <section aria-labelledby="input-heading">
+      <h2 id="input-heading">1. Select Model ZIP</h2>
+      <label for="model-file">One original TrainRef3D Model ZIP</label><input id="model-file" type="file" accept=".zip">
+      <h2>2. Add Holdout Training ZIPs</h2>
+      <label for="training-files">SegRef3D Training Data ZIPs with complete Ground Truth</label><input id="training-files" type="file" accept=".zip" multiple>
+      <h2>3. Add InferRef3D Result ZIPs</h2>
+      <label for="result-files">Original raw results from the selected model</label><input id="result-files" type="file" accept=".zip" multiple>
+      <p class="hint">Select all cases together (1–32 cases, request up to 1 GiB). File names do not determine pairing. No resampling, postprocessing or manual corrections are accepted.</p>
+      <h2>4. Pair &amp; Validate</h2>
+      <button id="validate" type="button">Pair &amp; Validate</button>
+      <dl id="validation-summary" hidden>
+        <dt>Model</dt><dd id="model-id"></dd><dt>Target</dt><dd id="target"></dd>
+        <dt>Evaluation cases</dt><dd id="case-count"></dd><dt>Training overlap</dt><dd>0</dd>
+        <dt>Source fingerprint</dt><dd>All matched</dd><dt>Geometry</dt><dd>All matched</dd>
+      </dl>
+      <ul id="case-list"></ul>
+    </section>
+    <section aria-labelledby="confirm-heading">
+      <h2 id="confirm-heading">5. Confirm the evaluation set</h2>
+      <label for="domain">Evaluated data domain</label>
+      <textarea id="domain" maxlength="500" rows="3" placeholder="For example: adult pelvic MRI, T2-weighted, single-center. Do not enter patient names."></textarea>
+      <p class="hint">Record modality, population and acquisition context. Case count and domain are part of every certificate.</p>
+      <label class="confirmation"><input id="attestation" type="checkbox" disabled><span>I confirm that these evaluation cases are independent subjects that were not used for training or internal validation, and that the Ground Truth annotations are complete for the selected target.</span></label>
+      <p class="hint">Subject independence is user-attested. The platform cannot detect the same subject exported under different IDs.</p>
+      <h2>6. Create Evaluation Request ZIP</h2>
+      <button id="create" type="button" class="primary" disabled>Create Evaluation Request ZIP</button>
+      <div id="ready" hidden><a id="download" class="button primary">Download Evaluation Request ZIP</a></div>
+      <h2>7. Open EvalRef3D Colab</h2>
+      <a href="../ColabNotebooks/evalref3d.html" target="_blank" rel="noopener noreferrer">Open EvalRef3D Colab ↗</a>
+      <p>Use a CPU runtime. Upload the downloaded request explicitly. Opening Colab uploads nothing.</p>
+    </section>
+    <p id="status" role="status" aria-live="polite">Select one model and the holdout archives.</p>
+    <footer>Labelmaps and case metadata may still be identifiable. Review them before uploading to Colab. Keep the original Model ZIP unchanged and store the certificate as a separate sidecar. <a href="../docs/TRAINREF3D_EVALUATION_CERTIFICATE.md">Definitions and limitations</a></footer>
+  </main>
+  <script type="module" src="app.mjs"></script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+input[type=file], textarea { display:block; width:100%; margin:0.6rem 0 1.4rem; }
+textarea { box-sizing:border-box; padding:0.8rem; font:inherit; }
+dl { display:grid; grid-template-columns:10rem 1fr; gap:0.6rem; }
+dd { margin:0; overflow-wrap:anywhere; }
+#case-count { font-weight:bold; font-size:1.2rem; }
+#status { white-space:pre-wrap; overflow-wrap:anywhere; }
+#ready { margin-top:1rem; }
+@media (max-width:600px) { dl { grid-template-columns:1fr; } dd { margin-bottom:0.5rem; } }
