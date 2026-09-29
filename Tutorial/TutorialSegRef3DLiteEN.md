@@ -223,6 +223,21 @@ After finishing segmentation review, choose `Export` → `Training Data ZIP`. Se
 
 Generation is browser-local and does not upload data to a SegRef3D server. DICOM headers are excluded, but burned-in text, facial or unique anatomy, and user-entered object names may still identify someone. Do not treat the Training ZIP as anonymized. SegRef3D Lite does not yet train a model; this ZIP is a versioned case format for future custom-model training.
 
+### 11-5. Import a Custom Model prediction
+
+Open **AI Segmentation → Custom Model**. To create a new Inference Request ZIP, select a compatible
+TrainRef3D Model ZIP first. Upload the Model and Request ZIPs to InferRef3D to run inference.
+
+To import an existing InferRef3D Result ZIP, load the original source volume and choose **Import
+Prediction ZIP**. You do not need to re-select the Model ZIP. Review the prediction's target Obj/name,
+Model ID and confirmed source/geometry matches, then import. The Result ZIP determines the target Obj;
+the currently selected Obj does not change this mapping. If the target already has a mask, choose
+**Replace** or **Merge**. Both protect other Obj labels, report skipped overlaps and support one-step Undo.
+Default object names can adopt the result target name; custom names remain unchanged.
+
+If a Model ZIP is loaded, Lite also compares model provenance. A model mismatch shows a warning that
+you can accept or cancel. Source fingerprint or geometry mismatches always block import.
+
 ## 12. Other useful tools
 
 SegRef3D Lite also provides Threshold/RGB extraction, Mask Cleanup, mask interpolation, NIfTI Labelmap, TIFF, Label PNG, Overlay PNG, and Volume Statistics CSV. This getting-started tutorial focuses on the AI workflow. See the [SegRef3D Lite documentation](../lite-web/README.md) and the [detailed SegAnything guide](TutorialSegOnWebEN.md) for additional options and troubleshooting.

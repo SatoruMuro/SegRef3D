@@ -41,6 +41,8 @@ jobs:
         run: node lite-web/tests/three-viewer.browser.mjs build/preview-qa/oit
       - name: Test Color TIFF and existing export downloads
         run: node lite-web/tests/color-tiff.browser.mjs build/color-tiff-qa
+      - name: Test Custom Model prediction import and Undo
+        run: node lite-web/tests/custom-model.browser.mjs build/custom-model-qa
       - name: Set up Python for synthetic DICOM fixtures
         uses: actions/setup-python@v5
         with:
@@ -60,4 +62,5 @@ jobs:
           path: |
             build/preview-qa/
             build/color-tiff-qa/
+            build/custom-model-qa/
             build/svg-qa/

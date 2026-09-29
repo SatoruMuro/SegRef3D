@@ -2823,6 +2823,8 @@ svg {
 .custom-model-summary dt { color: #667; }
 .custom-model-summary dd { margin: 0; overflow-wrap: anywhere; }
 
+#custom-model-conflict-merge[hidden] { display: none; }
+
 .labels-panel {
   grid-column: 1;
   border-right: 1px solid var(--line);

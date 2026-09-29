@@ -226,9 +226,18 @@ The request contains deterministic canonical NIfTI channel bytes and their SHA-2
 not duplicate `model.pt`, but includes the model manifest and the whole Model ZIP hash. InferRef3D
 reconstructs the trusted state-dictionary model, reproduces manifest preprocessing, runs sliding-window
 inference, and nearest-neighbor resamples the prediction to the exact original shape and affine.
-Class 1 maps back to the model's original Obj ID. On import, Lite verifies model/source/prediction
-hashes, labels, shape, spacing, orientation and affine. **Replace** clears only that target; **Merge**
+Class 1 maps back to the model's original Obj ID. **A compatible Model ZIP is required to create an
+Inference Request, but is not required to import an InferRef3D Result ZIP.** Load the original source
+volume, then choose **Import Prediction ZIP**. Lite strictly verifies the ordered source fingerprints,
+channel count, prediction hash, datatype, labels, shape, spacing, affine, origin, orientation and
+declared original geometry. Source or geometry mismatches are hard errors and cannot be overridden.
+Without a Model ZIP, the confirmation shows the Result ZIP's target Obj/name and Model ID, plus
+the source and geometry match. Import always uses the Result ZIP's target Obj ID, not the current Obj.
+If a Model ZIP is loaded, Lite additionally checks model ID/hash/target/input/preprocessing provenance.
+A model mismatch requires explicit confirmation; Cancel leaves masks unchanged.
+**Replace** clears only that target; **Merge**
 keeps it. Both preserve all other objects on overlap, and the whole import is one Undo transaction.
+Only a default object name adopts the Result ZIP's target name; custom names are preserved.
 The imported mask remains editable and can be exported again as Training Data ZIP.
 
 Model/request/result validation is browser-local. Upload to Colab is always explicit. Images may

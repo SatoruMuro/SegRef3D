@@ -12,7 +12,7 @@
     <link rel="icon" href="./favicon.ico" sizes="any" />
     <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
     <link rel="manifest" href="./manifest.webmanifest" />
-    <link rel="stylesheet" href="./styles.css?v=40" />
+    <link rel="stylesheet" href="./styles.css?v=41" />
   </head>
   <body>
     <svg class="svg-defs" aria-hidden="true">
@@ -678,7 +678,7 @@
           <div class="instant3d-actions">
             <a id="custom-model-train" class="command-button" href="https://satorumuro.github.io/SegRef3D/train-web/" target="_blank" rel="noopener noreferrer">Open TrainRef3D</a>
           </div>
-          <div id="custom-model-status" class="workflow-summary">Select a TrainRef3D Model ZIP.</div>
+          <div id="custom-model-status" class="workflow-summary">To create a new request, select a TrainRef3D Model ZIP. Existing InferRef3D predictions can be imported without re-selecting the model.</div>
           <dl class="custom-model-summary">
             <div><dt>Target</dt><dd id="custom-model-target">—</dd></div>
             <div><dt>Input</dt><dd id="custom-model-input">—</dd></div>
@@ -729,8 +729,8 @@
 
     <dialog id="custom-model-conflict-dialog" class="local-file-dialog information-dialog" aria-labelledby="custom-model-conflict-title">
       <div class="local-file-dialog-content">
-        <div class="local-file-dialog-heading"><div><span class="dialog-kicker">EXISTING TARGET MASK</span><h2 id="custom-model-conflict-title">Choose how to import the prediction</h2></div></div>
-        <div class="local-file-dialog-copy"><p id="custom-model-conflict-copy">The target object already contains mask data.</p><p><strong>Replace</strong> clears only the target object, then applies the prediction. <strong>Merge</strong> keeps it and adds prediction only to background. Both modes protect every other object from overlap.</p></div>
+        <div class="local-file-dialog-heading"><div><span class="dialog-kicker">PREDICTION IMPORT</span><h2 id="custom-model-conflict-title">Choose how to import the prediction</h2></div></div>
+        <div class="local-file-dialog-copy"><p id="custom-model-provenance" style="white-space: pre-line; overflow-wrap: anywhere"></p><p id="custom-model-conflict-copy">The target object already contains mask data.</p><p><strong>Replace</strong> clears only the target object, then applies the prediction. <strong>Merge</strong> keeps it and adds prediction only to background. Both modes protect every other object from overlap.</p></div>
         <div class="local-file-dialog-actions"><button id="custom-model-conflict-cancel" class="command-button" type="button">Cancel</button><button id="custom-model-conflict-merge" class="command-button" type="button">Merge into target</button><button id="custom-model-conflict-replace" class="command-button accent" type="button">Replace target</button></div>
       </div>
     </dialog>
@@ -1194,6 +1194,6 @@
         if (status) status.textContent = `Application operation failed: ${message}`;
       });
     </script>
-    <script type="module" src="./app.mjs?v=58"></script>
+    <script type="module" src="./app.mjs?v=59"></script>
   </body>
 </html>

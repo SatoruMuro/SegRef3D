@@ -3,6 +3,16 @@
 Release and development history moved from the main README. Dates and descriptions before this
 move are preserved in their original language.
 
+## 2026.9.29 — Prediction import without reloading a model
+
+- Enable Custom Model prediction import whenever a source volume is loaded. Creating an Inference
+  Request still requires a compatible Model ZIP.
+- Show Result ZIP provenance and target before importing without a model. A loaded model's provenance
+  mismatch requires confirmation; source fingerprint, geometry and prediction integrity failures remain
+  hard errors. Always restore the result target Obj ID and preserve custom object names.
+- Preserve Replace/Merge, non-target overlap protection, skipped-overlap reporting and one-step Undo;
+  add Node and browser regression coverage for model-free imports and mismatch confirmation/cancellation.
+
 ## 2026.9.28 — TrainRef3D Colab shortcut
 
 - Add a persistent, discreet Colab link above the dataset workflow; opening it uploads no data automatically.

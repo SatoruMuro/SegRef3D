@@ -3,8 +3,6 @@ import test from "node:test";
 
 import {
   INFERENCE_REQUEST_FORMAT,
-  INFERENCE_RESULT_FORMAT,
-  MODEL_FORMAT,
   applyCustomPrediction,
   createInferenceRequestEntries,
   loadModelZip,
@@ -14,80 +12,10 @@ import {
   validateModelManifest,
   validateSourceCompatibility,
 } from "../custom-model.mjs";
-import { createNiftiScalarVolume } from "../training-export.mjs";
-import { createZip } from "../zip.mjs";
 
-const MODEL_ID = "TR3DM_a1b2c3d4";
+import { geometry, modelManifest, modelZip, scalarChannels, validatedModel, resultZip } from "./custom-model-fixtures.mjs";
+
 const REQUEST_ID = "TR3DI_11223344";
-
-function geometry(shape = [4, 3, 2]) {
-  const affine = [
-    [0.8, -0.1, 0.2, 12.5],
-    [0.1, 0.9, -0.3, -8.25],
-    [0, 0.2, 2.4, 31.75],
-    [0, 0, 0, 1],
-  ];
-  return {
-    shape,
-    affine,
-    spacing_mm: [0, 1, 2].map((axis) => Math.hypot(affine[0][axis], affine[1][axis], affine[2][axis])),
-  };
-}
-
-function modelManifest(overrides = {}) {
-  const sourceCategory = overrides.sourceCategory || "medical_scalar";
-  const channelCount = sourceCategory === "rgb" ? 3 : 1;
-  const targetSpacing = [1, 1, 2];
-  return {
-    format: MODEL_FORMAT,
-    model_id: MODEL_ID,
-    framework: "MONAI/PyTorch",
-    architecture: "3D UNet",
-    architecture_config: {
-      spatial_dims: 3, in_channels: channelCount, out_channels: 2,
-      channels: [8, 16, 32], strides: [2, 2], num_res_units: 1,
-      norm: "INSTANCE", act: "PRELU", dropout: 0, bias: true,
-    },
-    checkpoint_format: "state_dict_and_architecture_config",
-    task: { type: "binary_segmentation", target_label_id: 5, target_name: "Tumor" },
-    input: { channel_count: channelCount, source_category: sourceCategory, target_spacing_mm: targetSpacing },
-    preprocessing: {
-      orientation: "RAS", spacing_mm: targetSpacing,
-      spacing_policy: "dataset_median_per_RAS_axis", image_interpolation: "bilinear", label_interpolation: "nearest",
-      intensity: sourceCategory === "rgb" ? "rgb_divide_255" : "per_volume_percentile_0.5_99.5_clip_then_zscore",
-      patch_size: [16, 16, 16],
-      inference: { sliding_window_overlap: 0.25, mode: "gaussian", class_selection: "argmax", foreground_channel: 1 },
-    },
-    training: { epochs_completed: 2 }, dataset: { dataset_id: "TR3D_abcdef12" }, versions: {},
-    ...overrides.manifest,
-  };
-}
-
-async function zip(entries) {
-  return createZip(entries.map(([name, value]) => ({
-    name,
-    blob: new Blob([typeof value === "string" ? value : value], { type: "application/octet-stream" }),
-  })));
-}
-
-async function modelZip(manifest = modelManifest(), extra = []) {
-  return zip([
-    ["model.pt", Uint8Array.of(1, 2, 3)],
-    ["model_manifest.json", JSON.stringify(manifest)],
-    ["training_history.csv", "epoch,loss\n1,1\n"],
-    ["validation_metrics.csv", "case_id,dice\na,0\n"],
-    ["README.txt", "Research only"],
-    ...extra,
-  ]);
-}
-
-function scalarChannels() {
-  return [{ name: "scalar", values: Int16Array.from({ length: 24 }, (_, index) => index * 7 - 50), datatype: "int16" }];
-}
-
-async function validatedModel(manifest = modelManifest()) {
-  return loadModelZip(await modelZip(manifest));
-}
 
 test("validates the existing trainref3d-model-1.0 state_dict contract", () => {
   assert.equal(validateModelManifest(modelManifest()).task.target_label_id, 5);
@@ -148,39 +76,6 @@ test("channel and source-category mismatches are rejected without silent convers
   }), /requires medical_scalar/);
 });
 
-async function resultZip({ model, channelSha256, resultGeometry = geometry(), labels = null, mutate = null }) {
-  const values = labels || Uint8Array.from({ length: 24 }, (_, index) => index % 5 === 0 ? 5 : 0);
-  const prediction = createNiftiScalarVolume({
-    values, width: resultGeometry.shape[0], height: resultGeometry.shape[1], depth: resultGeometry.shape[2],
-    geometry: resultGeometry, datatype: "uint8",
-  });
-  const manifest = {
-    format: INFERENCE_RESULT_FORMAT, status: "success", request_id: REQUEST_ID,
-    model: {
-      model_id: model.manifest.model_id, model_sha256: model.sha256,
-      target_label_id: 5, target_name: "Tumor",
-    },
-    source: { channel_count: channelSha256.length, channel_sha256: channelSha256, source_category: "medical_scalar", original_geometry: resultGeometry },
-    prediction: {
-      file: "prediction.nii", sha256: await sha256Hex(prediction), datatype: "uint8", label_values: [0, 5],
-      foreground_voxel_count: values.filter((value) => value === 5).length, geometry: resultGeometry,
-    },
-    inference: {
-      architecture: model.manifest.architecture,
-      target_spacing_mm: model.manifest.input.target_spacing_mm,
-      preprocessing: model.manifest.preprocessing,
-      sliding_window: model.manifest.preprocessing.inference,
-      device: "cpu",
-    },
-    versions: { python: "3.12", torch: "2.8.0", monai: "1.5.1" },
-    backend: { source_sha256: "a".repeat(64) }, privacy: { source_images_included: false, model_weights_included: false },
-  };
-  if (mutate) mutate(manifest);
-  return zip([
-    ["prediction.nii", prediction], ["inference_result.json", JSON.stringify(manifest)], ["README.txt", "Review prediction"],
-  ]);
-}
-
 test("valid inference result checks model, source fingerprint, target labels, hash and geometry", async () => {
   const model = await validatedModel();
   const canonical = await prepareCanonicalInferenceChannels({
@@ -191,10 +86,12 @@ test("valid inference result checks model, source fingerprint, target labels, ha
     model, channelSha256: fingerprints, geometry: geometry(),
   });
   assert.deepEqual(result.prediction.ids, [5]);
+  assert.deepEqual(result.modelWarnings, []);
 
-  await assert.rejects(async () => validateInferenceResultZip(await resultZip({
+  const differentModel = await validateInferenceResultZip(await resultZip({
     model, channelSha256: fingerprints, mutate: (value) => { value.model.model_id = "TR3DM_deadbeef"; },
-  }), { model, channelSha256: fingerprints, geometry: geometry() }), /model ID/);
+  }), { model, channelSha256: fingerprints, geometry: geometry() });
+  assert.match(differentModel.modelWarnings.join(" "), /model ID/);
   await assert.rejects(async () => validateInferenceResultZip(await resultZip({ model, channelSha256: ["b".repeat(64)] }), {
     model, channelSha256: fingerprints, geometry: geometry(),
   }), /Source fingerprint/);
@@ -230,4 +127,99 @@ test("empty binary prediction remains a valid negative inference result", async 
     model, channelSha256: fingerprints, labels: new Uint8Array(24),
   }), { model, channelSha256: fingerprints, geometry: geometry() });
   assert.deepEqual(result.prediction.ids, []);
+});
+
+test("result imports without a model and restores the manifest target", async () => {
+  const model = await validatedModel();
+  const channelSha256 = ["c".repeat(64)];
+  const result = await validateInferenceResultZip(await resultZip({ model, channelSha256 }), {
+    channelSha256, geometry: geometry(),
+  });
+  assert.equal(result.manifest.model.target_label_id, 5);
+  assert.equal(result.manifest.model.target_name, "Tumor");
+  assert.deepEqual(result.modelWarnings, []);
+});
+
+test("without a model, all case identity and prediction integrity failures remain hard errors", async (t) => {
+  const model = await validatedModel();
+  const channelSha256 = ["c".repeat(64)];
+  const cases = [
+    ["format", m => { m.format = "future"; }, /format/],
+    ["status", m => { m.status = "failed"; }, /status/],
+    ["request ID", m => { m.request_id = "invalid"; }, /request_id/],
+    ["prediction file", m => { m.prediction.file = "missing.nii"; }, /missing/],
+    ["prediction hash", m => { m.prediction.sha256 = "0".repeat(64); }, /SHA-256/],
+    ["declared datatype", m => { m.prediction.datatype = "float32"; }, /uint8/],
+    ["labels", m => { m.prediction.label_values = [0, 1]; }, /label_values/],
+    ...[0, 21, 1.5, "2"].map(id => [`target ${id}`, m => { m.model.target_label_id = id; }, /target label/]),
+    ["model ID", m => { m.model.model_id = "bad"; }, /model ID/],
+    ["source fingerprint", m => { m.source.channel_sha256 = ["d".repeat(64)]; }, /Source fingerprint/],
+    ["channel count", m => { m.source.channel_count = 3; }, /fingerprints/],
+    ["missing original geometry", m => { delete m.source.original_geometry; }, /geometry/],
+    ["original geometry", m => { m.source.original_geometry.affine[0][3] += 1; }, /geometry mismatch/],
+    ["shape", m => { m.prediction.geometry.shape[0] += 1; }, /geometry mismatch/],
+    ["spacing", m => { m.prediction.geometry.spacing_mm[0] += 1; }, /Spacing/],
+    ["affine", m => { m.prediction.geometry.affine[0][3] += 1; }, /geometry mismatch/],
+    ["origin", m => { m.prediction.geometry.origin_mm = [0, 0, 0]; }, /Origin/],
+    ["orientation", m => { m.prediction.geometry.orientation = "LPI"; }, /Orientation/],
+  ];
+  for (const [name, mutate, error] of cases) {
+    await t.test(name, async () => {
+      await assert.rejects(async () => validateInferenceResultZip(await resultZip({ model, channelSha256, mutate }), {
+        channelSha256, geometry: geometry(),
+      }), error);
+    });
+  }
+  const shifted = geometry();
+  shifted.affine[0][3] += 1;
+  await assert.rejects(async () => validateInferenceResultZip(await resultZip({ model, channelSha256, resultGeometry: shifted }), {
+    channelSha256, geometry: geometry(),
+  }), /geometry mismatch/);
+  await assert.rejects(async () => validateInferenceResultZip(await resultZip({ model, channelSha256, labels: new Uint8Array(24).fill(2) }), {
+    channelSha256, geometry: geometry(),
+  }), /only background/);
+});
+
+test("model provenance mismatches are warnings only after strict source validation", async () => {
+  const model = await validatedModel();
+  const channelSha256 = ["c".repeat(64)];
+  const selected = structuredClone({ manifest: model.manifest, sha256: model.sha256 });
+  selected.manifest.model_id = "TR3DM_deadbeef";
+  selected.sha256 = "d".repeat(64);
+  selected.manifest.task = { ...selected.manifest.task, target_label_id: 2, target_name: "Other target" };
+  selected.manifest.preprocessing.patch_size = [32, 32, 32];
+  const result = await validateInferenceResultZip(await resultZip({ model, channelSha256 }), {
+    model: selected, channelSha256, geometry: geometry(),
+  });
+  assert.equal(result.manifest.model.target_label_id, 5);
+  assert.equal(result.modelWarnings.length, 2);
+  await assert.rejects(async () => validateInferenceResultZip(await resultZip({ model, channelSha256 }), {
+    model: selected, channelSha256: ["e".repeat(64)], geometry: geometry(),
+  }), /Source fingerprint/);
+  const shifted = geometry();
+  shifted.affine[0][3] += 1;
+  await assert.rejects(async () => validateInferenceResultZip(await resultZip({ model, channelSha256 }), {
+    model: selected, channelSha256, geometry: shifted,
+  }), /geometry mismatch/);
+});
+
+test("no-model result validation rejects non-uint8 NIfTI and unsafe ZIP members", async () => {
+  const model = await validatedModel();
+  const channelSha256 = ["c".repeat(64)];
+  const options = { channelSha256, geometry: geometry() };
+  await assert.rejects(async () => validateInferenceResultZip(await resultZip({
+    model, channelSha256, datatype: "int16",
+  }), options), /uint8/);
+  for (const [name, error] of [["../escape.txt", /Unsafe ZIP path/], ["unexpected.txt", /unexpected files/], ["prediction.nii", /Duplicate|duplicate/]]) {
+    await assert.rejects(async () => validateInferenceResultZip(await resultZip({
+      model, channelSha256, extra: [[name, "invalid"]],
+    }), options), error);
+  }
+});
+
+test("request creation still requires a validated compatible model", async () => {
+  const options = { channels: scalarChannels(), width: 4, height: 3, depth: 2, geometry: geometry(),
+    sourceFormat: "nifti", intensityPolicy: "original_scalar" };
+  await assert.rejects(createInferenceRequestEntries(options), /validated Model ZIP/);
+  await assert.rejects(createInferenceRequestEntries({ ...options, model: await validatedModel(modelManifest({ sourceCategory: "rgb" })) }), /requires 3 channel/);
 });

@@ -89,8 +89,14 @@ file/hash/uint8 labels/foreground count/geometry; architecture, exact preprocess
 sliding-window settings; device and optional peak GPU memory; Python/torch/MONAI/CUDA versions;
 backend source SHA-256; and privacy declarations.
 
-Lite rejects a result unless model identity/hash, ordered source fingerprints, prediction hash,
-label values (`0` or target only), shape, spacing, affine, origin and orientation agree. **Replace**
+Creating an Inference Request requires a compatible Model ZIP. Importing a Result ZIP does not.
+Lite rejects a result unless ordered source fingerprints, channel count, prediction hash, uint8 datatype,
+label values (`0` or target only), shape, spacing, affine, origin, orientation and declared original
+geometry agree with the current source. These errors cannot be overridden. The Result ZIP supplies
+the model ID/hash and target Obj ID/name. With a Model ZIP loaded, identity/hash/target/input and
+preprocessing are additionally compared; differences produce a warning requiring explicit confirmation,
+after all hard checks pass. Without a Model ZIP, the same confirmation shows result provenance and
+the source/geometry matches before import. Cancel leaves masks unchanged. **Replace**
 clears only the target Obj before applying foreground; **Merge** retains it and fills background.
 Both skip voxels occupied by another Obj and report the count. The whole import uses one existing
 bulk Undo transaction. A default `Object X` name may adopt the model target name; a user custom name

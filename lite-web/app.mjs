@@ -107,7 +107,7 @@ import {
   prepareCanonicalInferenceChannels,
   validateInferenceResultZip,
   validateSourceCompatibility,
-} from "./custom-model.mjs?v=1";
+} from "./custom-model.mjs?v=2";
 import {
   MASK_MANIFEST_FILENAME,
   MASK_SLICE_ORDER,
@@ -232,6 +232,7 @@ const elements = {
   customModelWarningContinue: document.querySelector("#custom-model-warning-continue"),
   customModelConflictDialog: document.querySelector("#custom-model-conflict-dialog"),
   customModelConflictCopy: document.querySelector("#custom-model-conflict-copy"),
+  customModelProvenance: document.querySelector("#custom-model-provenance"),
   customModelConflictCancel: document.querySelector("#custom-model-conflict-cancel"),
   customModelConflictMerge: document.querySelector("#custom-model-conflict-merge"),
   customModelConflictReplace: document.querySelector("#custom-model-conflict-replace"),
@@ -716,9 +717,10 @@ async function importInstant3DResult(file) {
 
 function updateCustomModelControls() {
   const model = state.customModel?.manifest;
-  const compatible = Boolean(model && state.customModelCompatibility?.compatible && state.images.length);
-  elements.customModelExport.disabled = !compatible || state.loading;
-  elements.customModelImport.disabled = !compatible || state.loading;
+  const canCreateRequest = Boolean(model && state.customModelCompatibility?.compatible && state.images.length);
+  const canImportPrediction = Boolean(state.images.length);
+  elements.customModelExport.disabled = !canCreateRequest || state.loading;
+  elements.customModelImport.disabled = !canImportPrediction || state.loading;
   elements.customModelTarget.textContent = model
     ? `Obj ${model.task.target_label_id} — ${model.task.target_name}` : "—";
   elements.customModelInput.textContent = model
@@ -726,15 +728,15 @@ function updateCustomModelControls() {
   elements.customModelId.textContent = model?.model_id || "—";
   elements.customModelStatus.classList.remove("success", "error", "warning");
   if (!model) {
-    elements.customModelStatus.textContent = "Select a TrainRef3D Model ZIP.";
+    elements.customModelStatus.textContent = "To create a new request, select a TrainRef3D Model ZIP. Existing InferRef3D predictions can be imported without re-selecting the model.";
   } else if (!state.images.length) {
     elements.customModelStatus.textContent = "Model valid. Load a source image to check compatibility.";
     elements.customModelStatus.classList.add("warning");
-  } else if (compatible) {
+  } else if (canCreateRequest) {
     elements.customModelStatus.textContent = "Compatible — request creation and prediction import are enabled.";
     elements.customModelStatus.classList.add("success");
   } else {
-    elements.customModelStatus.textContent = `Incompatible — ${state.customModelCompatibility?.message || "source validation is required"}`;
+    elements.customModelStatus.textContent = `Request unavailable — ${state.customModelCompatibility?.message || "source validation is required"}. Prediction import remains available.`;
     elements.customModelStatus.classList.add("error");
   }
 }
@@ -857,7 +859,8 @@ async function applyCustomModelImport(mode) {
 }
 
 async function importCustomModelResult(file) {
-  if (!file || !state.customModel || !state.customModelCompatibility?.compatible) return;
+  if (!file || !state.images.length || state.loading) return;
+  state.customModelPendingImport = null;
   try {
     setLoading(true, "Importing Custom Model prediction", "Rebuilding canonical source fingerprint…");
     const source = await prepareCurrentCustomModelSource((message) => { elements.loadingDetail.textContent = message; });
@@ -885,8 +888,30 @@ async function importCustomModelResult(file) {
     state.customModelPendingImport = { manifest: validated.manifest, volume };
     const targetId = validated.manifest.model.target_label_id;
     const conflict = state.images.some((image) => image.mask.includes(targetId));
-    if (conflict) {
-      elements.customModelConflictCopy.textContent = `Obj ${targetId} — ${validated.manifest.model.target_name} already contains mask data.`;
+    if (conflict || !state.customModel || validated.modelWarnings.length) {
+      const resultModel = validated.manifest.model;
+      const selected = state.customModel?.manifest;
+      const summary = [
+        `Prediction target: Obj ${targetId} — ${resultModel.target_name}`,
+        `Model ID: ${resultModel.model_id}`,
+        "Source: Matched current volume",
+        "Geometry: Matched",
+        `Model ZIP currently loaded: ${selected?.model_id || "None"}`,
+      ];
+      if (!selected) {
+        summary.push("Model ZIP is not required for prediction import. Result provenance is read from the Inference Result ZIP.");
+      } else if (validated.modelWarnings.length) {
+        summary.unshift("This prediction was generated with a different TrainRef3D model or preprocessing contract.");
+        summary.push(`Currently selected target: Obj ${selected.task.target_label_id} — ${selected.task.target_name}`,
+          ...validated.modelWarnings,
+          `The source image fingerprint and geometry match the current case. Import this prediction to Obj ${targetId} anyway?`);
+      }
+      elements.customModelProvenance.textContent = summary.join("\n");
+      elements.customModelConflictCopy.textContent = conflict
+        ? `Obj ${targetId} — ${resultModel.target_name} already contains mask data.`
+        : `Import this prediction to Obj ${targetId} — ${resultModel.target_name}.`;
+      elements.customModelConflictMerge.hidden = !conflict;
+      elements.customModelConflictReplace.textContent = conflict ? "Replace target" : "Import Prediction";
       elements.customModelConflictDialog.showModal();
     } else {
       await applyCustomModelImport("replace");

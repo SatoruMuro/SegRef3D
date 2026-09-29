@@ -329,21 +329,27 @@ export async function validateInferenceResultZip(source, {
   const targetId = result.model?.target_label_id;
   if (!Number.isInteger(targetId) || targetId < 1 || targetId > 20) throw new Error("Invalid inference result target label.");
   requiredText(result.model.target_name, "result target name", 80);
+  if (!isModelId(result.model.model_id)) throw new Error("Invalid result model ID.");
   if (!/^[a-f0-9]{64}$/.test(result.model.model_sha256 || "")) throw new Error("Invalid result model hash.");
+  // Model provenance is advisory. Case identity and prediction integrity below
+  // must pass before any warning can be presented for confirmation.
+  const modelWarnings = [];
   if (model) {
     if (result.model.model_id !== model.manifest.model_id || result.model.model_sha256 !== model.sha256
         || targetId !== model.manifest.task.target_label_id
         || result.model.target_name !== model.manifest.task.target_name) {
-      throw new Error("Inference result model ID, hash or target mismatch.");
+      modelWarnings.push("Inference result model ID, hash or target mismatch.");
     }
     if (result.source?.channel_count !== model.manifest.input.channel_count
         || result.source?.source_category !== model.manifest.input.source_category) {
-      throw new Error("Inference result source channel count or category mismatch.");
+      modelWarnings.push("Selected model input channel count or category differs from the result.");
     }
   }
   if (channelSha256) validateHashList(result.source?.channel_sha256, channelSha256, "Source fingerprint");
   if (!Array.isArray(result.source?.channel_sha256)
-      || result.source.channel_count !== result.source.channel_sha256.length) {
+      || ![1, 3].includes(result.source.channel_count)
+      || result.source.channel_count !== result.source.channel_sha256.length
+      || result.source.channel_sha256.some((hash) => !/^[a-f0-9]{64}$/.test(hash))) {
     throw new Error("Inference result source fingerprints are incomplete.");
   }
   const predictionFile = result.prediction?.file;
@@ -358,7 +364,7 @@ export async function validateInferenceResultZip(source, {
   const predictionHash = await sha256Hex(predictionBytes);
   if (predictionHash !== result.prediction.sha256) throw new Error("Prediction SHA-256 mismatch.");
   const parsed = await inspectNifti(predictionBytes, { labels: true, limit: CASE_LIMITS.expanded });
-  if (parsed.datatype !== "uint8" || parsed.ids.some((id) => id !== targetId)) {
+  if (result.prediction.datatype !== "uint8" || parsed.datatype !== "uint8" || parsed.ids.some((id) => id !== targetId)) {
     throw new Error("Prediction must be uint8 and contain only background or the model target label.");
   }
   if (!sameJson(result.prediction.label_values, [0, targetId])) throw new Error("Prediction label_values are invalid.");
@@ -367,13 +373,13 @@ export async function validateInferenceResultZip(source, {
   const declaredGeometry = validateGeometry(result.prediction.geometry);
   sameGeometry(parsed.geometry, declaredGeometry);
   if (geometry) sameGeometry(parsed.geometry, canonicalGeometry(geometry, geometry.shape));
-  if (result.source?.original_geometry) sameGeometry(parsed.geometry, validateGeometry(result.source.original_geometry));
+  sameGeometry(parsed.geometry, validateGeometry(result.source?.original_geometry));
   if (model) {
     if (result.inference?.architecture !== model.manifest.architecture
         || !sameJson(result.inference.target_spacing_mm, model.manifest.input.target_spacing_mm)
         || !sameJson(result.inference.preprocessing, model.manifest.preprocessing)
         || !sameJson(result.inference.sliding_window, model.manifest.preprocessing.inference)) {
-      throw new Error("Inference result does not reproduce the model preprocessing contract.");
+      modelWarnings.push("Inference result does not reproduce the selected model preprocessing contract.");
     }
   }
   if (!requiredText(result.inference?.device, "inference device", 96)
@@ -385,7 +391,7 @@ export async function validateInferenceResultZip(source, {
       || result.privacy?.model_weights_included !== false) {
     throw new Error("Inference result runtime or privacy metadata is invalid.");
   }
-  return { files, manifest: result, predictionBytes, prediction: parsed };
+  return { files, manifest: result, predictionBytes, prediction: parsed, modelWarnings };
 }
 
 export function applyCustomPrediction(currentMasks, predictionMasks, targetId, mode = "replace") {

@@ -45,29 +45,29 @@ test("offline cache uses the current UI asset generation", async () => {
     readLiteWebFile("service-worker.js"),
   ]);
 
-  assert.match(html, /styles\.css\?v=40/);
+  assert.match(html, /styles\.css\?v=41/);
   assert.match(html, /favicon\.ico/);
   assert.match(html, /apple-touch-icon\.png/);
   assert.match(html, /class="brand-icon" src="\.\/icon-192\.png"/);
-  assert.match(html, /app\.mjs\?v=58/);
-  assert.match(html, /<script type="module" src="\.\/app\.mjs\?v=58"><\/script>/);
+  assert.match(html, /app\.mjs\?v=59/);
+  assert.match(html, /<script type="module" src="\.\/app\.mjs\?v=59"><\/script>/);
   assert.match(html, /id="window-center"[^>]+min="-4096"[^>]+max="4095"/);
   assert.match(html, /id="window-width"[^>]+max="8192"/);
   assert.match(html, /TutorialSegRef3DLiteEN\.html/);
   assert.match(html, /AskAISegRef3D\.html/);
-  assert.match(worker, /segref3d-lite-web-v65/);
+  assert.match(worker, /segref3d-lite-web-v66/);
   assert.match(worker, /legacy-svg\.mjs\?v=1/);
   assert.match(worker, /three-viewer\.mjs\?v=18/);
   assert.match(worker, /preview-controls\.mjs\?v=1/);
   assert.match(worker, /preview-transparency\.mjs\?v=1/);
   assert.match(worker, /medical-geometry\.mjs\?v=3/);
   assert.match(worker, /mask-tools\.mjs\?v=21/);
-  assert.match(worker, /styles\.css\?v=40/);
+  assert.match(worker, /styles\.css\?v=41/);
   assert.match(worker, /favicon\.ico/);
   assert.match(worker, /apple-touch-icon\.png/);
   assert.match(worker, /icon-192\.png/);
   assert.match(worker, /icon-512\.png/);
-  assert.match(worker, /app\.mjs\?v=58/);
+  assert.match(worker, /app\.mjs\?v=59/);
   assert.match(worker, /volume-tools\.mjs\?v=20/);
   assert.match(worker, /image-tools\.mjs\?v=26/);
   assert.match(worker, /medical-io\.mjs\?v=25/);
@@ -75,7 +75,7 @@ test("offline cache uses the current UI asset generation", async () => {
   assert.match(worker, /dicom-codec\.mjs\?v=1/);
   assert.match(worker, /training-export\.mjs\?v=2/);
   assert.match(worker, /mask-sequence\.mjs\?v=1/);
-  assert.match(worker, /custom-model\.mjs\?v=1/);
+  assert.match(worker, /custom-model\.mjs\?v=2/);
   assert.match(worker, /workspace-ui\.mjs\?v=35/);
   assert.match(worker, /instant3d-bridge\.mjs\?v=7/);
   assert.match(worker, /totalsegmentator_roi_catalog\.json/);
