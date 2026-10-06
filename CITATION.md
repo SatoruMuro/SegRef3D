@@ -37,6 +37,7 @@ If you use SegRef3D in research or academic work, please cite the following arti
 | Serial histological sections | Human cadaveric specimen | Muro et al., *Anatomical Science International*, 2026. [DOI](https://doi.org/10.1007/s12565-026-00950-w) | 3D reconstruction of fibrous connective tissue supporting the umbilical concavity. |
 | Serial histological sections | Animal specimen | Kakui et al., *Deep-Sea Research Part I*, 2026. [DOI](https://doi.org/10.1016/j.dsr.2026.104716) | 3D reconstruction of a newly described deep-sea entoproct species. |
 | CoMBI block-face images | Human cadaveric specimen | Muro et al., *International Journal of Urology*, 2026. [DOI](https://doi.org/10.1111/iju.70385) | Segmentation and 3D reconstruction of thin adipose compartments. |
+| Serial histological sections | Red-eared slider (*Trachemys scripta elegans*) liver | Kasamatsu et al., *Anatomia, Histologia, Embryologia*, 2026. [DOI](https://doi.org/10.1111/ahe.70178) | Identification and segmentation of hepatic vascular structures and melanomacrophages using SegRef3D for subsequent 3D reconstruction in 3D Slicer. |
 
 ---
 
